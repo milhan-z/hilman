@@ -1,0 +1,204 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────────────────────────────
+   Hilman. design tokens — single source of truth
+   Light = "Paper" · Dark = "Ink / night notebook"
+   ─────────────────────────────────────────────── */
+:root {
+  /* surfaces */
+  --paper: #f6f3ec;
+  --surface: #fbf9f3;
+  --raise: #fffdf8;
+  /* ink */
+  --ink: #1b1a17;
+  --soft: #57534a;
+  --faint: #76705f;
+  /* lines */
+  --line: #e4ddcd;
+  --line-strong: #cdc5ae;
+  /* accents — semantic stationery roles */
+  --hl: #f5c518;          /* highlighter: featured, pinned, active */
+  --hl-ink: #3a2f00;      /* dark text on yellow (AA) */
+  --hl-soft: rgba(245, 197, 24, 0.22);
+  --pen: #2553c4;         /* ink pen: links, primary action, focus */
+  --pen-soft: rgba(47, 111, 237, 0.12);
+  --red: #c93a3f;         /* red pen: emphasis, marginalia, destructive */
+  --red-soft: rgba(229, 72, 77, 0.12);
+  /* neutrals 50–950 */
+  --n-50: #faf8f2;
+  --n-100: #f1ede2;
+  --n-200: #e4ddcd;
+  --n-300: #cdc5ae;
+  --n-400: #a89f8a;
+  --n-500: #8a8270;
+  --n-600: #6d665a;
+  --n-700: #57534a;
+  --n-800: #3d3a34;
+  --n-900: #28261f;
+  --n-950: #1b1a17;
+  /* elevation */
+  --shadow-card: 0 1px 2px rgba(27, 26, 23, 0.05), 0 6px 20px -10px rgba(27, 26, 23, 0.16);
+  --shadow-lift: 0 2px 4px rgba(27, 26, 23, 0.06), 0 16px 32px -14px rgba(27, 26, 23, 0.24);
+  --shadow-sticky: 1px 3px 0 rgba(27, 26, 23, 0.12), 0 10px 22px -12px rgba(27, 26, 23, 0.28);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --paper: #15151a;
+  --surface: #1b1b22;
+  --raise: #22222b;
+  --ink: #ece9e1;
+  --soft: #b4b0a4;
+  --faint: #88847a;
+  --line: #2a2a34;
+  --line-strong: #3b3b48;
+  --hl: #ffd23f;
+  --hl-ink: #2b2300;
+  --hl-soft: rgba(255, 210, 63, 0.16);
+  --pen: #8fadff;
+  --pen-soft: rgba(91, 140, 255, 0.16);
+  --red: #ff8589;
+  --red-soft: rgba(255, 107, 111, 0.14);
+  --n-50: #1b1a17;
+  --n-100: #28261f;
+  --n-200: #3d3a34;
+  --n-300: #57534a;
+  --n-400: #6d665a;
+  --n-500: #8a8270;
+  --n-600: #a89f8a;
+  --n-700: #cdc5ae;
+  --n-800: #e4ddcd;
+  --n-900: #f1ede2;
+  --n-950: #faf8f2;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -10px rgba(0, 0, 0, 0.55);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.45), 0 18px 36px -14px rgba(0, 0, 0, 0.65);
+  --shadow-sticky: 1px 3px 0 rgba(0, 0, 0, 0.45), 0 10px 22px -12px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+  body {
+    @apply bg-paper font-body text-base text-ink antialiased;
+  }
+  ::selection {
+    background: var(--hl);
+    color: var(--hl-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--pen);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  /* reading typography for markdown / rich text */
+  .prose-h {
+    @apply text-base text-ink;
+    max-width: 42rem;
+  }
+  .prose-h > * + * {
+    margin-top: 1.1em;
+  }
+  .prose-h h2 {
+    @apply font-display text-xl font-semibold;
+    margin-top: 1.8em;
+  }
+  .prose-h h3 {
+    @apply font-display text-lg font-semibold;
+    margin-top: 1.6em;
+  }
+  .prose-h h4 {
+    @apply text-base font-semibold;
+  }
+  .prose-h a {
+    color: var(--pen);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .prose-h strong {
+    @apply font-semibold;
+  }
+  .prose-h ul,
+  .prose-h ol {
+    padding-left: 1.4em;
+  }
+  .prose-h ul {
+    list-style: disc;
+  }
+  .prose-h ol {
+    list-style: decimal;
+  }
+  .prose-h li + li {
+    margin-top: 0.4em;
+  }
+  .prose-h blockquote {
+    border-left: 3px solid var(--hl);
+    padding-left: 1em;
+    color: var(--soft);
+    font-style: italic;
+  }
+  .prose-h code {
+    @apply rounded-sm text-sm;
+    background: var(--n-100);
+    padding: 0.15em 0.4em;
+  }
+  .prose-h pre {
+    @apply rounded-lg text-sm;
+    background: var(--n-900);
+    color: var(--n-50);
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+  }
+  [data-theme="dark"] .prose-h pre {
+    background: var(--raise);
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .prose-h pre code {
+    background: transparent;
+    padding: 0;
+  }
+  .prose-h hr {
+    border: 0;
+    border-top: 1px dashed var(--line-strong);
+  }
+  .prose-h img {
+    @apply rounded-lg;
+  }
+}
+
+@layer utilities {
+  /* faint bullet-journal dot grid — use sparingly */
+  .dotgrid {
+    background-image: radial-gradient(var(--line-strong) 1px, transparent 1px);
+    background-size: 26px 26px;
+  }
+  /* ruled lines, notebook page */
+  .ruled {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 31px,
+      var(--line) 31px,
+      var(--line) 32px
+    );
+  }
+  /* highlighter swipe behind text */
+  .hl-mark {
+    background-image: linear-gradient(transparent 55%, var(--hl-soft) 55%);
+  }
+  .tab-corner {
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
+  }
+}

@@ -1,0 +1,41 @@
+import Link from "next/link";
+import { createServerSupabase } from "@/lib/supabase/server";
+import { formatDate } from "@/lib/utils";
+
+export default async function AdminJournalPage() {
+  const supabase = createServerSupabase();
+  const { data: posts } = await supabase
+    .from("journal_posts")
+    .select("id, title, slug, status, featured, published_at, updated_at")
+    .order("updated_at", { ascending: false });
+
+  return (
+    <div className="max-w-4xl">
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-2xl font-bold">Journal</h1>
+        <Link href="/admin/journal/new" className="rounded bg-pen px-4 py-2.5 text-sm font-medium text-white hover:opacity-90">
+          + New entry
+        </Link>
+      </div>
+      <ul className="mt-6 divide-y divide-line rounded-lg border border-line bg-surface">
+        {(posts ?? []).map((p) => (
+          <li key={p.id}>
+            <Link href={`/admin/journal/${p.id}`} className="flex items-center gap-3 px-4 py-3.5 text-sm hover:bg-n-100">
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {p.featured && <span className="mr-1.5" title="Featured">📌</span>}
+                {p.title}
+              </span>
+              <span className="hidden text-xs text-faint sm:inline">{formatDate(p.published_at)}</span>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-2xs uppercase tracking-wider ${p.status === "published" ? "bg-pen-soft text-pen" : "bg-hl-soft text-hl-ink"}`}>
+                {p.status}
+              </span>
+            </Link>
+          </li>
+        ))}
+        {(posts ?? []).length === 0 && (
+          <li className="px-4 py-8 text-center text-sm text-faint">No entries yet.</li>
+        )}
+      </ul>
+    </div>
+  );
+}
