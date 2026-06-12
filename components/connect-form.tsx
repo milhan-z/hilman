@@ -3,7 +3,9 @@
 import { useFormState, useFormStatus } from "react-dom";
 import { sendMessage, type ConnectState } from "@/app/(site)/connect/actions";
 
-const initialState: ConnectState = { status: "idle" };
+const labelCls = "mb-1.5 block font-mono text-2xs uppercase tracking-widest text-faint";
+const inputCls =
+  "w-full rounded-md border border-line-strong bg-raise px-4 py-2.5 text-base text-ink outline-none transition-colors placeholder:text-faint/70 focus:border-pen focus:ring-1 focus:ring-pen";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -11,9 +13,9 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex min-h-[44px] items-center justify-center rounded bg-pen px-6 py-2.5 text-sm font-medium text-white transition-opacity duration-base hover:opacity-90 disabled:opacity-50"
+      className="inline-flex min-h-[44px] items-center justify-center rounded-md bg-hl px-6 py-2.5 text-sm font-medium text-hl-ink shadow-card transition-all duration-base hover:brightness-95 hover:shadow-glow active:translate-y-px disabled:opacity-50"
     >
-      {pending ? "Sending…" : "Send it over"}
+      {pending ? "Sending…" : "Send it over →"}
     </button>
   );
 }
@@ -23,8 +25,8 @@ export function ConnectForm() {
 
   if (state.status === "success") {
     return (
-      <div className="rounded-lg border border-line bg-surface p-8 text-center shadow-card">
-        <p className="font-display text-xl font-semibold">Got it. Thanks!</p>
+      <div className="rounded-md border border-line bg-surface p-8 text-center shadow-card">
+        <p className="font-display text-2xl font-semibold">Got it. Thanks!</p>
         <p className="mt-2 text-soft">Your note is on my desk — I’ll get back to you soon.</p>
         <p className="mt-3 font-hand text-lg text-faint">probably with too many follow-up questions</p>
       </div>
@@ -43,20 +45,13 @@ export function ConnectForm() {
 
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
-          <label htmlFor="name" className="mb-1.5 block text-sm font-medium">
+          <label htmlFor="name" className={labelCls}>
             Name
           </label>
-          <input
-            id="name"
-            name="name"
-            required
-            maxLength={120}
-            autoComplete="name"
-            className="w-full rounded border border-line bg-raise px-4 py-2.5 text-base outline-none transition-colors focus:border-pen"
-          />
+          <input id="name" name="name" required maxLength={120} autoComplete="name" className={inputCls} />
         </div>
         <div>
-          <label htmlFor="email" className="mb-1.5 block text-sm font-medium">
+          <label htmlFor="email" className={labelCls}>
             Email
           </label>
           <input
@@ -66,12 +61,12 @@ export function ConnectForm() {
             required
             maxLength={200}
             autoComplete="email"
-            className="w-full rounded border border-line bg-raise px-4 py-2.5 text-base outline-none transition-colors focus:border-pen"
+            className={inputCls}
           />
         </div>
       </div>
       <div>
-        <label htmlFor="body" className="mb-1.5 block text-sm font-medium">
+        <label htmlFor="body" className={labelCls}>
           What’s on your mind?
         </label>
         <textarea
@@ -80,12 +75,12 @@ export function ConnectForm() {
           required
           rows={6}
           maxLength={5000}
-          className="ruled w-full rounded border border-line bg-raise px-4 py-2.5 text-base leading-8 outline-none transition-colors focus:border-pen"
+          className={`${inputCls} ruled leading-8`}
         />
       </div>
 
       {state.status === "error" && (
-        <p role="alert" className="rounded border border-red/40 bg-red-soft px-4 py-3 text-sm text-red">
+        <p role="alert" className="rounded-md border border-red/40 bg-red-soft px-4 py-3 text-sm text-red">
           {state.message ?? "Something went sideways. Mind trying again?"}
         </p>
       )}
@@ -94,3 +89,5 @@ export function ConnectForm() {
     </form>
   );
 }
+
+const initialState: ConnectState = { status: "idle" };

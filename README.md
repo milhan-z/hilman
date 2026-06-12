@@ -139,12 +139,19 @@ Adding a type = **two map entries**:
 Tokens live in `app/globals.css` (CSS variables, single source) and are mapped in
 `tailwind.config.ts`:
 
-- **Light = Paper** (`#f6f3ec` warm cream), **Dark = Ink** (`#15151a` warm charcoal).
-  Toggle in the nav: follows `prefers-color-scheme`, persists to `localStorage`,
-  applied by an inline `<head>` script → no flash.
-- **Stationery accents** (semantic, not decorative): 🟡 highlighter = featured/
-  pinned/active · 🔵 ink pen = links/primary/focus · 🔴 red pen = emphasis/
-  marginalia/destructive. One dominant accent per screen; red used sparingly.
+- **Light = Paper** (`#f4efe3` warm cream), **Dark = Night** (`#1a1713` warm
+  charcoal — a dimmed notebook, never OLED black). Toggle in the nav: follows
+  `prefers-color-scheme`, persists to `localStorage`, applied by an inline
+  `<head>` script → no flash.
+- **Stationery accents** (semantic, not decorative): 🟡 highlighter (`#f3c40a`) =
+  featured/pinned/active, only ever as a marker sweep — never as text · 🔵 ink pen
+  (`#2e51b0`) = links/primary actions/focus · 🔴 red pen (`#cc3a33`) = emphasis/
+  marginalia/destructive + the "end-of-entry" stamp. One dominant accent per
+  screen; red used sparingly.
+- **The notebook is the layout.** A ledger-strip masthead (No. / section / date),
+  a numbered home **Index** (table of contents), filing-tabs on Works, a diary
+  date-rail on journal entries, and `EntryMeta` mono ledger lines tie every page
+  to one archival language.
 - **Type:** Fraunces (display) + Inter (body, 16px floor, 1.7 line-height) +
   Caveat strictly for marginalia/labels. Modular scale ≈ 1.25.
 - **Motion:** 150/250/400 ms, `cubic-bezier(0.22,1,0.36,1)`, every animation has a

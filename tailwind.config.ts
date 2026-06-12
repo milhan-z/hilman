@@ -13,6 +13,7 @@ const config: Config = {
         paper: "var(--paper)",
         surface: "var(--surface)",
         raise: "var(--raise)",
+        "card-hover": "var(--bg-card-hover)",
         ink: "var(--ink)",
         soft: "var(--soft)",
         faint: "var(--faint)",
@@ -22,9 +23,17 @@ const config: Config = {
         "hl-ink": "var(--hl-ink)",
         "hl-soft": "var(--hl-soft)",
         pen: "var(--pen)",
+        "pen-deep": "var(--pen-deep)",
         "pen-soft": "var(--pen-soft)",
         red: "var(--red)",
         "red-soft": "var(--red-soft)",
+        cyan: "var(--cyan)",
+        "cyan-soft": "var(--cyan-soft)",
+        green: "var(--green)",
+        cream: "var(--cream)",
+        "cream-ink": "var(--cream-ink)",
+        "cream-soft": "var(--cream-soft)",
+        "cream-line": "var(--cream-line)",
         n: {
           50: "var(--n-50)",
           100: "var(--n-100)",
@@ -43,6 +52,14 @@ const config: Config = {
         display: ["var(--font-display)", "Georgia", "serif"],
         body: ["var(--font-body)", "system-ui", "sans-serif"],
         hand: ["var(--font-hand)", "cursive"],
+        mono: [
+          "var(--font-mono)",
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "Consolas",
+          "monospace",
+        ],
       },
       fontSize: {
         // modular scale ~1.25, body floor 16px
@@ -56,6 +73,8 @@ const config: Config = {
         "3xl": ["2.441rem", { lineHeight: "1.15" }],
         "4xl": ["3.052rem", { lineHeight: "1.08" }],
         "5xl": ["3.815rem", { lineHeight: "1.04" }],
+        "6xl": ["4.768rem", { lineHeight: "0.98", letterSpacing: "-0.02em" }],
+        "7xl": ["5.96rem", { lineHeight: "0.94", letterSpacing: "-0.025em" }],
       },
       borderRadius: {
         sm: "6px",
@@ -67,9 +86,11 @@ const config: Config = {
         card: "var(--shadow-card)",
         lift: "var(--shadow-lift)",
         sticky: "var(--shadow-sticky)",
+        glow: "var(--glow)",
       },
       transitionTimingFunction: {
         out: "cubic-bezier(0.22, 1, 0.36, 1)",
+        spring: "cubic-bezier(0.34, 1.56, 0.64, 1)",
       },
       transitionDuration: {
         fast: "150ms",
@@ -78,7 +99,11 @@ const config: Config = {
       },
       maxWidth: {
         content: "72rem",
+        wide: "84rem",
         prose: "42rem",
+      },
+      rotate: {
+        "1.5": "1.5deg",
       },
     },
   },

@@ -40,7 +40,6 @@ export const mockSettings: Settings = {
     { label: "Works", href: "/works" },
     { label: "Journal", href: "/journal" },
     { label: "Lab", href: "/lab" },
-    { label: "Desk", href: "/desk" },
     { label: "About", href: "/about" },
     { label: "Connect", href: "/connect" },
   ],
@@ -443,36 +442,6 @@ export const mockPages: PageRow[] = [
       lede: "Got a project, a question, or just a good link to share? My inbox is friendlier than this form looks.",
       availability: "Open for select freelance work and collaborations — especially ones that mix at least two of: design, film, code.",
       note: "I reply to everything that isn't a crypto pitch. Usually within two days.",
-    },
-  },
-  {
-    id: "pg-desk",
-    slug: "desk",
-    title: "Hilman's Desk",
-    data: {
-      lede: "My digital desk — sticky notes, open folders, and whatever I'm fiddling with this week. Feel free to move things around; it resets when you leave, just like a real desk doesn't.",
-      stickies: [
-        { color: "yellow", text: "Ship the archive. Done is the new perfect." },
-        { color: "blue", text: "Idea: zine about hand-painted kiosk signs" },
-        { color: "red", text: "BACKUP THE FOOTAGE. Today." },
-      ],
-      folders: [
-        { label: "Visual Design", href: "/works?stream=visual-design", count: 2 },
-        { label: "Visual Stories", href: "/works?stream=visual-stories", count: 2 },
-        { label: "Digital Lab", href: "/works?stream=digital-lab", count: 2 },
-      ],
-      checklist: [
-        { text: "Color grade Harbor Light reel", done: true },
-        { text: "Write journal: color as stationery", done: true },
-        { text: "Prototype Tandai mobile view", done: false },
-        { text: "Scan new signage photos", done: false },
-      ],
-      quick_links: [
-        { label: "Playground →", href: "/lab" },
-        { label: "Latest journal →", href: "/journal" },
-        { label: "Say hello →", href: "/connect" },
-      ],
-      now: { listening: "Hindia — Lagipula Hidup Akan Berakhir", drinking: "Kopi susu, less sugar" },
     },
   },
 ];

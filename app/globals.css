@@ -2,80 +2,126 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ───────────────────────────────────────────────
-   Hilman. design tokens — single source of truth
-   Light = "Paper" · Dark = "Ink / night notebook"
-   ─────────────────────────────────────────────── */
-:root {
-  /* surfaces */
-  --paper: #f6f3ec;
-  --surface: #fbf9f3;
-  --raise: #fffdf8;
-  /* ink */
-  --ink: #1b1a17;
-  --soft: #57534a;
-  --faint: #76705f;
-  /* lines */
-  --line: #e4ddcd;
-  --line-strong: #cdc5ae;
-  /* accents — semantic stationery roles */
-  --hl: #f5c518;          /* highlighter: featured, pinned, active */
-  --hl-ink: #3a2f00;      /* dark text on yellow (AA) */
-  --hl-soft: rgba(245, 197, 24, 0.22);
-  --pen: #2553c4;         /* ink pen: links, primary action, focus */
-  --pen-soft: rgba(47, 111, 237, 0.12);
-  --red: #c93a3f;         /* red pen: emphasis, marginalia, destructive */
-  --red-soft: rgba(229, 72, 77, 0.12);
-  /* neutrals 50–950 */
-  --n-50: #faf8f2;
-  --n-100: #f1ede2;
-  --n-200: #e4ddcd;
-  --n-300: #cdc5ae;
-  --n-400: #a89f8a;
-  --n-500: #8a8270;
-  --n-600: #6d665a;
-  --n-700: #57534a;
-  --n-800: #3d3a34;
-  --n-900: #28261f;
-  --n-950: #1b1a17;
-  /* elevation */
-  --shadow-card: 0 1px 2px rgba(27, 26, 23, 0.05), 0 6px 20px -10px rgba(27, 26, 23, 0.16);
-  --shadow-lift: 0 2px 4px rgba(27, 26, 23, 0.06), 0 16px 32px -14px rgba(27, 26, 23, 0.24);
-  --shadow-sticky: 1px 3px 0 rgba(27, 26, 23, 0.12), 0 10px 22px -12px rgba(27, 26, 23, 0.28);
-  color-scheme: light;
+/* ═══════════════════════════════════════════════════════════
+   Hilman. — design tokens (single source of truth)
+
+   Mix-media digital paper notebook.
+   PRIMARY = Night (black #0a0a0a canvas).  Yellow #f5c518 is the
+   signature accent. Cream-paper cutouts get mixed onto the black
+   for the "analog notebook on a digital desk" feeling.
+
+   Accents:  yellow = primary / Visual Design · red = Visual Stories
+             cyan = Digital Lab · cream = paper material
+   "Paper" (light) is the secondary theme — still accessible.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── PRIMARY: Night (default, no data-theme needed) ── */
+:root,
+[data-theme="dark"] {
+  --paper: #0a0a0a;
+  --surface: #121212;
+  --raise: #1a1a1a;
+  --bg-card-hover: #1f1f1f;
+
+  --ink: #f2efe9;
+  --soft: #a3a097;
+  --faint: #6f6b62;
+
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
+  /* yellow — the signature accent (links/active text + vivid fills) */
+  --pen: #f5c518;
+  --pen-deep: #ffd740;
+  --pen-soft: rgba(245, 197, 24, 0.14);
+  --hl: #f5c518;
+  --hl-ink: #0a0a0a;
+  --hl-soft: rgba(245, 197, 24, 0.18);
+
+  /* supporting accents */
+  --red: #ff6b5b;
+  --red-soft: rgba(255, 107, 91, 0.14);
+  --cyan: #18d9b4;
+  --cyan-soft: rgba(24, 217, 180, 0.14);
+  --green: #4ade80;
+
+  /* cream paper material (mix-media cutouts on black) */
+  --cream: #f3eddf;
+  --cream-ink: #1a1713;
+  --cream-soft: #5a5346;
+  --cream-line: rgba(120, 104, 78, 0.3);
+
+  /* neutrals 50–950 (dark-scaled) */
+  --n-50: #121212;
+  --n-100: #1a1a1a;
+  --n-200: #222222;
+  --n-300: #2e2e2e;
+  --n-400: #444444;
+  --n-500: #6f6b62;
+  --n-600: #908a7e;
+  --n-700: #b3ab9c;
+  --n-800: #d4ccba;
+  --n-900: #f2efe9;
+  --n-950: #ffffff;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 30px -16px rgba(0, 0, 0, 0.7);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.55), 0 28px 56px -22px rgba(0, 0, 0, 0.8);
+  --shadow-sticky: 1px 3px 0 rgba(0, 0, 0, 0.55), 0 14px 30px -16px rgba(0, 0, 0, 0.7);
+  --glow: 0 0 40px rgba(245, 197, 24, 0.18);
+
+  color-scheme: dark;
 }
 
-[data-theme="dark"] {
-  --paper: #15151a;
-  --surface: #1b1b22;
-  --raise: #22222b;
-  --ink: #ece9e1;
-  --soft: #b4b0a4;
-  --faint: #88847a;
-  --line: #2a2a34;
-  --line-strong: #3b3b48;
-  --hl: #ffd23f;
-  --hl-ink: #2b2300;
-  --hl-soft: rgba(255, 210, 63, 0.16);
-  --pen: #8fadff;
-  --pen-soft: rgba(91, 140, 255, 0.16);
-  --red: #ff8589;
-  --red-soft: rgba(255, 107, 111, 0.14);
-  --n-50: #1b1a17;
-  --n-100: #28261f;
-  --n-200: #3d3a34;
-  --n-300: #57534a;
-  --n-400: #6d665a;
-  --n-500: #8a8270;
-  --n-600: #a89f8a;
-  --n-700: #cdc5ae;
-  --n-800: #e4ddcd;
-  --n-900: #f1ede2;
-  --n-950: #faf8f2;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -10px rgba(0, 0, 0, 0.55);
-  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.45), 0 18px 36px -14px rgba(0, 0, 0, 0.65);
-  --shadow-sticky: 1px 3px 0 rgba(0, 0, 0, 0.45), 0 10px 22px -12px rgba(0, 0, 0, 0.6);
-  color-scheme: dark;
+/* ── SECONDARY: Paper (light) ── */
+[data-theme="light"] {
+  --paper: #f4efe3;
+  --surface: #fbf7ee;
+  --raise: #fffdf7;
+  --bg-card-hover: rgba(33, 29, 23, 0.035);
+
+  --ink: #1f1b15;
+  --soft: #564e41;
+  --faint: #8c826f;
+
+  --line: rgba(120, 104, 78, 0.22);
+  --line-strong: rgba(120, 104, 78, 0.42);
+
+  --pen: #8a6a00; /* accessible amber link text on cream */
+  --pen-deep: #6f5500;
+  --pen-soft: rgba(245, 197, 24, 0.2);
+  --hl: #f5c518;
+  --hl-ink: #2a2208;
+  --hl-soft: rgba(243, 196, 10, 0.45);
+
+  --red: #cc3a33;
+  --red-soft: rgba(204, 58, 51, 0.1);
+  --cyan: #0a8f78;
+  --cyan-soft: rgba(10, 143, 120, 0.12);
+  --green: #2f9e44;
+
+  --cream: #fffdf7;
+  --cream-ink: #1f1b15;
+  --cream-soft: #564e41;
+  --cream-line: rgba(120, 104, 78, 0.3);
+
+  --n-50: #faf7f0;
+  --n-100: #f1ece0;
+  --n-200: #e4ddcc;
+  --n-300: #cec5ac;
+  --n-400: #a99f88;
+  --n-500: #8c8270;
+  --n-600: #6e6557;
+  --n-700: #564f44;
+  --n-800: #3c3830;
+  --n-900: #28251f;
+  --n-950: #1b1915;
+
+  --shadow-card: 0 1px 1px rgba(27, 25, 21, 0.04), 0 8px 22px -14px rgba(27, 25, 21, 0.22);
+  --shadow-lift: 0 2px 4px rgba(27, 25, 21, 0.06), 0 22px 44px -20px rgba(27, 25, 21, 0.3);
+  --shadow-sticky: 1px 2px 0 rgba(27, 25, 21, 0.1), 0 12px 26px -14px rgba(27, 25, 21, 0.3);
+  --glow: 0 0 40px rgba(245, 197, 24, 0.16);
+
+  color-scheme: light;
 }
 
 @layer base {
@@ -99,10 +145,29 @@
     outline-offset: 2px;
     border-radius: 2px;
   }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+  /* thin themed scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--faint);
+  }
 }
 
 @layer components {
-  /* reading typography for markdown / rich text */
+  /* ── reading typography ── */
   .prose-h {
     @apply text-base text-ink;
     max-width: 42rem;
@@ -125,16 +190,34 @@
     color: var(--pen);
     text-decoration: underline;
     text-underline-offset: 3px;
+    text-decoration-thickness: 1.5px;
+    text-decoration-color: var(--pen-soft);
+  }
+  .prose-h a:hover {
+    text-decoration-color: var(--pen);
   }
   .prose-h strong {
     @apply font-semibold;
+  }
+  .prose-h em {
+    font-style: italic;
   }
   .prose-h ul,
   .prose-h ol {
     padding-left: 1.4em;
   }
   .prose-h ul {
-    list-style: disc;
+    list-style: none;
+  }
+  .prose-h ul > li {
+    position: relative;
+  }
+  .prose-h ul > li::before {
+    content: "–";
+    position: absolute;
+    left: -1.4em;
+    color: var(--pen);
+    font-weight: 600;
   }
   .prose-h ol {
     list-style: decimal;
@@ -152,17 +235,14 @@
     @apply rounded-sm text-sm;
     background: var(--n-100);
     padding: 0.15em 0.4em;
+    font-variant-ligatures: none;
   }
   .prose-h pre {
     @apply rounded-lg text-sm;
-    background: var(--n-900);
-    color: var(--n-50);
+    background: #0d0d0d;
+    color: #f1ede2;
     padding: 1rem 1.25rem;
     overflow-x: auto;
-  }
-  [data-theme="dark"] .prose-h pre {
-    background: var(--raise);
-    color: var(--ink);
     border: 1px solid var(--line);
   }
   .prose-h pre code {
@@ -176,15 +256,38 @@
   .prose-h img {
     @apply rounded-lg;
   }
+
+  /* heading sitting on a ruled baseline */
+  .rule-baseline {
+    position: relative;
+    padding-bottom: 0.5rem;
+  }
+  .rule-baseline::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-bottom: 1px solid var(--line-strong);
+  }
+
+  /* paper cutout — cream material pasted on the dark canvas */
+  .paper-cut {
+    background: var(--cream);
+    color: var(--cream-ink);
+    border: 1px solid var(--cream-line);
+  }
+  .paper-cut .text-soft,
+  .paper-cut .text-faint {
+    color: var(--cream-soft);
+  }
 }
 
 @layer utilities {
-  /* faint bullet-journal dot grid — use sparingly */
   .dotgrid {
     background-image: radial-gradient(var(--line-strong) 1px, transparent 1px);
     background-size: 26px 26px;
   }
-  /* ruled lines, notebook page */
   .ruled {
     background-image: repeating-linear-gradient(
       to bottom,
@@ -194,11 +297,81 @@
       var(--line) 32px
     );
   }
+  .graphpaper {
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  /* faint engineering grid for whole sections */
+  .grid-bg {
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  /* radial yellow glow behind hero/feature blocks */
+  .glow-yellow {
+    position: relative;
+    isolation: isolate;
+  }
+  .glow-yellow::before {
+    content: "";
+    position: absolute;
+    top: -10%;
+    left: 50%;
+    width: min(720px, 90%);
+    aspect-ratio: 1;
+    transform: translateX(-50%);
+    background: radial-gradient(circle, rgba(245, 197, 24, 0.1) 0%, transparent 65%);
+    pointer-events: none;
+    z-index: -1;
+  }
   /* highlighter swipe behind text */
   .hl-mark {
-    background-image: linear-gradient(transparent 55%, var(--hl-soft) 55%);
+    background-image: linear-gradient(
+      to bottom,
+      transparent 12%,
+      var(--hl-soft) 12%,
+      var(--hl-soft) 92%,
+      transparent 92%
+    );
+    background-repeat: no-repeat;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    padding: 0 0.08em;
   }
   .tab-corner {
     clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
+  }
+  .stitch-left {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      var(--line-strong) 0,
+      var(--line-strong) 6px,
+      transparent 6px,
+      transparent 12px
+    );
+    background-repeat: no-repeat;
+    background-size: 1px 100%;
+    background-position: left top;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  /* subtle film-grain over the whole page (mix-media texture) */
+  .noise::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.5;
+    mix-blend-mode: overlay;
   }
 }

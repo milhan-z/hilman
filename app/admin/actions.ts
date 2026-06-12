@@ -22,7 +22,7 @@ const ok: ActionState = { status: "success" };
 const fail = (message: string): ActionState => ({ status: "error", message });
 
 function revalidateSite() {
-  for (const p of ["/", "/works", "/journal", "/about", "/connect", "/desk", "/lab"]) {
+  for (const p of ["/", "/works", "/journal", "/about", "/connect", "/lab"]) {
     revalidatePath(p);
   }
   revalidatePath("/works/[slug]", "page");
@@ -231,6 +231,128 @@ export async function savePage(_prev: ActionState, formData: FormData): Promise<
   return ok;
 }
 
+export async function quickUpdateItem(
+  kind: "project" | "journal",
+  id: string,
+  updates: {
+    title: string;
+    slug?: string;
+    status: "published" | "draft";
+    featured: boolean;
+    stream?: string;
+    year?: number | null;
+    sort_order?: number;
+  }
+): Promise<ActionState> {
+  const supabase = createServerSupabase();
+  const table = kind === "project" ? "projects" : "journal_posts";
+  
+  const title = updates.title.trim();
+  if (!title) return fail("A title is required.");
+
+  const row: Record<string, any> = {
+    title,
+    slug: slugify(updates.slug || "") || slugify(title),
+    status: updates.status,
+    featured: updates.featured,
+  };
+
+  if (kind === "project") {
+    if (updates.stream) row.stream = updates.stream;
+    row.year = updates.year ?? null;
+    if (updates.sort_order !== undefined) row.sort_order = updates.sort_order;
+  }
+
+  try {
+    if (updates.status === "published") {
+      const { data: existing } = await supabase
+        .from(table)
+        .select("published_at")
+        .eq("id", id)
+        .single();
+      if (!existing?.published_at) {
+        row.published_at = new Date().toISOString();
+      }
+    }
+
+    const { error } = await supabase.from(table).update(row).eq("id", id);
+    if (error) return fail(error.message);
+
+    revalidateSite();
+    return ok;
+  } catch (e: any) {
+    return fail(e.message ?? "Quick edit failed.");
+  }
+}
+
+export async function bulkUpdateItems(
+  kind: "project" | "journal",
+  ids: string[],
+  updates: { status: "published" | "draft" }
+): Promise<ActionState> {
+  const supabase = createServerSupabase();
+  const table = kind === "project" ? "projects" : "journal_posts";
+
+  try {
+    const row: Record<string, any> = {
+      status: updates.status,
+    };
+
+    if (updates.status === "published") {
+      const { data: existing, error: fetchErr } = await supabase
+        .from(table)
+        .select("id, published_at")
+        .in("id", ids);
+
+      if (fetchErr) return fail(fetchErr.message);
+
+      for (const item of existing || []) {
+        const itemRow: Record<string, any> = { status: updates.status };
+        if (!item.published_at) {
+          itemRow.published_at = new Date().toISOString();
+        }
+        await supabase.from(table).update(itemRow).eq("id", item.id);
+      }
+    } else {
+      const { error } = await supabase.from(table).update(row).in("id", ids);
+      if (error) return fail(error.message);
+    }
+
+    revalidateSite();
+    return ok;
+  } catch (e: any) {
+    return fail(e.message ?? "Bulk update failed.");
+  }
+}
+
+export async function bulkDeleteItems(
+  kind: "project" | "journal",
+  ids: string[]
+): Promise<ActionState> {
+  const supabase = createServerSupabase();
+  const table = kind === "project" ? "projects" : "journal_posts";
+
+  try {
+    // Delete associated content blocks first
+    const { error: blockErr } = await supabase
+      .from("content_blocks")
+      .delete()
+      .eq("owner_type", kind)
+      .in("owner_id", ids);
+
+    if (blockErr) return fail(blockErr.message);
+
+    // Delete records
+    const { error } = await supabase.from(table).delete().in("id", ids);
+    if (error) return fail(error.message);
+
+    revalidateSite();
+    return ok;
+  } catch (e: any) {
+    return fail(e.message ?? "Bulk delete failed.");
+  }
+}
+
 /* ── taxonomy ──────────────────────────────────────────── */
 
 export async function createTag(formData: FormData) {
@@ -352,4 +474,27 @@ export async function deleteMessage(id: string) {
   const supabase = createServerSupabase();
   await supabase.from("messages").delete().eq("id", id);
   revalidatePath("/admin/messages");
+}
+
+/* ── command palette ───────────────────────────────────── */
+
+export interface CommandIndex {
+  projects: { id: string; title: string; status: string }[];
+  journal: { id: string; title: string; status: string }[];
+  pages: { id: string; title: string; slug: string }[];
+}
+
+/** Lightweight content index for the ⌘K palette — titles only, newest first. */
+export async function getCommandIndex(): Promise<CommandIndex> {
+  const supabase = createServerSupabase();
+  const [projects, journal, pages] = await Promise.all([
+    supabase.from("projects").select("id, title, status").order("updated_at", { ascending: false }).limit(50),
+    supabase.from("journal_posts").select("id, title, status").order("updated_at", { ascending: false }).limit(50),
+    supabase.from("pages").select("id, title, slug").order("slug"),
+  ]);
+  return {
+    projects: projects.data ?? [],
+    journal: journal.data ?? [],
+    pages: pages.data ?? [],
+  };
 }

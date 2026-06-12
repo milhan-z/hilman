@@ -1,22 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import { extractYouTubeId } from "@/lib/embed";
 
 /**
  * Lite YouTube embed — renders only a thumbnail + play button until clicked,
  * keeping the iframe (and ~1MB of YouTube JS) off the critical path.
+ * Accepts a bare id, a watch/share URL, or a pasted <iframe> snippet.
  */
 export function YouTubeFacade({ youtubeId, caption }: { youtubeId: string; caption?: string }) {
   const [playing, setPlaying] = useState(false);
+  const id = extractYouTubeId(youtubeId);
 
   return (
     <figure>
-      <div className="relative aspect-video overflow-hidden rounded-lg border border-line bg-n-900">
+      <div className="relative aspect-video overflow-hidden rounded-md border border-line bg-n-900">
         {playing ? (
           <iframe
-            src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1`}
+            src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1`}
             title={caption || "YouTube video"}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
             className="absolute inset-0 h-full w-full"
           />
@@ -29,7 +32,7 @@ export function YouTubeFacade({ youtubeId, caption }: { youtubeId: string; capti
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`}
+              src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`}
               alt=""
               loading="lazy"
               className="h-full w-full object-cover opacity-90 transition-opacity duration-base group-hover:opacity-100"

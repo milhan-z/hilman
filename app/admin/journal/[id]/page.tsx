@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ContentEditor } from "@/components/admin/content-editor";
+import { LiveEditor } from "@/components/admin/live-editor";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { Block } from "@/lib/types";
 
@@ -32,16 +32,15 @@ export default async function JournalEditorPage({ params }: { params: { id: stri
   const { data: allTags } = await supabase.from("tags").select("*").order("name");
 
   return (
-    <div className="max-w-3xl">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold">{isNew ? "New entry" : `Edit: ${initial?.title}`}</h1>
-        {initial?.status === "published" && (
-          <Link href={`/journal/${initial.slug}`} className="text-sm text-pen hover:underline">
+    <div className="w-full">
+      {initial?.status === "published" && (
+        <div className="mb-2 flex justify-end">
+          <Link href={`/journal/${initial.slug}`} className="text-sm text-pen hover:underline font-mono">
             View live ↗
           </Link>
-        )}
-      </div>
-      <ContentEditor kind="journal" initial={initial} allTags={allTags ?? []} />
+        </div>
+      )}
+      <LiveEditor kind="journal" initial={initial} allTags={allTags ?? []} />
     </div>
   );
 }

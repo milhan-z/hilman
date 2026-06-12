@@ -4,6 +4,7 @@ import { Button, NoteDivider } from "../ui";
 import { YouTubeFacade } from "../youtube-facade";
 import { CustomBlock } from "../lab/registry";
 import { fileSrc } from "@/lib/cloudinary";
+import { parseEmbed } from "@/lib/embed";
 import { cn } from "@/lib/utils";
 import type { Block, BlockType } from "@/lib/types";
 import type { ReactNode } from "react";
@@ -14,7 +15,7 @@ import type { ReactNode } from "react";
    components/admin/block-editors.tsx.
    ───────────────────────────────────────────────────────── */
 
-type BlockFC = (props: { data: Record<string, any> }) => JSX.Element | null;
+export type BlockFC = (props: { data: Record<string, any> }) => JSX.Element | null;
 
 const HeadingBlock: BlockFC = ({ data }) => {
   const level = data.level === 4 ? "h4" : data.level === 3 ? "h3" : "h2";
@@ -33,7 +34,7 @@ const MarkdownBlock: BlockFC = ({ data }) => <Prose md={data.md ?? ""} />;
 
 const ImageBlock: BlockFC = ({ data }) => (
   <figure className="!max-w-none">
-    <div className="overflow-hidden rounded-lg border border-line shadow-card">
+    <div className="overflow-hidden rounded-md border border-line shadow-card">
       <Pic
         src={data.public_id ?? data.src}
         alt={data.alt ?? ""}
@@ -86,21 +87,31 @@ const YouTubeBlock: BlockFC = ({ data }) => (
   </div>
 );
 
-const EmbedBlock: BlockFC = ({ data }) => (
-  <div className="!max-w-none overflow-hidden rounded-lg border border-line">
-    <iframe
-      src={data.url}
-      title={data.provider ? `${data.provider} embed` : "Embedded content"}
-      loading="lazy"
-      className="aspect-video w-full"
-      sandbox="allow-scripts allow-same-origin allow-popups"
-    />
-  </div>
-);
+const EmbedBlock: BlockFC = ({ data }) => {
+  // Accepts a bare URL or a full <iframe> snippet (Figma/CodePen/maps/…).
+  // Owner-authored content via the CMS, so no sandbox — maximises compatibility.
+  const { src, ratio } = parseEmbed(data.url);
+  if (!src) return null;
+  const fixedHeight = typeof data.height === "number" ? data.height : null;
+  return (
+    <div className="!max-w-none overflow-hidden rounded-md border border-line bg-n-100">
+      <iframe
+        src={src}
+        title={data.provider ? `${data.provider} embed` : "Embedded content"}
+        loading="lazy"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+        allowFullScreen
+        referrerPolicy="strict-origin-when-cross-origin"
+        className={cn("w-full border-0", !fixedHeight && !ratio && "aspect-video")}
+        style={fixedHeight ? { height: fixedHeight } : ratio ? { aspectRatio: String(ratio) } : undefined}
+      />
+    </div>
+  );
+};
 
 const QuoteBlock: BlockFC = ({ data }) => (
   <blockquote className="my-2 border-l-[3px] border-hl py-1 pl-5">
-    <p className="font-display text-lg italic leading-relaxed text-ink">“{data.text}”</p>
+    <p className="font-display text-xl italic leading-relaxed text-ink">“{data.text}”</p>
     {data.source && <cite className="mt-2 block font-hand text-lg not-italic text-faint">— {data.source}</cite>}
   </blockquote>
 );
@@ -114,7 +125,7 @@ const CodeBlock: BlockFC = ({ data }) => (
         {data.language}
       </span>
     )}
-    <pre className="overflow-x-auto rounded-lg rounded-tl-none border border-line bg-[#211f1a] p-5 text-sm leading-relaxed text-[#f1ede2]">
+    <pre className="overflow-x-auto rounded-md rounded-tl-none border border-line bg-[#1c1813] p-5 text-sm leading-relaxed text-[#f1ede2]">
       <code>{data.code}</code>
     </pre>
   </div>
@@ -133,7 +144,7 @@ const LinkBlock: BlockFC = ({ data }) => (
     href={data.url}
     target="_blank"
     rel="noopener noreferrer"
-    className="group flex items-center gap-4 rounded-lg border border-line bg-surface p-4 shadow-card transition-all duration-base ease-out hover:-translate-y-0.5 hover:shadow-lift"
+    className="group flex items-center gap-4 rounded-md border border-line bg-surface p-4 shadow-card transition-all duration-base ease-out hover:-translate-y-0.5 hover:shadow-lift"
   >
     {data.thumbnail && (
       <div className="hidden h-16 w-24 shrink-0 overflow-hidden rounded sm:block">
@@ -155,7 +166,7 @@ const FileBlock: BlockFC = ({ data }) => {
     <a
       href={href}
       download
-      className="group inline-flex items-center gap-3 rounded-lg border border-dashed border-line-strong bg-surface px-4 py-3 transition-colors duration-fast hover:border-pen"
+      className="group inline-flex items-center gap-3 rounded-md border border-dashed border-line-strong bg-surface px-4 py-3 transition-colors duration-fast hover:border-pen"
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pen)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
@@ -166,7 +177,7 @@ const FileBlock: BlockFC = ({ data }) => {
   );
 };
 
-const renderers: Record<BlockType, BlockFC> = {
+export const renderers: Record<BlockType, BlockFC> = {
   heading: HeadingBlock,
   paragraph: ParagraphBlock,
   markdown: MarkdownBlock,
@@ -183,17 +194,48 @@ const renderers: Record<BlockType, BlockFC> = {
   custom: ({ data }) => <CustomBlock component={data.component} props={data.props} />,
 };
 
+export function getBlockLayoutClasses(type: BlockType, data: Record<string, any>) {
+  const isText = ["paragraph", "heading", "quote", "markdown", "button"].includes(type);
+  const width = (data.width as string) || "prose";
+  const spacing = (data.spacing as string) || "medium";
+
+  // Width mapping
+  const widthCls = (
+    {
+      prose: "max-w-prose mx-auto w-full px-5",
+      wide: "max-w-content mx-auto w-full px-5 sm:px-8",
+      full: "max-w-none w-full",
+    } as Record<string, string>
+  )[width] ?? "max-w-prose mx-auto w-full px-5";
+
+  // Spacing mapping
+  const spacingCls = (
+    {
+      none: "py-0",
+      small: "py-2 sm:py-3.5",
+      medium: "py-4 sm:py-7",
+      large: "py-8 sm:py-16",
+    } as Record<string, string>
+  )[spacing] ?? "py-4 sm:py-7";
+
+  return cn(widthCls, spacingCls);
+}
+
 export function BlockRenderer({ blocks }: { blocks: Block[] }) {
   if (!blocks?.length) return null;
   return (
-    <div className="space-y-7 [&>*]:mx-auto [&>*]:max-w-prose">
+    <div className="flex flex-col w-full">
       {blocks
         .slice()
         .sort((a, b) => a.position - b.position)
         .map((block) => {
           const Renderer = renderers[block.type];
           if (!Renderer) return null;
-          return <Renderer key={block.id} data={block.data ?? {}} />;
+          return (
+            <div key={block.id} className={getBlockLayoutClasses(block.type, block.data ?? {})}>
+              <Renderer data={block.data ?? {}} />
+            </div>
+          );
         })}
     </div>
   );

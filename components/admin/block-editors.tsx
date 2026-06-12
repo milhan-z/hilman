@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Field, Select, TextArea, TextInput } from "./fields";
 import { uploadToCloudinary } from "./upload";
+import { useMediaSelector } from "./media-library-context";
 import type { BlockType } from "@/lib/types";
 
 /* ─────────────────────────────────────────────────────────
@@ -70,23 +71,58 @@ interface EditorProps {
   onChange: (data: Record<string, any>) => void;
 }
 
-function MediaField({
+export function MediaField({
   label,
   value,
   onChange,
+  onSelectAsset,
   accept = "image/*",
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  onSelectAsset?: (publicId: string, altText?: string) => void;
   accept?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Safe invocation of media selector context
+  let mediaSelector: any = null;
+  try {
+    mediaSelector = useMediaSelector();
+  } catch {
+    // Context is not available (e.g. in standalone field rendering)
+  }
+
+  function handleChooseFromLibrary() {
+    if (mediaSelector) {
+      mediaSelector.openSelector((publicId: string, altText?: string) => {
+        if (onSelectAsset) {
+          onSelectAsset(publicId, altText);
+        } else {
+          onChange(publicId);
+        }
+      });
+    }
+  }
+
   return (
-    <Field label={label} hint="Cloudinary public_id or full URL — or upload directly.">
+    <Field label={label} hint="Cloudinary public_id or URL — upload directly or choose from library.">
       <div className="flex gap-2">
         <TextInput value={value} onChange={(e) => onChange(e.target.value)} placeholder="folder/asset-id or https://…" />
+        
+        {mediaSelector && (
+          <button
+            type="button"
+            onClick={handleChooseFromLibrary}
+            className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded border border-line bg-raise px-3 text-sm text-soft hover:border-pen hover:text-pen transition-colors"
+            title="Choose from media library"
+          >
+            Library
+          </button>
+        )}
+
         <label className="inline-flex min-h-[44px] shrink-0 cursor-pointer items-center rounded border border-line px-3 text-sm text-soft transition-colors hover:border-pen hover:text-pen">
           {busy ? "Uploading…" : "Upload"}
           <input
@@ -101,7 +137,11 @@ function MediaField({
               setError(null);
               try {
                 const asset = await uploadToCloudinary(file);
-                onChange(asset.public_id);
+                if (onSelectAsset) {
+                  onSelectAsset(asset.public_id);
+                } else {
+                  onChange(asset.public_id);
+                }
               } catch (err: any) {
                 setError(err.message);
               } finally {
@@ -179,7 +219,14 @@ const EDITORS: Record<BlockType, (p: EditorProps) => JSX.Element> = {
   ),
   image: ({ data, onChange }) => (
     <div className="space-y-3">
-      <MediaField label="Image" value={data.public_id ?? data.src ?? ""} onChange={(v) => onChange({ ...data, public_id: v, src: undefined })} />
+      <MediaField
+        label="Image"
+        value={data.public_id ?? data.src ?? ""}
+        onChange={(v) => onChange({ ...data, public_id: v, src: undefined })}
+        onSelectAsset={(id, alt) =>
+          onChange({ ...data, public_id: id, alt: alt || data.alt || "", src: undefined })
+        }
+      />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Alt text">
           <TextInput value={data.alt ?? ""} onChange={(e) => onChange({ ...data, alt: e.target.value })} />
@@ -208,7 +255,7 @@ const EDITORS: Record<BlockType, (p: EditorProps) => JSX.Element> = {
   ),
   youtube: ({ data, onChange }) => (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label="YouTube ID" hint="The part after watch?v= — e.g. dQw4w9WgXcQ">
+      <Field label="YouTube ID or link" hint="Paste the id, the watch/share URL, or the full <iframe> — I'll find the id.">
         <TextInput value={data.youtube_id ?? ""} onChange={(e) => onChange({ ...data, youtube_id: e.target.value })} />
       </Field>
       <Field label="Caption">
@@ -217,12 +264,15 @@ const EDITORS: Record<BlockType, (p: EditorProps) => JSX.Element> = {
     </div>
   ),
   embed: ({ data, onChange }) => (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <Field label="URL">
-        <TextInput value={data.url ?? ""} onChange={(e) => onChange({ ...data, url: e.target.value })} />
+    <div className="space-y-3">
+      <Field
+        label="Embed URL or <iframe> code"
+        hint="Paste the share URL or the whole <iframe> snippet (Figma, CodePen, Maps…). I'll pull out the src and size automatically."
+      >
+        <TextArea rows={3} value={data.url ?? ""} onChange={(e) => onChange({ ...data, url: e.target.value })} />
       </Field>
-      <Field label="Provider">
-        <TextInput value={data.provider ?? ""} placeholder="codepen, figma…" onChange={(e) => onChange({ ...data, provider: e.target.value })} />
+      <Field label="Provider (optional)" hint="Just for the accessible title — e.g. figma, codepen.">
+        <TextInput value={data.provider ?? ""} placeholder="figma, codepen…" onChange={(e) => onChange({ ...data, provider: e.target.value })} />
       </Field>
     </div>
   ),
@@ -284,12 +334,30 @@ const EDITORS: Record<BlockType, (p: EditorProps) => JSX.Element> = {
       <Field label="Description">
         <TextInput value={data.description ?? ""} onChange={(e) => onChange({ ...data, description: e.target.value })} />
       </Field>
-      <MediaField label="Thumbnail (optional)" value={data.thumbnail ?? ""} onChange={(v) => onChange({ ...data, thumbnail: v })} />
+      <MediaField
+        label="Thumbnail (optional)"
+        value={data.thumbnail ?? ""}
+        onChange={(v) => onChange({ ...data, thumbnail: v })}
+        onSelectAsset={(id) => onChange({ ...data, thumbnail: id })}
+      />
     </div>
   ),
   file: ({ data, onChange }) => (
     <div className="space-y-3">
-      <MediaField label="File" accept="*/*" value={data.public_id ?? data.src ?? ""} onChange={(v) => onChange({ ...data, public_id: v, src: undefined })} />
+      <MediaField
+        label="File"
+        accept="*/*"
+        value={data.public_id ?? data.src ?? ""}
+        onChange={(v) => onChange({ ...data, public_id: v, src: undefined })}
+        onSelectAsset={(id) =>
+          onChange({
+            ...data,
+            public_id: id,
+            filename: data.filename || id.split("/").pop() || "",
+            src: undefined,
+          })
+        }
+      />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Filename (shown to visitors)">
           <TextInput value={data.filename ?? ""} onChange={(e) => onChange({ ...data, filename: e.target.value })} />
@@ -320,5 +388,43 @@ export function BlockEditorFields({
   onChange: (data: Record<string, any>) => void;
 }) {
   const Editor = EDITORS[type];
-  return <Editor data={data} onChange={onChange} />;
+  const supportsWidth = ["image", "gallery", "youtube", "embed", "code", "custom", "divider"].includes(type);
+
+  return (
+    <div className="space-y-4">
+      <Editor data={data} onChange={onChange} />
+      
+      <div className="border-t border-line pt-4 mt-4 space-y-3">
+        <p className="text-2xs font-semibold uppercase tracking-wider text-faint">
+          Block Layout Options
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Vertical Margin">
+            <Select
+              value={data.spacing ?? "medium"}
+              onChange={(e) => onChange({ ...data, spacing: e.target.value })}
+            >
+              <option value="none">None (0px)</option>
+              <option value="small">Small margin</option>
+              <option value="medium">Medium (standard)</option>
+              <option value="large">Large margin</option>
+            </Select>
+          </Field>
+
+          {supportsWidth && (
+            <Field label="Layout Width">
+              <Select
+                value={data.width ?? "prose"}
+                onChange={(e) => onChange({ ...data, width: e.target.value })}
+              >
+                <option value="prose">Standard Prose</option>
+                <option value="wide">Wide Width</option>
+                <option value="full">Full Screen Width</option>
+              </Select>
+            </Field>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

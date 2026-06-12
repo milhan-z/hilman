@@ -50,7 +50,7 @@ export function MediaLibrary({ media }: { media: MediaRow[] }) {
               <TextInput value={folder} onChange={(e) => setFolder(e.target.value)} />
             </Field>
           </div>
-          <label className={`inline-flex min-h-[44px] cursor-pointer items-center rounded bg-pen px-5 text-sm font-medium text-white hover:opacity-90 ${busy ? "opacity-50" : ""}`}>
+          <label className={`inline-flex min-h-[44px] cursor-pointer items-center rounded bg-hl px-5 text-sm font-medium text-hl-ink hover:opacity-90 ${busy ? "opacity-50" : ""}`}>
             {busy ? "Uploading…" : "Upload files"}
             <input
               ref={fileRef}

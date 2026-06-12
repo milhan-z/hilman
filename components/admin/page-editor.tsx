@@ -12,7 +12,7 @@ function SaveButton() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded bg-pen px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+      className="rounded bg-hl px-5 py-2.5 text-sm font-medium text-hl-ink hover:opacity-90 disabled:opacity-50"
     >
       {pending ? "Saving…" : "Save page"}
     </button>

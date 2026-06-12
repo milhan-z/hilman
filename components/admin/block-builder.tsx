@@ -87,7 +87,7 @@ export function BlockBuilder({
         <button
           type="button"
           onClick={add}
-          className="inline-flex min-h-[44px] items-center rounded bg-pen px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          className="inline-flex min-h-[44px] items-center rounded bg-hl px-4 text-sm font-medium text-hl-ink transition-opacity hover:opacity-90"
         >
           + Add block
         </button>

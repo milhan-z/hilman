@@ -20,7 +20,7 @@ export default async function AdminTaxonomyPage() {
             placeholder="New tag name"
             className="w-64 rounded border border-line bg-raise px-3.5 py-2.5 text-sm outline-none focus:border-pen"
           />
-          <button className="rounded bg-pen px-4 text-sm font-medium text-white hover:opacity-90">Add</button>
+          <button className="rounded bg-hl px-4 text-sm font-medium text-hl-ink hover:opacity-90">Add</button>
         </form>
         <ul className="mt-4 flex flex-wrap gap-2">
           {(tags ?? []).map((t) => (
@@ -61,7 +61,7 @@ export default async function AdminTaxonomyPage() {
             placeholder="Description (optional)"
             className="w-64 rounded border border-line bg-raise px-3.5 py-2.5 text-sm outline-none focus:border-pen"
           />
-          <button className="rounded bg-pen px-4 text-sm font-medium text-white hover:opacity-90">Add</button>
+          <button className="rounded bg-hl px-4 text-sm font-medium text-hl-ink hover:opacity-90">Add</button>
         </form>
         <ul className="mt-4 divide-y divide-line rounded-lg border border-line bg-surface">
           {(categories ?? []).map((c) => (
