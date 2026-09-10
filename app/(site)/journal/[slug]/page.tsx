@@ -4,7 +4,8 @@ import { BlockRenderer } from "@/components/blocks/renderer";
 import { JournalCard } from "@/components/journal-card";
 import { PrevNext } from "@/components/prev-next";
 import { ArrowLink, EntryMeta, Tag } from "@/components/ui";
-import { getJournalBySlug, getJournalPosts, getRelatedJournal } from "@/lib/data";
+import { getJournalBySlug, getJournalPosts, getRelatedJournal, load } from "@/lib/data";
+import { ContentUnavailablePage } from "@/components/content-unavailable";
 import { mediaSrc } from "@/lib/cloudinary";
 import { formatDate } from "@/lib/utils";
 
@@ -15,7 +16,8 @@ export async function generateMetadata({
 }: {
   params: { slug: string };
 }): Promise<Metadata> {
-  const post = await getJournalBySlug(params.slug);
+  const res = await load(() => getJournalBySlug(params.slug));
+  const post = res.ok ? res.value : null;
   if (!post) return {};
   const og = mediaSrc(post.cover_public_id, { width: 1200 });
   return {
@@ -26,9 +28,20 @@ export async function generateMetadata({
 }
 
 export default async function JournalEntryPage({ params }: { params: { slug: string } }) {
-  const post = await getJournalBySlug(params.slug);
+  // A failed read is not a missing entry — see the works detail page.
+  const postRes = await load(() => getJournalBySlug(params.slug));
+  if (!postRes.ok) {
+    return <ContentUnavailablePage what="this entry" detail={postRes.error} />;
+  }
+  const post = postRes.value;
   if (!post) notFound();
-  const [related, all] = await Promise.all([getRelatedJournal(post), getJournalPosts()]);
+
+  const [relatedRes, allRes] = await Promise.all([
+    load(() => getRelatedJournal(post)),
+    load(getJournalPosts),
+  ]);
+  const related = relatedRes.ok ? relatedRes.value : [];
+  const all = allRes.ok ? allRes.value : [];
 
   const idx = all.findIndex((p) => p.slug === post.slug);
   const newer = idx > 0 ? all[idx - 1] : null;

@@ -166,14 +166,18 @@ export interface Settings {
   featured: { note?: string };
 }
 
+/**
+ * Fallbacks used when a settings row is missing.
+ *
+ * `socials` is deliberately empty. It used to hold placeholder profiles
+ * (bare instagram.com / github.com links and a hello@hilman.site address)
+ * which shipped to the live site and sent visitors to accounts that were not
+ * Hilman's. An unset link is better than a wrong one: the UI hides the
+ * section until real accounts are entered in Studio → Settings.
+ */
 export const DEFAULT_SETTINGS: Settings = {
   hero_roles: ["Designer", "Editor", "Programmer", "Storyteller", "Technologist"],
-  socials: [
-    { label: "Instagram", url: "https://instagram.com/" },
-    { label: "GitHub", url: "https://github.com/" },
-    { label: "YouTube", url: "https://youtube.com/" },
-    { label: "Email", url: "mailto:hello@hilman.site" },
-  ],
+  socials: [],
   nav: [
     { label: "Works", href: "/works" },
     { label: "Journal", href: "/journal" },

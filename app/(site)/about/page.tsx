@@ -3,7 +3,9 @@ import { Pic } from "@/components/cld-image";
 import { DrawAccent } from "@/components/draw-accent";
 import { SectionReveal } from "@/components/motion";
 import { Button, EntryMeta, Kicker, Marginalia, Tag } from "@/components/ui";
-import { getPage, getSettings } from "@/lib/data";
+import { getPage, getSettings, load } from "@/lib/data";
+import { ContentUnavailablePage } from "@/components/content-unavailable";
+import { DEFAULT_SETTINGS } from "@/lib/types";
 
 export const revalidate = 60;
 
@@ -13,8 +15,15 @@ export const metadata: Metadata = {
 };
 
 export default async function AboutPage() {
-  const [page, settings] = await Promise.all([getPage("about"), getSettings()]);
+  const [pageRes, settingsRes] = await Promise.all([load(() => getPage("about")), load(getSettings)]);
+  if (!pageRes.ok) {
+    return <ContentUnavailablePage what="the About page" detail={pageRes.error} />;
+  }
+  const page = pageRes.value;
+  const settings = settingsRes.ok ? settingsRes.value : DEFAULT_SETTINGS;
   const d = page?.data ?? {};
+  // An unwritten profile should read as unwritten, not as a page that failed.
+  const hasProfile = Boolean(d.lede || d.story?.length || d.timeline?.length || d.portrait);
 
   return (
     <div className="mx-auto max-w-wide px-5 py-14 sm:px-8">
@@ -32,6 +41,11 @@ export default async function AboutPage() {
       <div className="mt-12 grid gap-12 lg:grid-cols-[1.4fr_1fr]">
         {/* story */}
         <div>
+          {!hasProfile && (
+            <p className="rounded-md border border-dashed border-line-strong p-6 text-lg leading-relaxed text-soft">
+              This page hasn&apos;t been written yet.
+            </p>
+          )}
           {d.lede && <p className="text-pretty text-2xl font-medium leading-snug">{d.lede}</p>}
           <div className="mt-6 space-y-5 text-lg leading-relaxed text-soft">
             {(d.story ?? []).map((para: string, i: number) => (
@@ -39,11 +53,32 @@ export default async function AboutPage() {
             ))}
           </div>
 
+          {Array.isArray(d.focus) && d.focus.length > 0 && (
+            <section className="mt-10" aria-labelledby="focus-heading">
+              <h2
+                id="focus-heading"
+                className="rule-baseline font-mono text-xs uppercase tracking-[0.2em] text-soft"
+              >
+                What I focus on
+              </h2>
+              <ul className="mt-4 grid gap-2.5 sm:grid-cols-2">
+                {d.focus.map((item: string, i: number) => (
+                  <li key={i} className="flex gap-2.5 text-soft">
+                    <span aria-hidden className="text-pen">
+                      →
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {/* timeline spine */}
           {d.timeline && (
             <SectionReveal>
               <section className="mt-14" aria-label="Loose timeline">
-                <h2 className="rule-baseline font-mono text-2xs uppercase tracking-[0.2em] text-faint">
+                <h2 className="rule-baseline font-mono text-xs uppercase tracking-[0.2em] text-soft">
                   A loose timeline
                 </h2>
                 <ol className="mt-6 space-y-0 border-l-2 border-line pl-6">
@@ -84,7 +119,7 @@ export default async function AboutPage() {
 
           {d.toolbox && (
             <div className="rounded-md border border-line bg-surface p-6 shadow-card">
-              <h2 className="font-mono text-2xs uppercase tracking-widest text-faint">In the toolbox</h2>
+              <h2 className="font-mono text-xs uppercase tracking-widest text-soft">In the toolbox</h2>
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {d.toolbox.map((tool: string) => (
                   <Tag key={tool}>{tool}</Tag>
@@ -95,7 +130,7 @@ export default async function AboutPage() {
 
           {d.currently && (
             <div className="ruled rounded-md border border-line bg-raise p-6 shadow-card">
-              <h2 className="font-mono text-2xs uppercase tracking-widest text-faint">Currently</h2>
+              <h2 className="font-mono text-xs uppercase tracking-widest text-soft">Currently</h2>
               <ul className="mt-4 space-y-3 text-sm leading-relaxed text-soft">
                 {d.currently.map((c: string, i: number) => (
                   <li key={i} className="flex gap-2.5">
@@ -107,9 +142,16 @@ export default async function AboutPage() {
             </div>
           )}
 
-          <Button href="/connect" className="w-full">
-            Say hello properly
-          </Button>
+          <div className="space-y-3">
+            <Button href="/connect" className="w-full">
+              Say hello properly
+            </Button>
+            {d.cv_url && (
+              <Button href={d.cv_url} variant="ghost" className="w-full">
+                Read the CV ↗
+              </Button>
+            )}
+          </div>
         </aside>
       </div>
     </div>

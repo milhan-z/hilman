@@ -209,7 +209,7 @@ export function CommandPalette() {
                     {item.status && (
                       <span
                         className={cn(
-                          "rounded-full px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase",
+                          "rounded-full px-1.5 py-0.5 font-mono text-2xs font-bold uppercase",
                           i === active
                             ? "bg-black/15 text-hl-ink"
                             : item.status === "published"

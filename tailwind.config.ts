@@ -62,8 +62,10 @@ const config: Config = {
         ],
       },
       fontSize: {
-        // modular scale ~1.25, body floor 16px
-        "2xs": ["0.694rem", { lineHeight: "1.4" }],
+        // modular scale ~1.25, body floor 16px.
+        // 2xs was 0.694rem (~11px) and carried real information - status
+        // labels, counts, admin controls. Floor it at 12px.
+        "2xs": ["0.75rem", { lineHeight: "1.45" }],
         xs: ["0.8rem", { lineHeight: "1.5" }],
         sm: ["0.875rem", { lineHeight: "1.55" }],
         base: ["1rem", { lineHeight: "1.7" }],

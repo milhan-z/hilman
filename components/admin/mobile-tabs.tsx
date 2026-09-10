@@ -66,7 +66,7 @@ export function MobileTabs() {
 
   const tabCls = (active: boolean) =>
     cn(
-      "flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 rounded-md font-mono text-[10px] uppercase tracking-wide transition-colors",
+      "flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 rounded-md font-mono text-2xs uppercase tracking-wide transition-colors",
       active ? "text-pen" : "text-faint hover:text-soft"
     );
 

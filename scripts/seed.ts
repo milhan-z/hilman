@@ -1,10 +1,17 @@
 /**
- * Seed Supabase with the mock content from lib/mock.ts.
+ * Replace all content with the demo material from lib/mock.ts.
  *
- *   npm run seed
+ *   npm run seed -- --force
+ *
+ * THIS IS DESTRUCTIVE. It deletes every project, journal entry, page, tag,
+ * category and setting before inserting fictional examples. It exists to fill
+ * an empty development database, and nothing else.
+ *
+ * If you only need the Home / About / Connect page rows, do not use this:
+ * open Studio -> Pages and press "Create missing pages", which adds the
+ * missing rows and leaves your content alone.
  *
  * Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.
- * Idempotent: wipes content tables first, then re-inserts.
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -30,7 +37,43 @@ if (!url || !serviceKey) {
 
 const sb = createClient(url, serviceKey, { auth: { persistSession: false } });
 
+const forced = process.argv.includes("--force");
+
+/** Refuses to run against a database that already holds real content. */
+async function guard() {
+  if (forced) return;
+
+  const [projects, journal, pages] = await Promise.all([
+    sb.from("projects").select("id", { count: "exact", head: true }),
+    sb.from("journal_posts").select("id", { count: "exact", head: true }),
+    sb.from("pages").select("id", { count: "exact", head: true }),
+  ]);
+  const total = (projects.count ?? 0) + (journal.count ?? 0) + (pages.count ?? 0);
+
+  if (total > 0) {
+    console.error(
+      [
+        "",
+        "Refusing to seed: this database already has content.",
+        "  projects: " + (projects.count ?? 0) +
+          "   journal: " + (journal.count ?? 0) +
+          "   pages: " + (pages.count ?? 0),
+        "",
+        "Seeding DELETES all of it and inserts demo material instead.",
+        "",
+        "  - To add only the missing Home/About/Connect rows, open",
+        "    Studio > Pages and press \"Create missing pages\". Nothing is deleted.",
+        "  - If you really do want to wipe this database, run:",
+        "        npm run seed -- --force",
+        "",
+      ].join("\n")
+    );
+    process.exit(1);
+  }
+}
+
 async function run() {
+  await guard();
   console.log("→ clearing existing content…");
   for (const table of ["content_blocks", "projects", "journal_posts", "pages", "tags", "categories"]) {
     // join tables cascade from their parents

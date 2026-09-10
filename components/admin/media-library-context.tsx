@@ -50,3 +50,27 @@ export function MediaSelectorProvider({ children }: { children: ReactNode }) {
     </MediaSelectorContext.Provider>
   );
 }
+
+/**
+ * Opens the shared media picker and hands the chosen public_id back.
+ * Lives here so any form field can reuse the library instead of asking the
+ * editor to remember a Cloudinary id.
+ */
+export function MediaSelectorButton({
+  onSelect,
+  label = "Choose from library",
+}: {
+  onSelect: (publicId: string, altText?: string) => void;
+  label?: string;
+}) {
+  const { openSelector } = useMediaSelector();
+  return (
+    <button
+      type="button"
+      onClick={() => openSelector(onSelect)}
+      className="min-h-[44px] shrink-0 rounded border border-line-strong px-3.5 text-sm text-soft transition-colors hover:border-pen hover:text-pen"
+    >
+      {label}
+    </button>
+  );
+}

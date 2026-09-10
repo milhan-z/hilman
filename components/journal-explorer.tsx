@@ -117,19 +117,26 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
         ]}
       />
 
-      {filtered.length === 0 && (
+      {/* "nothing written yet" and "nothing matched your search" are
+          different things to tell a reader. */}
+      {posts.length === 0 ? (
+        <div className="dotgrid mt-8 rounded-lg border border-dashed border-line-strong p-12 text-center">
+          <p className="font-display text-lg text-soft">No entries published yet.</p>
+          <p className="mt-2 font-hand text-lg text-soft">notes appear here as they are written</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="dotgrid mt-8 rounded-lg border border-dashed border-line-strong p-12 text-center">
           <p className="font-display text-lg text-soft">No entries match that.</p>
-          <p className="mt-2 font-hand text-lg text-faint">try a broader word, or clear the topic</p>
+          <p className="mt-2 font-hand text-lg text-soft">try a broader word, or clear the topic</p>
         </div>
-      )}
+      ) : null}
 
       {/* pinned — only when browsing unfiltered */}
       {!anyFilter && pinned.length > 0 && (
         <section className="mt-10" aria-label="Pinned entries">
           <div className="mb-4 flex items-center gap-2">
             <Stamp tone="hl">pinned</Stamp>
-            <span className="font-mono text-2xs uppercase tracking-widest text-faint">worth starting with</span>
+            <span className="font-mono text-xs uppercase tracking-widest text-soft">worth starting with</span>
           </div>
           <div className="space-y-4">
             {pinned.map((post) => (

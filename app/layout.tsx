@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Fraunces, Inter, JetBrains_Mono } from "next/font/google";
+import { siteUrl } from "@/lib/site";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -18,8 +19,6 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-body", display: "swa
 const caveat = Caveat({ subsets: ["latin"], variable: "--font-hand", display: "swap" });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
@@ -27,7 +26,7 @@ export const metadata: Metadata = {
     template: "%s — Hilman.",
   },
   description:
-    "Hilman is a creative technologist working between design, media, and code. This is his living archive — works, journal, experiments, and an open desk.",
+    "Hilman works between design, media, and code. This is his living archive — selected work, a journal, and live experiments.",
   openGraph: {
     siteName: "Hilman.",
     type: "website",

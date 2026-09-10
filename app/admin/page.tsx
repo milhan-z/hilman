@@ -1,29 +1,28 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { QuickDraft } from "@/components/admin/quick-draft";
-import { deleteMessage } from "./actions";
-import { formatDate } from "@/lib/utils";
+import { MessageCard, type InboxMessage } from "@/components/admin/message-card";
+import { checkOwner } from "@/lib/owner";
 import { cloudinaryServerConfigured } from "@/lib/cloudinary-server";
+import { siteUrl, siteUrlIsPlaceholder } from "@/lib/site";
 
 export default async function AdminDashboard() {
   const supabase = createServerSupabase();
+  const owner = await checkOwner();
 
-  // Parallel fetches for statistics and recent data
   const [
     projectsCount,
     projectsDrafts,
-    journalCount,
-    journalDrafts,
-    messagesCount,
+    openMessages,
     recentProjects,
     recentJournal,
     recentMessages,
+    journalCount,
+    journalDrafts,
   ] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }),
     supabase.from("projects").select("id", { count: "exact", head: true }).eq("status", "draft"),
-    supabase.from("journal_posts").select("id", { count: "exact", head: true }),
-    supabase.from("journal_posts").select("id", { count: "exact", head: true }).eq("status", "draft"),
-    supabase.from("messages").select("id", { count: "exact", head: true }),
+    supabase.from("messages").select("id", { count: "exact", head: true }).in("status", ["new", "read"]),
     supabase
       .from("projects")
       .select("id, title, updated_at, status")
@@ -36,10 +35,25 @@ export default async function AdminDashboard() {
       .limit(3),
     supabase
       .from("messages")
-      .select("id, name, email, body, created_at")
+      .select("*")
+      .in("status", ["new", "read"])
       .order("created_at", { ascending: false })
       .limit(3),
+    supabase.from("journal_posts").select("id", { count: "exact", head: true }),
+    supabase.from("journal_posts").select("id", { count: "exact", head: true }).eq("status", "draft"),
   ]);
+
+  // `status` only exists after migration 0003 — fall back to a plain count.
+  const messagesFallback = openMessages.error
+    ? await supabase.from("messages").select("id", { count: "exact", head: true })
+    : null;
+  const recentMessagesFallback = recentMessages.error
+    ? await supabase.from("messages").select("*").order("created_at", { ascending: false }).limit(3)
+    : null;
+
+  const inboxCount = openMessages.error ? messagesFallback?.count ?? 0 : openMessages.count ?? 0;
+  const inbox = ((recentMessages.error ? recentMessagesFallback?.data : recentMessages.data) ??
+    []) as InboxMessage[];
 
   const stats = [
     {
@@ -47,33 +61,44 @@ export default async function AdminDashboard() {
       value: projectsCount.count ?? 0,
       sub: `${projectsDrafts.count ?? 0} draft`,
       href: "/admin/projects",
-      bgClass: "bg-pen-soft/20 text-pen",
+      error: projectsCount.error?.message,
     },
     {
       label: "Journal Posts",
       value: journalCount.count ?? 0,
       sub: `${journalDrafts.count ?? 0} draft`,
       href: "/admin/journal",
-      bgClass: "bg-hl-soft text-ink",
+      error: journalCount.error?.message,
     },
     {
-      label: "Messages Inbox",
-      value: messagesCount.count ?? 0,
-      sub: "from Connect form",
+      label: "Inbox",
+      value: inboxCount,
+      sub: openMessages.error ? "all messages" : "needing attention",
       href: "/admin/messages",
-      bgClass: "bg-red-soft/20 text-red",
+      error: openMessages.error && messagesFallback?.error ? messagesFallback.error.message : undefined,
     },
   ];
 
-  const supabaseLive = !projectsCount.error;
+  const dbError =
+    projectsCount.error?.message ??
+    journalCount.error?.message ??
+    recentProjects.error?.message ??
+    null;
 
   return (
     <div className="max-w-6xl space-y-6 sm:space-y-8">
-      {/* Header */}
       <div>
         <h1 className="font-display text-3xl font-bold">Dashboard</h1>
-        <p className="mt-1 font-hand text-xl text-faint">the desk behind the desk</p>
+        <p className="mt-1 font-hand text-xl text-soft">the desk behind the desk</p>
       </div>
+
+      {/* Things that are wrong right now, stated plainly. */}
+      <Warnings
+        dbError={dbError}
+        degraded={owner.ok && owner.degraded}
+        placeholderUrl={siteUrlIsPlaceholder}
+        statusColumnMissing={Boolean(openMessages.error)}
+      />
 
       {/* Quick actions — one tap to the things you actually do */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
@@ -90,10 +115,10 @@ export default async function AdminDashboard() {
           + New journal
         </Link>
         <Link
-          href="/admin/media"
+          href="/admin/pages/about"
           className="flex min-h-[52px] items-center justify-center rounded-md border border-line bg-surface px-3 text-sm font-medium text-soft transition-colors hover:border-pen hover:text-pen"
         >
-          Media library
+          Edit profile
         </Link>
         <a
           href="/"
@@ -113,162 +138,223 @@ export default async function AdminDashboard() {
             href={s.href}
             className="group relative overflow-hidden rounded-lg border border-line bg-surface p-3.5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lift sm:p-5"
           >
-            <p className="text-2xl font-bold text-ink sm:text-4xl">{s.value}</p>
-            <p className="mt-1 truncate text-xs font-semibold sm:text-sm">{s.label}</p>
-            <p className="hidden text-xs text-faint sm:block">{s.sub}</p>
+            <p className="text-2xl font-bold text-ink sm:text-4xl">{s.error ? "—" : s.value}</p>
+            <p className="mt-1 truncate text-sm font-semibold">{s.label}</p>
+            <p className={`hidden text-xs sm:block ${s.error ? "text-red" : "text-soft"}`}>
+              {s.error ? "could not read" : s.sub}
+            </p>
           </Link>
         ))}
       </div>
 
-      {/* Dashboard Main Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
-
-        {/* Left Side: Recent Lists (2/3 width) */}
-        <div className="lg:col-span-2 space-y-6 lg:order-1 order-2">
-          
-          {/* Recent Activity */}
+        <div className="order-2 space-y-6 lg:order-1 lg:col-span-2">
           <div className="rounded-lg border border-line bg-surface p-5 shadow-card">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-faint mb-3">
-              Recently Edited Content
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-soft">
+              Recently edited
             </h2>
             <div className="grid gap-4 md:grid-cols-2">
-              {/* Projects */}
-              <div>
-                <h3 className="text-sm font-bold text-soft mb-2 border-b border-line pb-1">Projects</h3>
-                <ul className="divide-y divide-line">
-                  {(recentProjects.data ?? []).map((p) => (
-                    <li key={p.id} className="py-2.5">
-                      <Link href={`/admin/projects/${p.id}`} className="group flex items-center justify-between text-xs hover:text-pen">
-                        <span className="truncate max-w-[150px] font-medium">{p.title}</span>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${
-                          p.status === "published" ? "bg-pen-soft text-pen" : "bg-n-200 text-soft"
-                        }`}>
-                          {p.status}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                  {(recentProjects.data ?? []).length === 0 && (
-                    <li className="py-4 text-xs text-faint italic">No projects found.</li>
-                  )}
-                </ul>
-              </div>
-
-              {/* Journal */}
-              <div>
-                <h3 className="text-sm font-bold text-soft mb-2 border-b border-line pb-1">Journal</h3>
-                <ul className="divide-y divide-line">
-                  {(recentJournal.data ?? []).map((j) => (
-                    <li key={j.id} className="py-2.5">
-                      <Link href={`/admin/journal/${j.id}`} className="group flex items-center justify-between text-xs hover:text-pen">
-                        <span className="truncate max-w-[150px] font-medium">{j.title}</span>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${
-                          j.status === "published" ? "bg-pen-soft text-pen" : "bg-n-200 text-soft"
-                        }`}>
-                          {j.status}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                  {(recentJournal.data ?? []).length === 0 && (
-                    <li className="py-4 text-xs text-faint italic">No journal posts found.</li>
-                  )}
-                </ul>
-              </div>
+              <RecentList
+                heading="Projects"
+                basePath="/admin/projects"
+                rows={recentProjects.data ?? []}
+                error={recentProjects.error?.message}
+              />
+              <RecentList
+                heading="Journal"
+                basePath="/admin/journal"
+                rows={recentJournal.data ?? []}
+                error={recentJournal.error?.message}
+              />
             </div>
           </div>
 
-          {/* Recent Message Inbox */}
           <div className="rounded-lg border border-line bg-surface p-5 shadow-card">
-            <div className="flex items-center justify-between border-b border-line pb-2 mb-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-faint">
-                Recent Inbox Submissions
+            <div className="mb-4 flex items-center justify-between border-b border-line pb-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-soft">
+                Inbox — needing attention
               </h2>
-              <Link href="/admin/messages" className="text-xs text-pen hover:underline font-mono">
-                View all messages →
+              <Link href="/admin/messages" className="font-mono text-xs text-pen hover:underline">
+                All messages →
               </Link>
             </div>
             <ul className="space-y-4">
-              {(recentMessages.data ?? []).map((m) => (
-                <li key={m.id} className="rounded border border-line bg-raise p-3 text-xs space-y-1.5">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="font-semibold text-ink">
-                      {m.name} · <a href={`mailto:${m.email}`} className="text-pen hover:underline font-normal">{m.email}</a>
-                    </p>
-                    <span className="text-[10px] text-faint">{formatDate(m.created_at)}</span>
-                  </div>
-                  <p className="line-clamp-2 leading-relaxed text-soft">{m.body}</p>
-                  <div className="flex justify-end pt-1">
-                    <form
-                      action={async () => {
-                        "use server";
-                        await deleteMessage(m.id);
-                      }}
-                    >
-                      <button className="text-[10px] text-red font-medium hover:underline">
-                        Dismiss Message
-                      </button>
-                    </form>
-                  </div>
-                </li>
+              {inbox.map((m) => (
+                <MessageCard key={m.id} message={m} compact />
               ))}
-              {(recentMessages.data ?? []).length === 0 && (
-                <li className="py-8 text-center text-xs text-faint italic">
-                  Inbox is currently empty.
+              {inbox.length === 0 && (
+                <li className="py-8 text-center text-sm text-soft">
+                  Nothing waiting. Archived and followed-up notes live in Messages.
                 </li>
               )}
             </ul>
           </div>
-
         </div>
 
-        {/* Right Side: Quick widgets — first on mobile, where Quick Draft matters most */}
-        <div className="space-y-6 lg:order-2 order-1">
-          
-          {/* Quick Draft Widget */}
+        <div className="order-1 space-y-6 lg:order-2">
           <QuickDraft />
 
-          {/* System Status / Diagnostics Card */}
           <div className="rounded-lg border border-line bg-surface p-5 shadow-card">
-            <h3 className="font-display text-sm font-bold text-ink mb-3 uppercase tracking-wider">
-              System Health Check
+            <h3 className="mb-3 font-display text-sm font-bold uppercase tracking-wider text-ink">
+              System health check
             </h3>
-            <div className="space-y-3">
-              {/* Database connection */}
-              <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                <span className="text-soft font-medium">Database (Supabase)</span>
-                <span className={`inline-flex items-center gap-1 font-semibold ${
-                  supabaseLive ? "text-green-500" : "text-red"
-                }`}>
-                  <span className={`h-2.5 w-2.5 rounded-full ${supabaseLive ? "bg-green-500" : "bg-red"}`} />
-                  {supabaseLive ? "Connected" : "Offline / Error"}
-                </span>
+            <dl className="space-y-3 text-sm">
+              <HealthRow
+                label="Database"
+                ok={!dbError}
+                okText="Connected"
+                failText={dbError ? "Error" : "Offline"}
+              />
+              <HealthRow
+                label="Owner enforcement"
+                ok={owner.ok && !owner.degraded}
+                okText="Database-enforced"
+                failText={owner.ok ? "App only" : "Unknown"}
+              />
+              <HealthRow
+                label="Media uploads"
+                ok={cloudinaryServerConfigured}
+                okText="Configured"
+                failText="Unconfigured"
+              />
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="font-medium text-soft">Public URL</dt>
+                <dd
+                  className={`truncate font-mono text-xs ${siteUrlIsPlaceholder ? "text-red" : "text-soft"}`}
+                >
+                  {siteUrl.replace(/^https?:\/\//, "")}
+                </dd>
               </div>
-              
-              {/* Media storage */}
-              <div className="flex items-center justify-between text-xs border-b border-line pb-2">
-                <span className="text-soft font-medium">Media Uploads (Cloudinary)</span>
-                <span className={`inline-flex items-center gap-1 font-semibold ${
-                  cloudinaryServerConfigured ? "text-green-500" : "text-yellow-500"
-                }`}>
-                  <span className={`h-2.5 w-2.5 rounded-full ${cloudinaryServerConfigured ? "bg-green-500" : "bg-yellow-500"}`} />
-                  {cloudinaryServerConfigured ? "Configured" : "Unconfigured"}
-                </span>
-              </div>
-
-              {/* Environment info */}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-soft font-medium">Node Environment</span>
-                <span className="font-mono text-faint uppercase font-bold">
-                  {process.env.NODE_ENV || "development"}
-                </span>
-              </div>
-            </div>
+            </dl>
           </div>
-
         </div>
-
       </div>
+    </div>
+  );
+}
+
+function HealthRow({
+  label,
+  ok,
+  okText,
+  failText,
+}: {
+  label: string;
+  ok: boolean;
+  okText: string;
+  failText: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-line pb-2 last:border-0 last:pb-0">
+      <dt className="font-medium text-soft">{label}</dt>
+      <dd className={`inline-flex items-center gap-1.5 font-semibold ${ok ? "text-pen" : "text-red"}`}>
+        <span aria-hidden className={`h-2.5 w-2.5 rounded-full ${ok ? "bg-pen" : "bg-red"}`} />
+        {ok ? okText : failText}
+      </dd>
+    </div>
+  );
+}
+
+function RecentList({
+  heading,
+  basePath,
+  rows,
+  error,
+}: {
+  heading: string;
+  basePath: string;
+  rows: { id: string; title: string; status: string }[];
+  error?: string;
+}) {
+  return (
+    <div>
+      <h3 className="mb-2 border-b border-line pb-1 text-sm font-bold text-soft">{heading}</h3>
+      {error ? (
+        <p role="alert" className="py-3 text-xs text-red">
+          Could not read {heading.toLowerCase()}: {error}
+        </p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {rows.map((r) => (
+            <li key={r.id} className="py-2.5">
+              <Link
+                href={`${basePath}/${r.id}`}
+                className="group flex items-center justify-between gap-2 text-sm hover:text-pen"
+              >
+                <span className="max-w-[150px] truncate font-medium">{r.title}</span>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    r.status === "published" ? "bg-pen-soft text-pen" : "bg-n-200 text-soft"
+                  }`}
+                >
+                  {r.status}
+                </span>
+              </Link>
+            </li>
+          ))}
+          {rows.length === 0 && (
+            <li className="py-4 text-sm text-soft">Nothing here yet.</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Warnings({
+  dbError,
+  degraded,
+  placeholderUrl,
+  statusColumnMissing,
+}: {
+  dbError: string | null;
+  degraded: boolean;
+  placeholderUrl: boolean;
+  statusColumnMissing: boolean;
+}) {
+  const items: { title: string; body: string }[] = [];
+
+  if (dbError) {
+    items.push({
+      title: "The database returned an error",
+      body: `${dbError} — counts and lists on this page may be incomplete.`,
+    });
+  }
+  if (degraded) {
+    items.push({
+      title: "Owner enforcement is not active in the database",
+      body:
+        "is_site_owner() is missing, so any signed-in account could still write through the API. " +
+        "Apply supabase/migrations/0003_owner_and_integrity.sql.",
+    });
+  }
+  if (statusColumnMissing) {
+    items.push({
+      title: "The inbox has no status column yet",
+      body:
+        "Messages can be read and deleted but not archived or marked followed up. " +
+        "Apply supabase/migrations/0003_owner_and_integrity.sql.",
+    });
+  }
+  if (placeholderUrl) {
+    items.push({
+      title: "The public URL is still localhost",
+      body:
+        "Social previews, robots.txt and sitemap.xml will point at localhost. " +
+        "Set NEXT_PUBLIC_SITE_URL in the deployment and rebuild.",
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div role="alert" className="space-y-3 rounded-lg border border-red/40 bg-red-soft/10 p-4">
+      {items.map((i) => (
+        <div key={i.title}>
+          <p className="text-sm font-semibold text-red">{i.title}</p>
+          <p className="mt-0.5 text-sm text-soft">{i.body}</p>
+        </div>
+      ))}
     </div>
   );
 }

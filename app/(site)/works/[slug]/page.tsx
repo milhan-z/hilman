@@ -4,7 +4,8 @@ import { BlockRenderer } from "@/components/blocks/renderer";
 import { Pic } from "@/components/cld-image";
 import { PrevNext } from "@/components/prev-next";
 import { ArrowLink, EntryMeta, Stamp, Tag } from "@/components/ui";
-import { getProjectBySlug, getProjects } from "@/lib/data";
+import { getProjectBySlug, getProjects, load } from "@/lib/data";
+import { ContentUnavailablePage } from "@/components/content-unavailable";
 import { mediaSrc } from "@/lib/cloudinary";
 import { STREAMS } from "@/lib/types";
 
@@ -15,7 +16,8 @@ export async function generateMetadata({
 }: {
   params: { slug: string };
 }): Promise<Metadata> {
-  const project = await getProjectBySlug(params.slug);
+  const res = await load(() => getProjectBySlug(params.slug));
+  const project = res.ok ? res.value : null;
   if (!project) return {};
   const og = mediaSrc(project.cover_public_id ?? project.thumbnail_public_id, { width: 1200 });
   return {
@@ -26,12 +28,19 @@ export async function generateMetadata({
 }
 
 export default async function ProjectPage({ params }: { params: { slug: string } }) {
-  const project = await getProjectBySlug(params.slug);
+  // A failed read is not a missing page. 404ing on an outage would tell the
+  // visitor (and every crawler) that this work does not exist.
+  const projectRes = await load(() => getProjectBySlug(params.slug));
+  if (!projectRes.ok) {
+    return <ContentUnavailablePage what="this project" detail={projectRes.error} />;
+  }
+  const project = projectRes.value;
   if (!project) notFound();
 
   const meta = project.meta ?? {};
 
-  const all = await getProjects();
+  const allRes = await load(() => getProjects());
+  const all = allRes.ok ? allRes.value : [];
   const idx = all.findIndex((p) => p.slug === project.slug);
   const prevP = idx > 0 ? all[idx - 1] : null;
   const nextP = idx >= 0 && idx < all.length - 1 ? all[idx + 1] : null;

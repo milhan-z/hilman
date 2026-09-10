@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import Link from "next/link";
 import { Reorder } from "framer-motion";
@@ -10,6 +10,7 @@ import { PropertyDrawer } from "./property-drawer";
 import { MetaBar } from "./meta-bar";
 import { BlockBuilder } from "./block-builder";
 import { DEFAULT_DATA } from "./block-editors";
+import { templatesFor } from "./block-templates";
 import { DeleteButton } from "./delete-button";
 import { Pic } from "../cld-image";
 import { STREAMS, type Stream } from "@/lib/types";
@@ -29,35 +30,55 @@ interface SaveBarProps {
   state: ActionState;
   isNew: boolean;
   isVisual: boolean;
+  /** True when the form has changed since the last successful save. */
+  dirty: boolean;
+  /** Blocks submission and explains why. */
+  blockedReason?: string | null;
 }
 
-function SaveBar({ state, isNew, isVisual }: SaveBarProps) {
+/**
+ * "Saved successfully!" used to stay on screen while the editor kept typing,
+ * describing a version that no longer existed. It now yields to
+ * "Unsaved changes" as soon as anything moves.
+ */
+function SaveBar({ state, isNew, isVisual, dirty, blockedReason }: SaveBarProps) {
   const { pending } = useFormStatus();
   return (
-    <div className="sticky bottom-0 z-30 -mx-4 flex items-center justify-between border-t border-line bg-paper/95 px-4 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] backdrop-blur shadow-sticky sm:-mx-8 sm:px-8">
-      <div className="flex items-center gap-3">
+    <div className="sticky bottom-0 z-30 -mx-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line bg-paper/95 px-4 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] shadow-sticky backdrop-blur sm:-mx-8 sm:px-8">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={pending}
-          className="inline-flex min-h-[44px] items-center rounded bg-hl px-6 text-sm font-semibold text-hl-ink shadow-card transition-all hover:opacity-90 disabled:opacity-50 active:scale-98"
+          disabled={pending || Boolean(blockedReason)}
+          className="inline-flex min-h-[44px] items-center rounded bg-hl px-6 text-sm font-semibold text-hl-ink shadow-card transition-all hover:opacity-90 active:scale-98 disabled:opacity-50"
         >
-          {pending ? "Saving…" : isNew ? "Create" : "Save changes"}
+          {pending ? "Saving..." : isNew ? "Create" : "Save changes"}
         </button>
-        {state.status === "success" && !pending && (
-          <span className="text-sm font-medium text-green-500 flex items-center gap-1">
+
+        {blockedReason ? (
+          <span role="alert" className="text-sm font-medium text-red">
+            {blockedReason}
+          </span>
+        ) : pending ? (
+          <span className="text-sm text-soft">Saving...</span>
+        ) : state.status === "error" ? (
+          <span role="alert" className="text-sm font-medium text-red">
+            Not saved &mdash; {state.message}
+          </span>
+        ) : dirty ? (
+          <span className="inline-flex items-center gap-1.5 text-sm text-soft">
+            <span aria-hidden className="h-2 w-2 rounded-full bg-hl" />
+            Unsaved changes
+          </span>
+        ) : state.status === "success" ? (
+          <span className="flex items-center gap-1 text-sm font-medium text-pen">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
               <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
-            Saved successfully!
+            Saved
           </span>
-        )}
-        {state.status === "error" && !pending && (
-          <span role="alert" className="text-sm font-medium text-red">
-            {state.message}
-          </span>
-        )}
+        ) : null}
       </div>
-      <span className="hidden text-xs text-faint sm:inline font-mono">
+      <span className="hidden font-mono text-xs text-soft sm:inline">
         Editing in {isVisual ? "Visual Canvas" : "Classic Form"}
       </span>
     </div>
@@ -157,6 +178,118 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const [isVisual, setIsVisual] = useState(true);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  /* -- unsaved work: track it, warn about it, recover it --
+     The editor holds a lot of state that only reaches the database on submit.
+     Losing it to a refresh, a closed tab, or a stray link was silent. */
+
+  const snapshot = useMemo(
+    () =>
+      JSON.stringify({
+        title, slug, subtitle, stream, excerpt, coverPublicId, thumbnailPublicId,
+        year, sortOrder, rawMeta, readingMinutes, status, featured, tagIds, blocks,
+      }),
+    [title, slug, subtitle, stream, excerpt, coverPublicId, thumbnailPublicId,
+     year, sortOrder, rawMeta, readingMinutes, status, featured, tagIds, blocks]
+  );
+
+  const draftKey = "hilman-draft:" + kind + ":" + (initial?.id ?? "new");
+  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
+  const submittedSnapshot = useRef(snapshot);
+  const [recovered, setRecovered] = useState<{ snapshot: string; savedAt: string } | null>(null);
+  const dirty = snapshot !== savedSnapshot;
+
+  // Offer a local draft rather than applying it -- restoring is a decision.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { snapshot: string; savedAt: string };
+      if (parsed.snapshot === savedSnapshot) {
+        window.localStorage.removeItem(draftKey);
+        return;
+      }
+      setRecovered(parsed);
+    } catch {
+      /* a corrupt draft is not worth interrupting the editor over */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  useEffect(() => {
+    try {
+      if (dirty) {
+        window.localStorage.setItem(
+          draftKey,
+          JSON.stringify({ snapshot, savedAt: new Date().toISOString() })
+        );
+      } else {
+        window.localStorage.removeItem(draftKey);
+      }
+    } catch {}
+  }, [dirty, snapshot, draftKey]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  // A save only clears the dirty flag for the version that was submitted.
+  useEffect(() => {
+    if (formState.status === "success") {
+      setSavedSnapshot(submittedSnapshot.current);
+      setRecovered(null);
+      try {
+        window.localStorage.removeItem(draftKey);
+      } catch {}
+    }
+  }, [formState.status, formState.savedAt, draftKey]);
+
+  function restoreDraft(raw: string) {
+    try {
+      const v = JSON.parse(raw);
+      setTitle(v.title ?? "");
+      setSlug(v.slug ?? "");
+      setSubtitle(v.subtitle ?? "");
+      setStream(v.stream ?? "visual-design");
+      setExcerpt(v.excerpt ?? "");
+      setCoverPublicId(v.coverPublicId ?? "");
+      setThumbnailPublicId(v.thumbnailPublicId ?? "");
+      setYear(v.year ?? "");
+      setSortOrder(v.sortOrder ?? "0");
+      setRawMeta(v.rawMeta ?? "{}");
+      setReadingMinutes(v.readingMinutes ?? "3");
+      setStatus(v.status === "published" ? "published" : "draft");
+      setFeatured(Boolean(v.featured));
+      setTagIds(Array.isArray(v.tagIds) ? v.tagIds : []);
+      setBlocks(Array.isArray(v.blocks) ? v.blocks : []);
+    } catch {
+      /* nothing usable in the stored draft */
+    }
+    setRecovered(null);
+  }
+
+  // The server refuses a malformed meta payload; say so before the round-trip.
+  const metaIsValid = (() => {
+    if (!rawMeta.trim()) return true;
+    try {
+      const parsed = JSON.parse(rawMeta);
+      return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
+    } catch {
+      return false;
+    }
+  })();
+
+  const blockedReason = !title.trim()
+    ? "Add a title before saving."
+    : !metaIsValid
+      ? "The meta field is not a valid JSON object."
+      : null;
 
   let parsedMeta: Record<string, any> = {};
   try {
@@ -265,6 +398,19 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     setActiveBlockId(duplicatedBlock.id);
   };
 
+  /** Drops a starter case-study layout in, replacing nothing that exists. */
+  const handleApplyTemplate = (templateId: string) => {
+    const template = templatesFor(kind).find((t) => t.id === templateId);
+    if (!template) return;
+    const built = template.build().map((b, idx) => ({
+      id: `new-${uid()}`,
+      type: b.type,
+      position: blocks.length + idx,
+      data: structuredClone(b.data ?? {}),
+    })) as Block[];
+    setBlocks([...blocks, ...built].map((b, idx) => ({ ...b, position: idx })));
+  };
+
   const handleReorder = (newBlocks: Block[]) => {
     setBlocks(newBlocks.map((b, idx) => ({ ...b, position: idx })));
   };
@@ -272,11 +418,50 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const activeBlock = blocks.find((b) => b.id === activeBlockId) || null;
 
   return (
-    <form action={action} className="relative min-h-[calc(100vh-140px)] flex flex-col justify-between">
+    <form
+      action={action}
+      onSubmit={() => {
+        submittedSnapshot.current = snapshot;
+      }}
+      className="relative flex min-h-[calc(100vh-140px)] flex-col justify-between"
+    >
       {/* Hidden serialization fields */}
       <input type="hidden" name="id" value={initial?.id ?? ""} />
       <input type="hidden" name="blocks" value={JSON.stringify(blocks)} />
       <input type="hidden" name="tag_ids" value={JSON.stringify(tagIds)} />
+
+      {recovered && (
+        <div className="mb-5 rounded-md border border-hl bg-hl-soft/25 p-4">
+          <p className="text-sm font-semibold text-ink">
+            There is an unsaved draft of this {kind} in this browser.
+          </p>
+          <p className="mt-1 text-sm text-soft">
+            It never reached the site. Restoring only refills the editor &mdash; you still choose
+            whether to save.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => restoreDraft(recovered.snapshot)}
+              className="rounded bg-hl px-3.5 py-2 text-sm font-semibold text-hl-ink"
+            >
+              Restore draft
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  window.localStorage.removeItem(draftKey);
+                } catch {}
+                setRecovered(null);
+              }}
+              className="rounded border border-line px-3.5 py-2 text-sm"
+            >
+              Discard it
+            </button>
+          </div>
+        </div>
+      )}
 
       <div>
         {/* Top Header Navigation */}
@@ -363,7 +548,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
           {isVisual ? (
             <div className="rounded-lg border border-line bg-surface p-4 sm:p-8 min-h-[400px]">
               <div className="mx-auto max-w-prose space-y-2">
-                <p className="text-2xs font-semibold uppercase tracking-wider text-faint text-center mb-6">
+                <p className="mb-6 text-center text-2xs font-semibold uppercase tracking-wider text-soft">
                   — Visual Canvas Preview (Click block to edit text, hover for actions) —
                 </p>
 
@@ -519,10 +704,28 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                 </Reorder.Group>
 
                 {blocks.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-line-strong p-12 text-center my-6">
-                    <p className="text-sm text-soft font-medium mb-4">No content blocks yet.</p>
-                    <p className="text-xs text-faint">
-                      Use the insertion zone below to add your first heading, paragraph, image, or custom element.
+                  <div className="my-6 rounded-lg border border-dashed border-line-strong p-8 text-center">
+                    <p className="mb-1 text-sm font-medium text-soft">No content blocks yet.</p>
+                    <p className="text-sm text-soft">
+                      Start from a structure, or build it up block by block below.
+                    </p>
+                    <div className="mt-5 grid gap-2 text-left sm:grid-cols-3">
+                      {templatesFor(kind).map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => handleApplyTemplate(t.id)}
+                          className="rounded-md border border-line bg-raise p-3 transition-colors hover:border-pen"
+                        >
+                          <span className="block text-sm font-semibold text-ink">{t.name}</span>
+                          <span className="mt-1 block text-xs leading-relaxed text-soft">
+                            {t.description}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-4 text-xs text-soft">
+                      Templates only add prompts to replace &mdash; they never fill in claims for you.
                     </p>
                   </div>
                 )}
@@ -543,7 +746,13 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
 
       {/* Save action footer */}
       <div>
-        <SaveBar state={formState} isNew={isNew} isVisual={isVisual} />
+        <SaveBar
+          state={formState}
+          isNew={isNew}
+          isVisual={isVisual}
+          dirty={dirty}
+          blockedReason={blockedReason}
+        />
 
         {/* Delete button (existing records only) */}
         {!isNew && (

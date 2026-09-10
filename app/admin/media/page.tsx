@@ -2,10 +2,11 @@ import { MediaLibrary } from "@/components/admin/media-library";
 import { cloudinaryServerConfigured } from "@/lib/cloudinary-server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { MediaRow } from "@/lib/types";
+import { QueryError } from "@/components/admin/query-error";
 
 export default async function AdminMediaPage() {
   const supabase = createServerSupabase();
-  const { data: media } = await supabase
+  const { data: media, error } = await supabase
     .from("media")
     .select("*")
     .order("created_at", { ascending: false });
@@ -23,6 +24,9 @@ export default async function AdminMediaPage() {
           <code>CLOUDINARY_API_SECRET</code> are set.
         </p>
       )}
+      <div className="mt-5">
+        <QueryError what="the media library" error={error?.message} />
+      </div>
       <div className="mt-6">
         <MediaLibrary media={(media as MediaRow[]) ?? []} />
       </div>

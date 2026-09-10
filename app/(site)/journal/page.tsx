@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { DrawAccent } from "@/components/draw-accent";
 import { JournalExplorer } from "@/components/journal-explorer";
 import { EmptyState, Kicker } from "@/components/ui";
-import { getJournalPosts } from "@/lib/data";
+import { getJournalPosts, load } from "@/lib/data";
+import { ContentUnavailable } from "@/components/content-unavailable";
 
 export const revalidate = 60;
 
@@ -12,7 +13,8 @@ export const metadata: Metadata = {
 };
 
 export default async function JournalPage() {
-  const posts = await getJournalPosts();
+  const postsRes = await load(getJournalPosts);
+  const posts = postsRes.ok ? postsRes.value : [];
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-14 sm:px-8">
@@ -30,7 +32,11 @@ export default async function JournalPage() {
         </p>
       </header>
 
-      {posts.length === 0 ? (
+      {!postsRes.ok ? (
+        <div className="mt-12">
+          <ContentUnavailable what="the journal" detail={postsRes.error} />
+        </div>
+      ) : posts.length === 0 ? (
         <div className="mt-12">
           <EmptyState title="The garden is freshly tilled." hint="entries coming soon" />
         </div>

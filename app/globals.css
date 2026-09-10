@@ -25,7 +25,9 @@
 
   --ink: #f2efe9;
   --soft: #a3a097;
-  --faint: #6f6b62;
+  /* 5.38:1 on --paper, 4.73:1 on --raise. The previous #6f6b62 sat at 3.73:1,
+     under the 4.5:1 WCAG minimum for body-size text. */
+  --faint: #8a8578;
 
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.16);
@@ -81,7 +83,8 @@
 
   --ink: #1f1b15;
   --soft: #564e41;
-  --faint: #8c826f;
+  /* 4.87:1 on --paper, 5.49:1 on --raise. Previously #8c826f at 3.31:1. */
+  --faint: #6f6759;
 
   --line: rgba(120, 104, 78, 0.22);
   --line-strong: rgba(120, 104, 78, 0.42);

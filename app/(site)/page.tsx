@@ -4,8 +4,9 @@ import { HeroRoles } from "@/components/hero-roles";
 import { JournalCard } from "@/components/journal-card";
 import { SectionReveal, Stagger, StaggerItem } from "@/components/motion";
 import { ProjectCard } from "@/components/project-card";
-import { Button, EntryMeta, Kicker, Marginalia, SectionHeading } from "@/components/ui";
-import { getJournalPosts, getPage, getProjects, getSettings } from "@/lib/data";
+import { Button, EmptyState, EntryMeta, Kicker, Marginalia, SectionHeading } from "@/components/ui";
+import { getJournalPosts, getPage, getProjects, getSettings, load } from "@/lib/data";
+import { ContentUnavailable, ContentUnavailablePage } from "@/components/content-unavailable";
 import { STREAMS, type Stream } from "@/lib/types";
 
 export const revalidate = 60;
@@ -18,20 +19,43 @@ const STREAM_DOT: Record<Stream, string> = {
 };
 
 export default async function HomePage() {
-  const [settings, projects, journal, home, about] = await Promise.all([
-    getSettings(),
-    getProjects(),
-    getJournalPosts(),
-    getPage("home"),
-    getPage("about"),
+  const [settingsRes, projectsRes, journalRes, homeRes, aboutRes] = await Promise.all([
+    load(getSettings),
+    load(() => getProjects()),
+    load(getJournalPosts),
+    load(() => getPage("home")),
+    load(() => getPage("about")),
   ]);
 
+  // Without settings there is no hero to render honestly.
+  if (!settingsRes.ok) {
+    return <ContentUnavailablePage what="the cover" detail={settingsRes.error} />;
+  }
+
+  const settings = settingsRes.value;
+  const projects = projectsRes.ok ? projectsRes.value : [];
+  const journal = journalRes.ok ? journalRes.value : [];
+  const home = homeRes.ok ? homeRes.value : null;
+  const about = aboutRes.ok ? aboutRes.value : null;
+
   const featured = projects.filter((p) => p.featured).slice(0, 3);
+  // Falls back to the most recent published work so the home page never shows
+  // an empty strip just because nothing has been starred yet.
+  const showcase = featured.length ? featured : projects.slice(0, 3);
   const latestJournal = journal.slice(0, 2);
   const streamCounts = Object.fromEntries(
     STREAM_ORDER.map((s) => [s, projects.filter((p) => p.stream === s).length])
   ) as Record<Stream, number>;
   const currently: string[] = about?.data?.currently ?? [];
+
+  // Identity rows only appear when they have been filled in — the template
+  // used to state a campus and a city as fact.
+  const plateRows: [string, string][] = [
+    ["Keeper", "Hilman"],
+    ...(home?.data?.field ? ([["Field", home.data.field]] as [string, string][]) : []),
+    ...(home?.data?.based ? ([["Based", home.data.based]] as [string, string][]) : []),
+    ["Edition", `No. ${new Date().getFullYear()}`],
+  ];
 
   const indexRows = [
     { num: "01", name: "Works", href: "/works", desc: "Design, stories & code — filed by stream.", meta: `${projects.length} entries` },
@@ -59,14 +83,17 @@ export default async function HomePage() {
           <p className="mt-7 max-w-xl text-2xl font-semibold leading-snug">
             <HeroRoles roles={settings.hero_roles} />
           </p>
-          <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-soft">
-            {home?.data?.intro ??
-              "Informatics student at ITS, connecting visuals, stories, systems, and technology into one creative language. This is my living archive — not a portfolio."}
-          </p>
+          {/* No invented biography here: if the Home page record has no
+              positioning sentence, nothing is claimed on Hilman's behalf. */}
+          {home?.data?.intro && (
+            <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-soft">
+              {home.data.intro}
+            </p>
+          )}
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button href="/works">Open the archive</Button>
-            <Button href="/journal" variant="ghost">
-              Read the journal
+            <Button href="/works">See selected work</Button>
+            <Button href="/connect" variant="ghost">
+              Get in touch
             </Button>
           </div>
         </div>
@@ -75,24 +102,19 @@ export default async function HomePage() {
         <div className="flex items-center">
           <div className="dotgrid w-full rounded-md border border-line-strong bg-surface p-6 shadow-lift sm:p-7 lg:rotate-1">
             <div className="flex items-center justify-between border-b-2 border-pen/70 pb-3">
-              <span className="font-mono text-2xs font-bold uppercase tracking-[0.2em] text-pen">Field Notebook</span>
+              <span className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-pen">Field Notebook</span>
               <span aria-hidden className="font-hand text-2xl leading-none text-red">✦</span>
             </div>
             <dl className="mt-4 space-y-2.5 font-mono text-xs">
-              {[
-                ["Keeper", "Hilman"],
-                ["Field", "Design · Media · Tech"],
-                ["Based", "Surabaya, Indonesia"],
-                ["Edition", `No. ${new Date().getFullYear()}`],
-              ].map(([k, v]) => (
+              {plateRows.map(([k, v]) => (
                 <div key={k} className="flex items-baseline justify-between gap-3">
-                  <dt className="uppercase tracking-widest text-faint">{k}</dt>
+                  <dt className="uppercase tracking-widest text-soft">{k}</dt>
                   <dd className="text-right font-semibold text-ink">{v}</dd>
                 </div>
               ))}
             </dl>
             <div className="mt-5 border-t border-dashed border-line-strong pt-4">
-              <p className="font-mono text-2xs uppercase tracking-widest text-faint">Contents</p>
+              <p className="font-mono text-xs uppercase tracking-widest text-soft">Contents</p>
               <ul className="mt-2.5 space-y-1.5">
                 {STREAM_ORDER.map((s) => (
                   <li key={s}>
@@ -104,7 +126,7 @@ export default async function HomePage() {
                         <span aria-hidden className={`h-2 w-2 rounded-full ${STREAM_DOT[s]}`} />
                         {STREAMS[s].name}
                       </span>
-                      <span className="font-mono text-2xs text-faint tnum group-hover:text-pen">
+                      <span className="font-mono text-xs text-soft tnum group-hover:text-pen">
                         {String(streamCounts[s]).padStart(2, "0")}
                       </span>
                     </Link>
@@ -116,11 +138,42 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* ══ Pinned work ═══════════════════════════════════ */}
+      {/* Selected work comes before the index: a visitor should meet real work
+          in the first scroll, not a table of contents. */}
+      <section className="border-t-2 border-line-strong pt-10" aria-label="Selected work">
+        <SectionReveal>
+          <SectionHeading
+            index="✦"
+            title={showcase.length ? "Selected work" : "Work"}
+            hint={featured.length ? "the highlighter ones" : undefined}
+            href="/works"
+            hrefLabel="All works"
+          />
+        </SectionReveal>
+        {!projectsRes.ok ? (
+          <ContentUnavailable what="the work" detail={projectsRes.error} compact />
+        ) : showcase.length > 0 ? (
+          <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" gap={0.1}>
+            {showcase.map((p, i) => (
+              <StaggerItem key={p.id}>
+                <ProjectCard project={p} priority={i === 0} index={i} />
+              </StaggerItem>
+            ))}
+          </Stagger>
+        ) : (
+          <EmptyState
+            title="No published work yet."
+            hint="the archive is being filled — check back soon"
+          />
+        )}
+      </section>
+
       {/* ══ The Index — table of contents ═════════════════ */}
       <SectionReveal>
-        <section aria-labelledby="index-heading" className="border-t-2 border-line-strong pt-10">
+        <section aria-labelledby="index-heading" className="mt-20 border-t-2 border-line-strong pt-10">
           <div className="mb-6 flex items-center justify-between">
-            <h2 id="index-heading" className="font-mono text-2xs uppercase tracking-[0.2em] text-faint">
+            <h2 id="index-heading" className="font-mono text-xs uppercase tracking-[0.2em] text-soft">
               Index — the worlds inside
             </h2>
             <Marginalia className="hidden -rotate-2 sm:block">start anywhere</Marginalia>
@@ -132,7 +185,7 @@ export default async function HomePage() {
                   href={row.href}
                   className="group grid grid-cols-[2.5rem_1fr_auto] items-center gap-4 border-b border-line py-5 transition-colors duration-fast hover:bg-surface sm:grid-cols-[3rem_1fr_auto] sm:py-6"
                 >
-                  <span className="font-mono text-sm font-semibold text-faint tnum transition-colors group-hover:text-pen">
+                  <span className="font-mono text-sm font-semibold text-soft tnum transition-colors group-hover:text-pen">
                     {row.num}
                   </span>
                   <span className="min-w-0">
@@ -142,10 +195,10 @@ export default async function HomePage() {
                     <span className="mt-0.5 block truncate text-sm text-soft">{row.desc}</span>
                   </span>
                   <span className="flex items-center gap-3 sm:gap-5">
-                    <span className="hidden font-mono text-2xs uppercase tracking-wider text-faint sm:inline">
+                    <span className="hidden font-mono text-xs uppercase tracking-wider text-soft sm:inline">
                       {row.meta}
                     </span>
-                    <span aria-hidden className="text-faint transition-transform duration-fast group-hover:translate-x-1 group-hover:text-pen">
+                    <span aria-hidden className="text-soft transition-transform duration-fast group-hover:translate-x-1 group-hover:text-pen">
                       →
                     </span>
                   </span>
@@ -156,25 +209,9 @@ export default async function HomePage() {
         </section>
       </SectionReveal>
 
-      {/* ══ Pinned work ═══════════════════════════════════ */}
-      {featured.length > 0 && (
-        <section className="mt-20" aria-labelledby="featured-heading">
-          <SectionReveal>
-            <SectionHeading index="✦" title="Pinned from the archive" hint="the highlighter ones" href="/works" hrefLabel="All works" />
-          </SectionReveal>
-          <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" gap={0.1}>
-            {featured.map((p, i) => (
-              <StaggerItem key={p.id}>
-                <ProjectCard project={p} priority={i === 0} index={i} />
-              </StaggerItem>
-            ))}
-          </Stagger>
-        </section>
-      )}
-
       {/* ══ From the journal ══════════════════════════════ */}
       {latestJournal.length > 0 && (
-        <section className="mt-20" aria-labelledby="journal-heading">
+        <section className="mt-20" aria-label="From the journal">
           <SectionReveal>
             <SectionHeading index="✎" title="How I think, in public" href="/journal" hrefLabel={home?.data?.journal_hook ?? "Wander the journal"} />
           </SectionReveal>

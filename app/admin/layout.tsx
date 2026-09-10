@@ -6,6 +6,7 @@ import { MobileTabs } from "@/components/admin/mobile-tabs";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { supabaseConfigured } from "@/lib/supabase/config";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { checkOwner } from "@/lib/owner";
 import { signOut } from "./actions";
 import { MediaSelectorProvider } from "@/components/admin/media-library-context";
 
@@ -39,6 +40,27 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   // unauthenticated → /admin/login renders without the shell
   if (!user) return <div className="min-h-screen">{children}</div>;
+
+  // Signed in is not the same as owning the site. A non-owner gets a door,
+  // not a studio — and RLS would refuse their writes anyway.
+  const owner = await checkOwner();
+  if (!owner.ok) {
+    return (
+      <div className="mx-auto max-w-xl px-5 py-24 text-center">
+        <h1 className="font-display text-2xl font-bold">This isn&apos;t your studio</h1>
+        <p className="mt-4 text-soft">{owner.message}</p>
+        <p className="mt-2 text-sm text-soft">Signed in as {user.email}.</p>
+        <div className="mt-6 flex items-center justify-center gap-4 text-sm">
+          <Link href="/" className="text-pen underline underline-offset-4">
+            ← Back to the site
+          </Link>
+          <form action={signOut}>
+            <button className="text-soft hover:text-red">Sign out</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <MediaSelectorProvider>

@@ -72,7 +72,7 @@ export function InsertZone({ onInsert }: InsertZoneProps) {
                 }}
                 className="flex items-center gap-2 rounded border border-transparent bg-raise/50 px-2 py-1.5 text-left text-xs text-soft hover:border-pen hover:text-pen transition-colors"
               >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-pen-soft text-pen font-mono text-[9px] font-bold uppercase">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-pen-soft text-pen font-mono text-2xs font-bold uppercase">
                   {t.type.slice(0, 2)}
                 </span>
                 <span className="truncate">{t.label}</span>

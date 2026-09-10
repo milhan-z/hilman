@@ -40,7 +40,7 @@ function StatusToggle({
       onClick={onToggle}
       title={status === "published" ? "Tap to unpublish" : "Tap to publish"}
       className={cn(
-        "min-h-[32px] rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all active:scale-95 disabled:opacity-50",
+        "min-h-[32px] rounded-full px-2.5 py-0.5 text-2xs font-bold uppercase tracking-wide transition-all active:scale-95 disabled:opacity-50",
         status === "published"
           ? "bg-pen-soft text-pen hover:bg-pen-soft/70"
           : "bg-n-200 text-soft hover:bg-n-300"

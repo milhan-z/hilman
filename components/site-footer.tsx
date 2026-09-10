@@ -10,14 +10,14 @@ const SECTION_NUM: Record<string, string> = {
   "/connect": "05",
 };
 
-export function SiteFooter({ settings }: { settings: Settings }) {
+export function SiteFooter({ settings, blurb, based }: { settings: Settings; blurb?: string; based?: string }) {
   const year = new Date().getFullYear();
   return (
     <footer className="mt-28 border-t-2 border-ink/85">
       {/* ledger strip, mirroring the masthead */}
       <div className="border-b border-line">
         <div className="mx-auto max-w-wide px-5 py-1.5 sm:px-8">
-          <EntryMeta items={["Colophon", "Hilman.", `Edition ${year}`, "Surabaya, ID"]} />
+          <EntryMeta items={["Colophon", "Hilman.", `Edition ${year}`, ...(based ? [based] : [])]} />
         </div>
       </div>
 
@@ -29,18 +29,14 @@ export function SiteFooter({ settings }: { settings: Settings }) {
               Hilman
               <span aria-hidden className="inline-block h-[7px] w-[7px] rounded-[1px] bg-red" />
             </p>
-            <p className="mt-3 max-w-sm text-sm leading-relaxed text-soft">
-              A living creative archive — design, stories, and code, filed loosely on purpose by an
-              Informatics student who refuses to pick one lane.
-            </p>
-            <p className="mt-4 font-hand text-lg text-faint">
-              last updated whenever inspiration hit
-            </p>
+            {blurb && (
+              <p className="mt-3 max-w-sm text-sm leading-relaxed text-soft">{blurb}</p>
+            )}
           </div>
 
           {/* index */}
           <nav aria-label="Site index">
-            <h2 className="font-mono text-2xs uppercase tracking-widest text-faint">Index</h2>
+            <h2 className="font-mono text-xs uppercase tracking-widest text-soft">Index</h2>
             <ul className="mt-4 space-y-1.5">
               {settings.nav.map((item) => (
                 <li key={item.href}>
@@ -48,7 +44,7 @@ export function SiteFooter({ settings }: { settings: Settings }) {
                     href={item.href}
                     className="group flex items-baseline gap-2 text-sm text-soft transition-colors hover:text-pen"
                   >
-                    <span className="font-mono text-2xs text-faint tnum group-hover:text-pen">
+                    <span className="font-mono text-xs text-soft tnum group-hover:text-pen">
                       {SECTION_NUM[item.href] ?? "··"}
                     </span>
                     {item.label}
@@ -58,9 +54,9 @@ export function SiteFooter({ settings }: { settings: Settings }) {
             </ul>
           </nav>
 
-          {/* elsewhere */}
-          <nav aria-label="Social links">
-            <h2 className="font-mono text-2xs uppercase tracking-widest text-faint">Elsewhere</h2>
+          {/* elsewhere — hidden until real accounts exist in Settings */}
+          <nav aria-label="Social links" hidden={settings.socials.length === 0}>
+            <h2 className="font-mono text-xs uppercase tracking-widest text-soft">Elsewhere</h2>
             <ul className="mt-4 space-y-1.5">
               {settings.socials.map((s) => (
                 <li key={s.label}>
@@ -79,12 +75,12 @@ export function SiteFooter({ settings }: { settings: Settings }) {
         </div>
 
         <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-dashed border-line pt-6">
-          <p className="font-mono text-2xs uppercase tracking-wider text-faint">
+          <p className="font-mono text-xs uppercase tracking-wider text-soft">
             © {year} Hilman · Set in Fraunces &amp; Inter · Archived with care
           </p>
           <Link
             href="/admin"
-            className="font-mono text-2xs uppercase tracking-wider text-faint transition-colors hover:text-pen"
+            className="font-mono text-xs uppercase tracking-wider text-soft transition-colors hover:text-pen"
           >
             studio door →
           </Link>

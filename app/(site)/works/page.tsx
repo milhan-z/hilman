@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { DrawAccent } from "@/components/draw-accent";
 import { Kicker } from "@/components/ui";
 import { WorksExplorer } from "@/components/works-explorer";
-import { getProjects, getTags } from "@/lib/data";
+import { getProjects, getTags, load } from "@/lib/data";
+import { ContentUnavailable } from "@/components/content-unavailable";
 import { STREAMS, type Stream } from "@/lib/types";
 
 export const revalidate = 60;
@@ -22,7 +23,9 @@ export default async function WorksPage({
   const initialStream = streamKeys.includes(searchParams.stream as Stream)
     ? (searchParams.stream as Stream)
     : undefined;
-  const [projects, tags] = await Promise.all([getProjects(), getTags()]);
+  const [projectsRes, tagsRes] = await Promise.all([load(() => getProjects()), load(getTags)]);
+  const projects = projectsRes.ok ? projectsRes.value : [];
+  const tags = tagsRes.ok ? tagsRes.value : [];
 
   return (
     <div className="mx-auto max-w-wide px-5 py-14 sm:px-8">
@@ -40,12 +43,18 @@ export default async function WorksPage({
         </p>
       </header>
 
-      <WorksExplorer
-        projects={projects}
-        tags={tags}
-        initialStream={initialStream}
-        initialTag={searchParams.tag}
-      />
+      {projectsRes.ok ? (
+        <WorksExplorer
+          projects={projects}
+          tags={tags}
+          initialStream={initialStream}
+          initialTag={searchParams.tag}
+        />
+      ) : (
+        <div className="mt-10">
+          <ContentUnavailable what="the archive" detail={projectsRes.error} />
+        </div>
+      )}
     </div>
   );
 }

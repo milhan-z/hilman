@@ -198,7 +198,15 @@ export function WorksExplorer({
 
       {/* animated grid */}
       <div className="mt-6">
-        {filtered.length === 0 ? (
+        {/* An empty archive and an empty filter result are different facts. */}
+        {projects.length === 0 ? (
+          <div className="dotgrid rounded-lg border border-dashed border-line-strong p-12 text-center">
+            <p className="font-display text-lg text-soft">No published work yet.</p>
+            <p className="mt-2 font-hand text-lg text-soft">
+              projects appear here as they are finished
+            </p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="dotgrid rounded-lg border border-dashed border-line-strong p-12 text-center">
             <p className="font-display text-lg text-soft">Nothing matches that yet.</p>
             <button onClick={reset} className="mt-2 font-hand text-lg text-pen hover:underline">

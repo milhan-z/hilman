@@ -51,7 +51,7 @@ export function SiteNav({ items }: { items: { label: string; href: string }[] })
     <header className="sticky top-0 z-40 border-b-2 border-ink/85 bg-paper/90 backdrop-blur-md">
       {/* ── Ledger strip — the bound header of the page ── */}
       <div className="border-b border-line">
-        <div className="mx-auto flex max-w-wide items-center justify-between px-5 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-faint sm:px-8">
+        <div className="mx-auto flex max-w-wide items-center justify-between px-5 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-soft sm:px-8">
           <div className="flex items-center gap-2 tnum">
             <span className="text-faint/70">No.</span>
             <span className="font-semibold text-ink">{section.num}</span>

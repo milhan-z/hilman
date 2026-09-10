@@ -9,6 +9,10 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 
+# Database and media dumps - these contain the whole archive, and the
+# connection strings used to make them. Never commit one.
+backups/
+
 # Agent-specific files
 .agents/
 .claude/
