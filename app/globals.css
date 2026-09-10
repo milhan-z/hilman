@@ -505,3 +505,99 @@
     transition: none;
   }
 }
+
+/* ── Site header ───────────────────────────────────────────
+   The translucent backdrop is painted by a pseudo-element
+   rather than the header itself. On iOS a `backdrop-filter`
+   applied directly to a sticky element is repainted lazily
+   while scrolling, which left a band of sharp, unblurred page
+   content across the top of the bar. A promoted layer of its
+   own repaints reliably, and the higher opacity means even a
+   dropped frame reads as solid rather than as text bleeding
+   through. */
+.site-header {
+  position: sticky;
+  top: 0;
+  isolation: isolate;
+}
+
+.site-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--paper);
+  opacity: 0.95;
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  transform: translateZ(0);
+}
+
+/* Browsers without backdrop-filter get a solid bar — a 95%
+   translucent one over moving content is unreadable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-header::before {
+    opacity: 1;
+  }
+}
+
+/* Retreats while reading, returns the moment you scroll back up.
+   Only on phones: on a laptop the bar costs no meaningful room. */
+@media (max-width: 767px) {
+  .site-header {
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .site-header[data-tucked="true"] {
+    transform: translateY(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-header {
+    transition: none;
+  }
+}
+
+/* ── Edge-to-edge scroll rows ──────────────────────────────
+   Filter rows on a phone. Wrapping them stacked three rows of
+   chips above the results, pushing the first card most of a
+   screen down; scrolling sideways keeps the whole control set
+   one row tall. The negative margin lets the row bleed into
+   the page gutter so it reads as scrollable rather than
+   clipped, and the padding keeps the first and last chip clear
+   of the edge. */
+.scroll-row {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  /* Momentum scrolling in iOS otherwise steals vertical drags. */
+  overscroll-behavior-x: contain;
+}
+
+.scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
+.scroll-row > * {
+  flex: none;
+}
+
+/* Bleeds the row into the page gutter on phones only. */
+.scroll-row-bleed {
+  margin-inline: -1.25rem;
+  padding-inline: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .scroll-row-bleed {
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+  /* Room is no longer scarce — let the chips wrap and be seen at once. */
+  .scroll-row-wrap-sm {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}

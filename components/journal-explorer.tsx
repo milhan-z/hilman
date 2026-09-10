@@ -58,7 +58,7 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
   return (
     <div>
       {/* search + tags */}
-      <div className="mt-10 flex flex-col gap-4">
+      <div className="mt-7 flex flex-col gap-4 sm:mt-10">
         <label className="relative">
           <span className="sr-only">Search the journal</span>
           <svg
@@ -78,8 +78,8 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
           />
         </label>
         {tags.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-hand text-lg text-faint">topics:</span>
+          <div className="scroll-row scroll-row-bleed scroll-row-wrap-sm items-center">
+            <span className="self-center font-hand text-lg text-faint">topics:</span>
             {tags.map((t) => {
               const active = tag === t.slug;
               return (
@@ -89,7 +89,7 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
                   onClick={() => setTag(active ? undefined : t.slug)}
                   aria-pressed={active}
                   className={cn(
-                    "inline-flex items-center rounded-[4px] border px-2 py-0.5 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
+                    "inline-flex min-h-[36px] items-center whitespace-nowrap rounded-[4px] border px-3 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
                     active ? "border-transparent bg-hl text-hl-ink font-semibold" : "border-line-strong text-soft hover:border-pen hover:text-pen"
                   )}
                 >
@@ -104,7 +104,7 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
                   setTag(undefined);
                   setQuery("");
                 }}
-                className="ml-1 font-mono text-2xs uppercase tracking-wider text-red hover:underline"
+                className="ml-1 inline-flex min-h-[36px] items-center whitespace-nowrap font-mono text-2xs uppercase tracking-wider text-red hover:underline"
               >
                 clear ✕
               </button>

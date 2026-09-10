@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 
+/** Kept in sync with --paper in globals.css and the boot script in app/layout.tsx. */
+const PAPER = { dark: "#0a0a0a", light: "#f4efe3" } as const;
+
 /**
  * Theme is applied before paint by the inline script in app/layout.tsx.
  * This toggle just flips the attribute + persists the choice.
@@ -18,6 +21,8 @@ export function ThemeToggle() {
   function toggle() {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
+    // Keep the browser/status bar tint with the page instead of a stale seam.
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", PAPER[next]);
     try {
       localStorage.setItem("hilman-theme", next);
     } catch {}

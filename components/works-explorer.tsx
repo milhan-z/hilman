@@ -105,7 +105,7 @@ export function WorksExplorer({
   return (
     <div>
       {/* search + sort */}
-      <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-7 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:items-center">
         <label className="relative flex-1">
           <span className="sr-only">Search works</span>
           <svg
@@ -125,7 +125,7 @@ export function WorksExplorer({
           />
         </label>
         <div className="flex items-center gap-2 font-mono text-2xs uppercase tracking-wider text-faint">
-          <span>sort</span>
+          <span className="shrink-0">sort</span>
           <div className="flex rounded-md border border-line-strong p-0.5">
             {SORTS.map((s) => (
               <button
@@ -134,7 +134,7 @@ export function WorksExplorer({
                 onClick={() => setSort(s.key)}
                 aria-pressed={sort === s.key}
                 className={cn(
-                  "rounded px-2.5 py-1 transition-colors",
+                  "min-h-[36px] rounded px-3 transition-colors",
                   sort === s.key ? "bg-hl text-hl-ink font-semibold" : "text-soft hover:text-ink"
                 )}
               >
@@ -146,7 +146,10 @@ export function WorksExplorer({
       </div>
 
       {/* filing tabs */}
-      <nav aria-label="Work streams" className="mt-6 flex flex-wrap items-end gap-1 border-b-2 border-line-strong">
+      <nav
+        aria-label="Work streams"
+        className="scroll-row scroll-row-bleed mt-6 items-end gap-1 border-b-2 border-line-strong"
+      >
         {[undefined, ...streamKeys].map((s) => {
           const active = stream === s;
           return (
@@ -156,7 +159,7 @@ export function WorksExplorer({
               onClick={() => pickStream(s)}
               aria-pressed={active}
               className={cn(
-                "relative min-h-[44px] translate-y-[2px] rounded-t-md border border-b-0 px-4 py-2.5 font-mono text-2xs uppercase tracking-widest transition-colors duration-fast",
+                "relative min-h-[44px] translate-y-[2px] whitespace-nowrap rounded-t-md border border-b-0 px-4 py-2.5 font-mono text-2xs uppercase tracking-widest transition-colors duration-fast",
                 active ? "border-line-strong bg-surface font-bold text-ink" : "border-transparent text-faint hover:text-ink"
               )}
               style={active && s ? { boxShadow: `inset 0 3px 0 ${STREAM_ACCENT[s]}` } : undefined}
@@ -168,8 +171,8 @@ export function WorksExplorer({
       </nav>
 
       {/* tag chips */}
-      <div className="mt-6 flex flex-wrap items-center gap-2">
-        <span className="font-hand text-lg text-faint">filter:</span>
+      <div className="scroll-row scroll-row-bleed scroll-row-wrap-sm mt-6 items-center">
+        <span className="self-center font-hand text-lg text-faint">filter:</span>
         {tags.map((t) => {
           const active = tag === t.slug;
           return (
@@ -179,7 +182,7 @@ export function WorksExplorer({
               onClick={() => pickTag(active ? undefined : t.slug)}
               aria-pressed={active}
               className={cn(
-                "inline-flex items-center rounded-[4px] border px-2 py-0.5 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
+                "inline-flex min-h-[36px] items-center whitespace-nowrap rounded-[4px] border px-3 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
                 active ? "border-transparent bg-hl text-hl-ink font-semibold" : "border-line-strong text-soft hover:border-pen hover:text-pen"
               )}
             >
@@ -188,7 +191,11 @@ export function WorksExplorer({
           );
         })}
         {anyFilter && (
-          <button type="button" onClick={reset} className="ml-1 font-mono text-2xs uppercase tracking-wider text-red hover:underline">
+          <button
+            type="button"
+            onClick={reset}
+            className="ml-1 inline-flex min-h-[36px] items-center whitespace-nowrap font-mono text-2xs uppercase tracking-wider text-red hover:underline"
+          >
             clear ✕
           </button>
         )}

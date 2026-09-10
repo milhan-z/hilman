@@ -28,7 +28,7 @@ export default async function WorksPage({
   const tags = tagsRes.ok ? tagsRes.value : [];
 
   return (
-    <div className="mx-auto max-w-wide px-5 py-14 sm:px-8">
+    <div className="mx-auto max-w-wide px-5 py-9 sm:px-8 sm:py-14">
       <header className="max-w-2xl">
         <Kicker>the archive, properly filed</Kicker>
         <div className="relative mt-3 inline-block">
@@ -37,7 +37,7 @@ export default async function WorksPage({
             <DrawAccent variant="underline" color="yellow" width={150} strokeWidth={4} />
           </div>
         </div>
-        <p className="mt-5 text-lg text-pretty leading-relaxed text-soft">
+        <p className="mt-4 text-pretty leading-relaxed text-soft sm:mt-5 sm:text-lg">
           One desk, three worlds — design, stories, and code. Switch streams below; everything filters
           on the spot, no page reloads.
         </p>

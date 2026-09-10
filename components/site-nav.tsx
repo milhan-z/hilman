@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { ThemeToggle } from "./theme-toggle";
+import { useTuckedHeader } from "./use-tucked-header";
 import { cn } from "@/lib/utils";
 
 /* Section index — the notebook's table of contents.
@@ -46,9 +47,14 @@ export function SiteNav({ items }: { items: { label: string; href: string }[] })
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   const section = sectionFor(pathname);
+  // An open menu must not slide away with the bar it is attached to.
+  const tucked = useTuckedHeader() && !open;
 
   return (
-    <header className="sticky top-0 z-40 border-b-2 border-ink/85 bg-paper/90 backdrop-blur-md">
+    <header
+      data-tucked={tucked}
+      className="site-header z-40 border-b-2 border-ink/85"
+    >
       {/* ── Ledger strip — the bound header of the page ── */}
       <div className="border-b border-line">
         <div className="mx-auto flex max-w-wide items-center justify-between px-5 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-soft sm:px-8">

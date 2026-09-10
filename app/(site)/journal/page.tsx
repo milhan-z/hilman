@@ -17,7 +17,7 @@ export default async function JournalPage() {
   const posts = postsRes.ok ? postsRes.value : [];
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-14 sm:px-8">
+    <div className="mx-auto max-w-3xl px-5 py-9 sm:px-8 sm:py-14">
       <header>
         <Kicker>a garden, not a feed</Kicker>
         <div className="relative mt-3 inline-block">

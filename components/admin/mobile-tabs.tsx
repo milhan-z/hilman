@@ -45,6 +45,13 @@ const TABS = [
   },
 ] as const;
 
+/** The things worth starting from anywhere in the studio, in one tap. */
+const CREATE_LINKS = [
+  { label: "New project", href: "/admin/projects/new", hint: "a case study" },
+  { label: "New journal entry", href: "/admin/journal/new", hint: "a note" },
+  { label: "Upload media", href: "/admin/media", hint: "images & files" },
+];
+
 const MORE_LINKS = [
   { label: "Pages", href: "/admin/pages" },
   { label: "Media library", href: "/admin/media" },
@@ -53,11 +60,43 @@ const MORE_LINKS = [
   { label: "Settings", href: "/admin/settings" },
 ];
 
+/** Bottom sheet chrome — the overlay, the grab handle, the dismiss behaviour. */
+function Sheet({
+  label,
+  onClose,
+  children,
+}: {
+  label: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[90] bg-black/50 backdrop-blur-sm lg:hidden"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+    >
+      <div className="absolute inset-x-0 bottom-0 rounded-t-xl border-t border-line-strong bg-surface p-4 pb-[calc(76px+env(safe-area-inset-bottom))] shadow-lift">
+        <div aria-hidden className="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong" />
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function MobileTabs() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
-  useEffect(() => setMoreOpen(false), [pathname]);
+  useEffect(() => {
+    setMoreOpen(false);
+    setCreateOpen(false);
+  }, [pathname]);
 
   if (EDITOR_ROUTE.test(pathname)) return null;
 
@@ -75,20 +114,47 @@ export function MobileTabs() {
       {/* in-flow spacer so page content can scroll clear of the fixed bar */}
       <div aria-hidden className="h-[calc(64px+env(safe-area-inset-bottom))] lg:hidden" />
 
+      {/* Create sheet — the studio's primary action on a phone */}
+      {createOpen && (
+        <Sheet label="Create something new" onClose={() => setCreateOpen(false)}>
+          <p className="mb-3 px-1 font-mono text-2xs uppercase tracking-widest text-faint">
+            Add to the archive
+          </p>
+          <div className="grid gap-2">
+            {CREATE_LINKS.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className="flex min-h-[56px] items-center justify-between gap-3 rounded-md border border-line bg-raise px-4 transition-colors hover:border-pen"
+              >
+                <span className="text-base font-semibold text-ink">{l.label}</span>
+                <span className="font-mono text-2xs uppercase tracking-wide text-faint">
+                  {l.hint}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </Sheet>
+      )}
+
       {/* More sheet */}
       {moreOpen && (
-        <div
-          className="fixed inset-0 z-[90] bg-black/50 backdrop-blur-sm lg:hidden"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setMoreOpen(false);
-          }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="More sections"
-        >
-          <div className="absolute inset-x-0 bottom-0 rounded-t-xl border-t border-line-strong bg-surface p-4 pb-[calc(76px+env(safe-area-inset-bottom))] shadow-lift">
-            <div aria-hidden className="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong" />
-            <div className="grid grid-cols-2 gap-2">
+        <Sheet label="More sections" onClose={() => setMoreOpen(false)}>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMoreOpen(false);
+                window.dispatchEvent(new Event("hilman:cmdk"));
+              }}
+              className="col-span-2 flex min-h-[48px] items-center gap-2.5 rounded-md border border-line bg-raise px-4 text-sm font-medium text-soft"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <circle cx="11" cy="11" r="7" />
+                <path d="M21 21l-4.3-4.3" />
+              </svg>
+              Search the studio
+            </button>
               {MORE_LINKS.map((l) => (
                 <Link
                   key={l.href}
@@ -111,14 +177,13 @@ export function MobileTabs() {
               >
                 View site ↗
               </a>
-              <form action={signOut} className="contents">
-                <button className="flex min-h-[48px] items-center rounded-md border border-line bg-raise px-4 text-left text-sm font-medium text-red">
-                  Sign out
-                </button>
-              </form>
-            </div>
+            <form action={signOut} className="contents">
+              <button className="flex min-h-[48px] items-center rounded-md border border-line bg-raise px-4 text-left text-sm font-medium text-red">
+                Sign out
+              </button>
+            </form>
           </div>
-        </div>
+        </Sheet>
       )}
 
       {/* Tab bar */}
@@ -127,24 +192,37 @@ export function MobileTabs() {
         className="fixed inset-x-0 bottom-0 z-[80] border-t border-line-strong bg-paper/95 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur lg:hidden"
       >
         <div className="mx-auto flex max-w-md items-stretch gap-1">
-          {TABS.map((t) => (
+          {TABS.slice(0, 2).map((t) => (
             <Link key={t.href} href={t.href} className={tabCls(isActive(t.href))} aria-current={isActive(t.href) ? "page" : undefined}>
               {t.icon}
               {t.label}
             </Link>
           ))}
+
+          {/* Create sits dead centre, under the thumb, and is the only filled
+              control on the bar — starting something new is the studio's whole
+              point on a phone, and it used to be three taps deep. */}
           <button
             type="button"
-            onClick={() => window.dispatchEvent(new Event("hilman:cmdk"))}
-            className={tabCls(false)}
-            aria-label="Search the studio"
+            onClick={() => setCreateOpen((v) => !v)}
+            aria-expanded={createOpen}
+            aria-label="Create something new"
+            className="flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 font-mono text-2xs uppercase tracking-wide text-hl-ink"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21l-4.3-4.3" />
-            </svg>
-            Search
+            <span className="flex h-8 w-12 items-center justify-center rounded-full bg-hl shadow-card transition-transform active:scale-95">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </span>
+            <span className="text-hl">New</span>
           </button>
+
+          {TABS.slice(2).map((t) => (
+            <Link key={t.href} href={t.href} className={tabCls(isActive(t.href))} aria-current={isActive(t.href) ? "page" : undefined}>
+              {t.icon}
+              {t.label}
+            </Link>
+          ))}
           <button
             type="button"
             onClick={() => setMoreOpen((v) => !v)}
