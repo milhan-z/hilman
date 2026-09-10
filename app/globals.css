@@ -519,6 +519,16 @@
   position: sticky;
   top: 0;
   isolation: isolate;
+  /* Its own compositor layer. iOS updates sticky offsets a frame late during
+     momentum scrolling, which lets a strip of page content slide visibly above
+     the bar before it catches up; a promoted layer tracks the scroll instead of
+     being re-laid-out after it. */
+  will-change: transform;
+  /* Zero unless the document opts into drawing under the status bar
+     (`viewport-fit: cover`). If it ever does, the bar pads itself so its own
+     backdrop — ::before covers the padded box — fills that strip, rather than
+     leaving it to whatever scrolls underneath. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .site-header::before {
