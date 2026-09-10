@@ -183,21 +183,33 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
      The editor holds a lot of state that only reaches the database on submit.
      Losing it to a refresh, a closed tab, or a stray link was silent. */
 
-  const snapshot = useMemo(
-    () =>
-      JSON.stringify({
-        title, slug, subtitle, stream, excerpt, coverPublicId, thumbnailPublicId,
-        year, sortOrder, rawMeta, readingMinutes, status, featured, tagIds, blocks,
-      }),
+  /**
+   * The document as a plain object. Assembling it is cheap; serialising it is
+   * not, so that is deliberately kept out of the render path below — on a long
+   * article, stringifying the whole document (and then stringifying it *again*
+   * for localStorage) on every keystroke was enough to make typing stutter.
+   */
+  const doc = useMemo(
+    () => ({
+      title, slug, subtitle, stream, excerpt, coverPublicId, thumbnailPublicId,
+      year, sortOrder, rawMeta, readingMinutes, status, featured, tagIds, blocks,
+    }),
     [title, slug, subtitle, stream, excerpt, coverPublicId, thumbnailPublicId,
      year, sortOrder, rawMeta, readingMinutes, status, featured, tagIds, blocks]
   );
+  // Read on submit, where the *current* document is what matters. Kept in sync
+  // from an effect rather than during render, so a render React throws away
+  // can never leave the ref pointing at a document that was never shown.
+  const docRef = useRef(doc);
+  useEffect(() => {
+    docRef.current = doc;
+  }, [doc]);
 
   const draftKey = "hilman-draft:" + kind + ":" + (initial?.id ?? "new");
-  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
-  const submittedSnapshot = useRef(snapshot);
+  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(doc));
+  const submittedSnapshot = useRef(savedSnapshot);
   const [recovered, setRecovered] = useState<{ snapshot: string; savedAt: string } | null>(null);
-  const dirty = snapshot !== savedSnapshot;
+  const [dirty, setDirty] = useState(false);
 
   // Offer a local draft rather than applying it -- restoring is a decision.
   useEffect(() => {
@@ -216,18 +228,30 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey]);
 
+  /**
+   * Works out whether there are unsaved changes, and mirrors them to
+   * localStorage — once the editor pauses, not once per character. The pause is
+   * short enough that a crash still costs at most a few words, and it keeps the
+   * serialisation and the synchronous storage write off the typing path.
+   */
   useEffect(() => {
-    try {
-      if (dirty) {
-        window.localStorage.setItem(
-          draftKey,
-          JSON.stringify({ snapshot, savedAt: new Date().toISOString() })
-        );
-      } else {
-        window.localStorage.removeItem(draftKey);
-      }
-    } catch {}
-  }, [dirty, snapshot, draftKey]);
+    const timer = window.setTimeout(() => {
+      const snapshot = JSON.stringify(doc);
+      const changed = snapshot !== savedSnapshot;
+      setDirty(changed);
+      try {
+        if (changed) {
+          window.localStorage.setItem(
+            draftKey,
+            JSON.stringify({ snapshot, savedAt: new Date().toISOString() })
+          );
+        } else {
+          window.localStorage.removeItem(draftKey);
+        }
+      } catch {}
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [doc, savedSnapshot, draftKey]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -243,6 +267,9 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   useEffect(() => {
     if (formState.status === "success") {
       setSavedSnapshot(submittedSnapshot.current);
+      // Anything typed while the save was in flight keeps the badge honest:
+      // the debounced effect re-runs against the new saved snapshot.
+      setDirty(JSON.stringify(docRef.current) !== submittedSnapshot.current);
       setRecovered(null);
       try {
         window.localStorage.removeItem(draftKey);
@@ -275,28 +302,24 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   }
 
   // The server refuses a malformed meta payload; say so before the round-trip.
-  const metaIsValid = (() => {
-    if (!rawMeta.trim()) return true;
+  // Parsed once per edit to `meta` rather than once per render — the editor
+  // re-renders on every keystroke anywhere in the document.
+  const { metaIsValid, parsedMeta } = useMemo(() => {
+    if (!rawMeta.trim()) return { metaIsValid: true, parsedMeta: {} as Record<string, any> };
     try {
       const parsed = JSON.parse(rawMeta);
-      return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
+      const valid = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
+      return { metaIsValid: valid, parsedMeta: valid ? parsed : {} };
     } catch {
-      return false;
+      return { metaIsValid: false, parsedMeta: {} as Record<string, any> };
     }
-  })();
+  }, [rawMeta]);
 
   const blockedReason = !title.trim()
     ? "Add a title before saving."
     : !metaIsValid
       ? "The meta field is not a valid JSON object."
       : null;
-
-  let parsedMeta: Record<string, any> = {};
-  try {
-    parsedMeta = JSON.parse(rawMeta);
-  } catch {
-    // ignore
-  }
 
   const handleUpdateMetaField = (key: string, value: any) => {
     let current: Record<string, any> = {};
@@ -417,18 +440,23 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
 
   const activeBlock = blocks.find((b) => b.id === activeBlockId) || null;
 
+  // Serialised only when the underlying list actually changes, not on every
+  // keystroke in an unrelated field.
+  const blocksField = useMemo(() => JSON.stringify(blocks), [blocks]);
+  const tagIdsField = useMemo(() => JSON.stringify(tagIds), [tagIds]);
+
   return (
     <form
       action={action}
       onSubmit={() => {
-        submittedSnapshot.current = snapshot;
+        submittedSnapshot.current = JSON.stringify(docRef.current);
       }}
       className="relative flex min-h-[calc(100vh-140px)] flex-col justify-between"
     >
       {/* Hidden serialization fields */}
       <input type="hidden" name="id" value={initial?.id ?? ""} />
-      <input type="hidden" name="blocks" value={JSON.stringify(blocks)} />
-      <input type="hidden" name="tag_ids" value={JSON.stringify(tagIds)} />
+      <input type="hidden" name="blocks" value={blocksField} />
+      <input type="hidden" name="tag_ids" value={tagIdsField} />
 
       {recovered && (
         <div className="mb-5 rounded-md border border-hl bg-hl-soft/25 p-4">

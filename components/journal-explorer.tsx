@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
+import { useDeferredValue, useMemo, useState } from "react";
+import { AnimatePresence, LayoutGroup, m, useReducedMotion } from "framer-motion";
 import { JournalCard } from "./journal-card";
 import { EntryMeta, Stamp } from "./ui";
 import type { JournalPost, TagRow } from "@/lib/types";
@@ -31,8 +31,11 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [posts]);
 
+  /** Keeps typing responsive: the input updates now, the list catches up. */
+  const deferredQuery = useDeferredValue(query);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     return posts.filter((p) => {
       if (tag && !(p.tags ?? []).some((t) => t.slug === tag)) return false;
       if (q) {
@@ -44,11 +47,13 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
       }
       return true;
     });
-  }, [posts, query, tag]);
+  }, [posts, deferredQuery, tag]);
 
-  const anyFilter = !!(query.trim() || tag);
-  const pinned = filtered.filter((p) => p.featured);
-  const groups = groupByYear(filtered);
+  const anyFilter = !!(deferredQuery.trim() || tag);
+  // Both derive from `filtered`; recomputing them on unrelated renders (a
+  // keystroke that changes nothing else) re-keys every year section.
+  const pinned = useMemo(() => filtered.filter((p) => p.featured), [filtered]);
+  const groups = useMemo(() => groupByYear(filtered), [filtered]);
 
   return (
     <div>
@@ -113,7 +118,7 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
         items={[
           `${filtered.length} ${filtered.length === 1 ? "entry" : "entries"}`,
           tag ? `#${tag}` : null,
-          query.trim() ? `“${query.trim()}”` : "updated when an idea lands",
+          deferredQuery.trim() ? `“${deferredQuery.trim()}”` : "updated when an idea lands",
         ]}
       />
 
@@ -156,10 +161,10 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
                 {items.length} {items.length === 1 ? "entry" : "entries"}
               </span>
             </div>
-            <motion.div layout={!reduced} className="space-y-4">
+            <m.div layout={!reduced} className="space-y-4">
               <AnimatePresence mode="popLayout">
                 {items.map((post) => (
-                  <motion.div
+                  <m.div
                     key={post.id}
                     layout={!reduced}
                     initial={reduced ? false : { opacity: 0, y: 10 }}
@@ -168,10 +173,10 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
                     transition={{ duration: 0.35, ease: EASE }}
                   >
                     <JournalCard post={post} />
-                  </motion.div>
+                  </m.div>
                 ))}
               </AnimatePresence>
-            </motion.div>
+            </m.div>
           </section>
         ))}
       </LayoutGroup>

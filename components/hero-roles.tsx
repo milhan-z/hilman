@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 
 /**
  * "Creative [Role]" — the role inside yellow brackets swaps with a
@@ -38,7 +38,7 @@ export function HeroRoles({
             <span className="text-pen">{role}</span>
           ) : (
             <AnimatePresence mode="popLayout" initial={false}>
-              <motion.span
+              <m.span
                 key={role}
                 initial={{ y: "0.55em", opacity: 0, filter: "blur(6px)" }}
                 animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
@@ -47,7 +47,7 @@ export function HeroRoles({
                 className="col-start-1 row-start-1 whitespace-nowrap text-pen"
               >
                 {role}
-              </motion.span>
+              </m.span>
             </AnimatePresence>
           )}
         </span>

@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { checkOwner } from "@/lib/owner";
 import { destroyAsset } from "@/lib/cloudinary-server";
 import { slugify } from "@/lib/utils";
+import { CACHE_TAGS } from "@/lib/data";
 import type { Block } from "@/lib/types";
 
 /**
@@ -35,7 +36,16 @@ const ok = (id?: string): ActionState => ({
 });
 const fail = (message: string): ActionState => ({ status: "error", message });
 
+/**
+ * Drops everything the public site has cached about content.
+ *
+ * Tags come first and are what makes an edit appear at once: they clear the
+ * query results in lib/data.ts, so the very next render reads the new rows
+ * rather than waiting out the page's revalidate window. The path purges then
+ * throw away the rendered HTML built from the old rows.
+ */
 function revalidateSite() {
+  for (const tag of Object.values(CACHE_TAGS)) revalidateTag(tag);
   for (const p of ["/", "/works", "/journal", "/about", "/connect", "/lab"]) {
     revalidatePath(p);
   }

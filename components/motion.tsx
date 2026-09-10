@@ -1,21 +1,24 @@
-"use client";
-
-import { motion, useReducedMotion, type Variants } from "framer-motion";
-import type { ReactNode } from "react";
-
-const EASE = [0.16, 1, 0.3, 1] as const;
+/**
+ * Scroll reveals.
+ *
+ * These are plain server components: they emit `data-reveal` markers, and all
+ * the animation lives in CSS (see globals.css) driven by one shared
+ * IntersectionObserver in <RevealObserver />. That matters for two reasons:
+ *
+ *  - Zero client JavaScript. These wrappers are on nearly every section of the
+ *    home, about and lab pages; as motion components they pulled the animation
+ *    runtime into the bundle of each one.
+ *  - They cannot strand content. The hidden state is scoped to `html.js`, a
+ *    class set by the inline script in app/layout.tsx, so if scripting is off
+ *    or a chunk fails to arrive the content is simply visible rather than
+ *    stuck at opacity 0 — which is what a JS-owned `initial` state does.
+ *
+ * Reduced motion is handled in CSS, so it needs no hook and no re-render.
+ */
+import type { CSSProperties, ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 type RevealVariant = "up" | "left" | "right" | "scale" | "blur" | "fade";
-
-const HIDDEN: Record<RevealVariant, Record<string, any>> = {
-  up: { opacity: 0, y: 24 },
-  left: { opacity: 0, x: -36 },
-  right: { opacity: 0, x: 36 },
-  scale: { opacity: 0, scale: 0.94 },
-  blur: { opacity: 0, y: 16, filter: "blur(8px)" },
-  fade: { opacity: 0 },
-};
-const SHOWN = { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" };
 
 /** One-shot reveal when a block scrolls into view. */
 export function SectionReveal({
@@ -29,18 +32,14 @@ export function SectionReveal({
   variant?: RevealVariant;
   className?: string;
 }) {
-  const reduced = useReducedMotion();
-  if (reduced) return <div className={className}>{children}</div>;
   return (
-    <motion.div
+    <div
+      data-reveal={variant}
       className={className}
-      initial={HIDDEN[variant]}
-      whileInView={SHOWN}
-      viewport={{ once: true, margin: "0px 0px -60px 0px" }}
-      transition={{ duration: 0.7, ease: EASE, delay }}
+      style={delay ? ({ "--reveal-delay": `${delay * 1000}ms` } as CSSProperties) : undefined}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
 
@@ -56,22 +55,19 @@ export function Stagger({
   gap?: number;
   delay?: number;
 }) {
-  const reduced = useReducedMotion();
-  if (reduced) return <div className={className}>{children}</div>;
-  const container: Variants = {
-    hidden: {},
-    show: { transition: { staggerChildren: gap, delayChildren: delay } },
-  };
   return (
-    <motion.div
+    <div
+      data-reveal-group=""
       className={className}
-      variants={container}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: "0px 0px -60px 0px" }}
+      style={
+        {
+          "--stagger-gap": `${gap * 1000}ms`,
+          ...(delay ? { "--reveal-delay": `${delay * 1000}ms` } : {}),
+        } as CSSProperties
+      }
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
 
@@ -84,30 +80,9 @@ export function StaggerItem({
   className?: string;
   variant?: RevealVariant;
 }) {
-  const reduced = useReducedMotion();
-  if (reduced) return <div className={className}>{children}</div>;
-  const item: Variants = {
-    hidden: HIDDEN[variant],
-    show: { ...SHOWN, transition: { duration: 0.6, ease: EASE } },
-  };
   return (
-    <motion.div className={className} variants={item}>
+    <div data-reveal={variant} className={cn(className)}>
       {children}
-    </motion.div>
-  );
-}
-
-/** Soft fade for route transitions — used by app/(site)/template.tsx. */
-export function PageFade({ children }: { children: ReactNode }) {
-  const reduced = useReducedMotion();
-  if (reduced) return <>{children}</>;
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: EASE }}
-    >
-      {children}
-    </motion.div>
+    </div>
   );
 }

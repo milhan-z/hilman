@@ -378,3 +378,130 @@
     mix-blend-mode: overlay;
   }
 }
+
+/* ── Route transition ──────────────────────────────────────
+   Paired with app/(site)/template.tsx. Opacity and transform
+   only, so it stays on the compositor and never triggers
+   layout during a navigation. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.page-enter {
+  animation: page-enter 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+}
+
+/* ── Loading placeholders ──────────────────────────────────
+   Used by components/skeleton.tsx. Animates background-position
+   only, so a screen full of placeholders stays off the main
+   thread while the real content is being fetched. */
+.skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--surface) 25%,
+    var(--raise) 37%,
+    var(--surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    background-image: none;
+    background-color: var(--surface);
+  }
+}
+
+/* ── Scroll reveals ────────────────────────────────────────
+   Paired with components/motion.tsx and <RevealObserver />.
+   Scoped to html.js so content is never hidden when scripting
+   is unavailable — the observer would then never un-hide it. */
+.js [data-reveal] {
+  opacity: 0;
+}
+.js [data-reveal="up"] {
+  transform: translate3d(0, 24px, 0);
+}
+.js [data-reveal="left"] {
+  transform: translate3d(-36px, 0, 0);
+}
+.js [data-reveal="right"] {
+  transform: translate3d(36px, 0, 0);
+}
+.js [data-reveal="scale"] {
+  transform: scale(0.94);
+}
+.js [data-reveal="blur"] {
+  transform: translate3d(0, 16px, 0);
+  filter: blur(8px);
+}
+
+.js [data-reveal][data-shown],
+.js [data-reveal-group][data-shown] > [data-reveal] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  transition:
+    opacity 700ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 700ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+/* Stagger: each child of a revealed group waits one more gap. */
+.js [data-reveal-group][data-shown] > [data-reveal]:nth-child(1) {
+  transition-delay: calc(var(--reveal-delay, 0ms) + 0 * var(--stagger-gap, 80ms));
+}
+.js [data-reveal-group][data-shown] > [data-reveal]:nth-child(2) {
+  transition-delay: calc(var(--reveal-delay, 0ms) + 1 * var(--stagger-gap, 80ms));
+}
+.js [data-reveal-group][data-shown] > [data-reveal]:nth-child(3) {
+  transition-delay: calc(var(--reveal-delay, 0ms) + 2 * var(--stagger-gap, 80ms));
+}
+.js [data-reveal-group][data-shown] > [data-reveal]:nth-child(4) {
+  transition-delay: calc(var(--reveal-delay, 0ms) + 3 * var(--stagger-gap, 80ms));
+}
+.js [data-reveal-group][data-shown] > [data-reveal]:nth-child(5) {
+  transition-delay: calc(var(--reveal-delay, 0ms) + 4 * var(--stagger-gap, 80ms));
+}
+.js [data-reveal-group][data-shown] > [data-reveal]:nth-child(6) {
+  transition-delay: calc(var(--reveal-delay, 0ms) + 5 * var(--stagger-gap, 80ms));
+}
+/* Beyond the sixth the delay would out-run the scroll — reveal together. */
+.js [data-reveal-group][data-shown] > [data-reveal]:nth-child(n + 7) {
+  transition-delay: calc(var(--reveal-delay, 0ms) + 6 * var(--stagger-gap, 80ms));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js [data-reveal],
+  .js [data-reveal-group] > [data-reveal] {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+}

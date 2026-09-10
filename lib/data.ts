@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { mockJournal, mockPages, mockProjects, mockSettings, mockTags } from "./mock";
 import { createPublicClient } from "./supabase/public";
 import { supabaseConfigured } from "./supabase/config";
@@ -24,7 +26,43 @@ import {
  *    from production put invented project slugs into the live sitemap while
  *    the real pages 404'd — so in production a missing Supabase config is an
  *    error, not a silent fallback.
+ *
+ * Caching has two layers, and they do different jobs:
+ *
+ *  - `cache()` from React dedupes within a single render. The site layout and
+ *    the page it wraps both want settings and the home record; without this
+ *    that is two round-trips for one answer.
+ *  - `unstable_cache` keeps the answer between requests, tagged by what it was
+ *    read from. A CMS save calls `revalidateTag`, so an edit is visible on the
+ *    next request instead of after the ISR window expires. See CACHE_TAGS.
  */
+
+/** Cache tags — the CMS invalidates these by name after a write. */
+export const CACHE_TAGS = {
+  settings: "settings",
+  projects: "projects",
+  journal: "journal",
+  pages: "pages",
+  tags: "tags",
+  blocks: "blocks",
+} as const;
+
+/**
+ * Wraps a read so it is memoised for the request *and* cached across requests
+ * under `tags`. Cached entries never expire on a timer: they are dropped when
+ * the CMS invalidates the tag, which is what makes an edit show up at once.
+ */
+function cached<A extends any[], R>(
+  read: (...args: A) => Promise<R>,
+  keyParts: string[],
+  tags: string[]
+): (...args: A) => Promise<R> {
+  // Mock content is in-process already; caching it only adds a serialisation hop.
+  if (usingMockContent) return cache(read) as (...args: A) => Promise<R>;
+  return cache(unstable_cache(read, keyParts, { tags, revalidate: false })) as (
+    ...args: A
+  ) => Promise<R>;
+}
 
 const PROJECT_SELECT = "*, project_tags(tag:tags(*))";
 const JOURNAL_SELECT = "*, journal_tags(tag:tags(*))";
@@ -78,7 +116,7 @@ async function fetchBlocks(ownerType: string, ownerId: string): Promise<Block[]>
 
 /* ── Settings ──────────────────────────────────────────── */
 
-export async function getSettings(): Promise<Settings> {
+async function readSettings(): Promise<Settings> {
   if (usingMockContent) return mockSettings;
   assertConfigured("site settings");
   const sb = createPublicClient();
@@ -87,23 +125,26 @@ export async function getSettings(): Promise<Settings> {
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return { ...DEFAULT_SETTINGS, ...map } as Settings;
 }
+export const getSettings = cached(readSettings, ["settings"], [CACHE_TAGS.settings]);
 
 /* ── Projects ──────────────────────────────────────────── */
 
+/** The one query behind every project list — filtering happens in memory. */
+async function readProjects(): Promise<Project[]> {
+  if (usingMockContent) return mockProjects.filter((p) => p.status === "published");
+  assertConfigured("works");
+  const sb = createPublicClient();
+  const res = await sb
+    .from("projects")
+    .select(PROJECT_SELECT)
+    .eq("status", "published")
+    .order("sort_order");
+  return (unwrap("works", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) }));
+}
+const allProjects = cached(readProjects, ["projects"], [CACHE_TAGS.projects, CACHE_TAGS.tags]);
+
 export async function getProjects(filter?: { stream?: Stream; tag?: string }): Promise<Project[]> {
-  let projects: Project[];
-  if (usingMockContent) {
-    projects = mockProjects.filter((p) => p.status === "published");
-  } else {
-    assertConfigured("works");
-    const sb = createPublicClient();
-    const res = await sb
-      .from("projects")
-      .select(PROJECT_SELECT)
-      .eq("status", "published")
-      .order("sort_order");
-    projects = (unwrap("works", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) }));
-  }
+  let projects = await allProjects();
   if (filter?.stream) projects = projects.filter((p) => p.stream === filter.stream);
   if (filter?.tag) projects = projects.filter((p) => p.tags?.some((t) => t.slug === filter.tag));
   return projects;
@@ -114,7 +155,7 @@ export async function getFeaturedProjects(limit = 3): Promise<Project[]> {
   return all.filter((p) => p.featured).slice(0, limit);
 }
 
-export async function getProjectBySlug(slug: string): Promise<Project | null> {
+async function readProjectBySlug(slug: string): Promise<Project | null> {
   if (usingMockContent) {
     return mockProjects.find((p) => p.slug === slug && p.status === "published") ?? null;
   }
@@ -131,10 +172,15 @@ export async function getProjectBySlug(slug: string): Promise<Project | null> {
   const blocks = await fetchBlocks("project", (data as any).id);
   return { ...(data as any), tags: mapTags(data), blocks };
 }
+export const getProjectBySlug = cached(
+  readProjectBySlug,
+  ["project-by-slug"],
+  [CACHE_TAGS.projects, CACHE_TAGS.blocks, CACHE_TAGS.tags]
+);
 
 /* ── Journal ───────────────────────────────────────────── */
 
-export async function getJournalPosts(): Promise<JournalPost[]> {
+async function readJournalPosts(): Promise<JournalPost[]> {
   if (usingMockContent) {
     return [...mockJournal]
       .filter((j) => j.status === "published")
@@ -149,8 +195,13 @@ export async function getJournalPosts(): Promise<JournalPost[]> {
     .order("published_at", { ascending: false });
   return (unwrap("the journal", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) }));
 }
+export const getJournalPosts = cached(
+  readJournalPosts,
+  ["journal"],
+  [CACHE_TAGS.journal, CACHE_TAGS.tags]
+);
 
-export async function getJournalBySlug(slug: string): Promise<JournalPost | null> {
+async function readJournalBySlug(slug: string): Promise<JournalPost | null> {
   if (usingMockContent) {
     return mockJournal.find((j) => j.slug === slug && j.status === "published") ?? null;
   }
@@ -167,6 +218,11 @@ export async function getJournalBySlug(slug: string): Promise<JournalPost | null
   const blocks = await fetchBlocks("journal", (data as any).id);
   return { ...(data as any), tags: mapTags(data), blocks };
 }
+export const getJournalBySlug = cached(
+  readJournalBySlug,
+  ["journal-by-slug"],
+  [CACHE_TAGS.journal, CACHE_TAGS.blocks, CACHE_TAGS.tags]
+);
 
 export async function getRelatedJournal(post: JournalPost, limit = 2): Promise<JournalPost[]> {
   const all = await getJournalPosts();
@@ -182,7 +238,7 @@ export async function getRelatedJournal(post: JournalPost, limit = 2): Promise<J
 
 /* ── Pages ─────────────────────────────────────────────── */
 
-export async function getPage(slug: string): Promise<PageRow | null> {
+async function readPage(slug: string): Promise<PageRow | null> {
   if (usingMockContent) {
     return mockPages.find((p) => p.slug === slug) ?? null;
   }
@@ -194,16 +250,18 @@ export async function getPage(slug: string): Promise<PageRow | null> {
   const blocks = await fetchBlocks("page", (data as any).id);
   return { ...(data as any), blocks };
 }
+export const getPage = cached(readPage, ["page"], [CACHE_TAGS.pages, CACHE_TAGS.blocks]);
 
 /* ── Tags ──────────────────────────────────────────────── */
 
-export async function getTags(): Promise<TagRow[]> {
+async function readTags(): Promise<TagRow[]> {
   if (usingMockContent) return mockTags;
   assertConfigured("topics");
   const sb = createPublicClient();
   const res = await sb.from("tags").select("*").order("name");
   return (unwrap("topics", res) as TagRow[] | null) ?? [];
 }
+export const getTags = cached(readTags, ["tags"], [CACHE_TAGS.tags]);
 
 /* ── Sitemap helpers ───────────────────────────────────── */
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { m, useReducedMotion } from "framer-motion";
 
 /**
  * Hand-drawn SVG accent that "draws in" when scrolled into view.
@@ -65,7 +65,7 @@ export function DrawAccent({
       className={className}
       style={{ overflow: "visible", display: "block" }}
     >
-      <motion.path
+      <m.path
         d={shape.d}
         stroke={stroke}
         strokeWidth={strokeWidth}

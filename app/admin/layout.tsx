@@ -5,7 +5,7 @@ import { CommandPalette } from "@/components/admin/command-palette";
 import { MobileTabs } from "@/components/admin/mobile-tabs";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { supabaseConfigured } from "@/lib/supabase/config";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { getRequestUser } from "@/lib/supabase/server";
 import { checkOwner } from "@/lib/owner";
 import { signOut } from "./actions";
 import { MediaSelectorProvider } from "@/components/admin/media-library-context";
@@ -33,17 +33,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
 
-  const supabase = createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Both reads are memoised for the request, and checkOwner() reuses the very
+  // same getUser() call — so this pair costs one auth round-trip, not three.
+  const [user, owner] = await Promise.all([getRequestUser(), checkOwner()]);
 
   // unauthenticated → /admin/login renders without the shell
   if (!user) return <div className="min-h-screen">{children}</div>;
 
   // Signed in is not the same as owning the site. A non-owner gets a door,
   // not a studio — and RLS would refuse their writes anyway.
-  const owner = await checkOwner();
   if (!owner.ok) {
     return (
       <div className="mx-auto max-w-xl px-5 py-24 text-center">

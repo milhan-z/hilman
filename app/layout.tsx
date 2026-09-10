@@ -33,14 +33,20 @@ export const metadata: Metadata = {
   },
 };
 
-/** Applied before paint. Night (dark) is the default; honours a stored choice. */
-const themeScript = `(function(){try{var t=localStorage.getItem("hilman-theme");if(t!=="light"&&t!=="dark"){t="dark"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})()`;
+/**
+ * Applied before paint. Night (dark) is the default; honours a stored choice.
+ *
+ * It also marks the document as scripted. Scroll reveals hide their content
+ * from CSS under `html.js`, so if this script never runs the page renders fully
+ * visible instead of blank — the reveal observer is what would have shown it.
+ */
+const bootScript = `(function(){document.documentElement.classList.add("js");try{var t=localStorage.getItem("hilman-theme");if(t!=="light"&&t!=="dark"){t="dark"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})()`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: bootScript }} />
       </head>
       <body
         className={`noise ${fraunces.variable} ${inter.variable} ${caveat.variable} ${jetbrains.variable}`}

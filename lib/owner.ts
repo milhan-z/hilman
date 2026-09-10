@@ -1,4 +1,5 @@
-import { createServerSupabase } from "@/lib/supabase/server";
+import { cache } from "react";
+import { createServerSupabase, getRequestUser } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/supabase/config";
 
 /**
@@ -11,6 +12,10 @@ import { supabaseConfigured } from "@/lib/supabase/config";
  * Every mutating server action and the upload-signing route call this. RLS
  * enforces the same rule at the database, so a route that slipped past
  * middleware still cannot write.
+ *
+ * Memoised per request: the admin layout, the page it renders, and any helper
+ * that asks all get one `auth.getUser()` and one `is_site_owner()` between
+ * them, instead of a fresh pair of round-trips each.
  */
 
 export type OwnerCheck =
@@ -20,7 +25,7 @@ export type OwnerCheck =
 /** Postgres/PostgREST codes meaning "is_site_owner() isn't in the database yet". */
 const MISSING_FUNCTION = new Set(["42883", "PGRST202", "PGRST203"]);
 
-export async function checkOwner(): Promise<OwnerCheck> {
+export const checkOwner = cache(async function checkOwner(): Promise<OwnerCheck> {
   if (!supabaseConfigured) {
     return {
       ok: false,
@@ -30,9 +35,7 @@ export async function checkOwner(): Promise<OwnerCheck> {
   }
 
   const supabase = createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) {
     return { ok: false, reason: "unauthenticated", message: "Please sign in again." };
   }
@@ -61,7 +64,7 @@ export async function checkOwner(): Promise<OwnerCheck> {
     };
   }
   return { ok: true, userId: user.id, degraded: false };
-}
+});
 
 /** True when the ownership rule is only being enforced by the app, not the database. */
 export async function ownerEnforcementDegraded(): Promise<boolean> {

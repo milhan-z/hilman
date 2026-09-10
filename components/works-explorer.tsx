@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
+import { useDeferredValue, useMemo, useState } from "react";
+import { AnimatePresence, LayoutGroup, m, useReducedMotion } from "framer-motion";
 import { ProjectCard } from "./project-card";
 import { EntryMeta } from "./ui";
 import { STREAMS, type Project, type Stream, type TagRow } from "@/lib/types";
@@ -46,8 +46,16 @@ export function WorksExplorer({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("curated");
 
+  /**
+   * The typed value updates the input immediately; the grid re-filters against
+   * the deferred copy. React can then interrupt the (expensive) list render to
+   * keep up with the keyboard, so the caret never lags behind on a large
+   * archive — and the shared-layout animation is not restarted per keystroke.
+   */
+  const deferredQuery = useDeferredValue(query);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     const list = projects.filter((p) => {
       if (stream && p.stream !== stream) return false;
       if (tag && !(p.tags ?? []).some((t) => t.slug === tag)) return false;
@@ -68,7 +76,7 @@ export function WorksExplorer({
       return a.sort_order - b.sort_order;
     });
     return list;
-  }, [projects, stream, tag, query, sort]);
+  }, [projects, stream, tag, deferredQuery, sort]);
 
   function syncUrl(nextStream?: Stream, nextTag?: string) {
     const params = new URLSearchParams();
@@ -192,7 +200,7 @@ export function WorksExplorer({
           `${filtered.length} ${filtered.length === 1 ? "entry" : "entries"}`,
           stream ? STREAMS[stream].name : "all streams",
           tag ? `#${tag}` : null,
-          query.trim() ? `“${query.trim()}”` : null,
+          deferredQuery.trim() ? `“${deferredQuery.trim()}”` : null,
         ]}
       />
 
@@ -215,10 +223,10 @@ export function WorksExplorer({
           </div>
         ) : (
           <LayoutGroup>
-            <motion.div layout={!reduced} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <m.div layout={!reduced} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               <AnimatePresence mode="popLayout">
                 {filtered.map((p, i) => (
-                  <motion.div
+                  <m.div
                     key={p.id}
                     layout={!reduced}
                     initial={reduced ? false : { opacity: 0, scale: 0.96, y: 12 }}
@@ -227,10 +235,10 @@ export function WorksExplorer({
                     transition={{ duration: 0.4, ease: EASE }}
                   >
                     <ProjectCard project={p} index={i} priority={i < 3} />
-                  </motion.div>
+                  </m.div>
                 ))}
               </AnimatePresence>
-            </motion.div>
+            </m.div>
           </LayoutGroup>
         )}
       </div>

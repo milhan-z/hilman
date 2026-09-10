@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -139,7 +139,7 @@ export function SiteNav({ items }: { items: { label: string; href: string }[] })
       {/* mobile index drawer */}
       <AnimatePresence>
         {open && (
-          <motion.div
+          <m.div
             id="mobile-nav"
             initial={reduced ? false : { height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -166,7 +166,7 @@ export function SiteNav({ items }: { items: { label: string; href: string }[] })
                 );
               })}
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </header>
