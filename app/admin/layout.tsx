@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { AdminNav } from "@/components/admin/nav";
 import { CommandPalette } from "@/components/admin/command-palette";
-import { MobileTabs } from "@/components/admin/mobile-tabs";
+import { StudioTabBar } from "@/components/admin/mobile/studio-tab-bar";
+import { KeyboardInset } from "@/components/admin/mobile/keyboard-inset";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { supabaseConfigured } from "@/lib/supabase/config";
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -32,6 +33,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#0a0a0a",
+  // The keyboard should take space away from the page rather than sit on top
+  // of it, so a sticky save bar stays above it. Where this is unsupported —
+  // Safari, at the time of writing — <KeyboardInset /> measures the same thing
+  // from visualViewport and the two agree.
+  interactiveWidget: "resizes-content",
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -88,6 +94,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <MediaSelectorProvider>
       <StudioRuntime />
+      <KeyboardInset />
       {/* min-h-[100dvh], not 100vh: Safari's toolbar makes vh taller than the
           space you can actually see, which pushes the bottom bar off-screen. */}
       <div className="flex min-h-[100dvh] flex-col lg:flex-row">
@@ -127,7 +134,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </div>
 
       <CommandPalette />
-      <MobileTabs />
+      <StudioTabBar />
     </MediaSelectorProvider>
   );
 }

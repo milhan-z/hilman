@@ -3,17 +3,22 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { listDrafts, type LocalDraft } from "@/lib/studio-local/drafts";
+import { listSnapshots, type ServerSnapshot } from "@/lib/studio-local/snapshots";
 import { useSyncState } from "./studio-runtime";
+import { PublishBadge, useDeviceName } from "./mobile/status-line";
 
 /**
  * Where you left off.
  *
- * On a phone the dashboard's job is not to report on the site, it is to get
+ * On a phone the home screen's job is not to report on the site, it is to get
  * you back into the sentence you were halfway through. Counts and health
  * checks are useful once a week; an unfinished paragraph is useful now, so it
  * goes first and they go below.
  *
- * Reads the local database, so it is right even when the network is not.
+ * Reads the local database, so it is right even when the network is not — and
+ * it crosses that against the last thing the server said about each row, so a
+ * half-edited live article is labelled Live rather than being quietly demoted
+ * to "a draft" because there is an unsaved copy of it on this phone.
  */
 
 const relative = (iso: string) => {
@@ -25,7 +30,7 @@ const relative = (iso: string) => {
   return new Date(iso).toLocaleDateString();
 };
 
-/** "journal:abc123" → the editor it came from. A quick draft has no row yet. */
+/** "journal:abc123" → the editor it came from. A quick note has no row yet. */
 function hrefFor(draft: LocalDraft): string | null {
   const [entity, ...rest] = draft.key.split(":");
   const id = rest.join(":");
@@ -36,13 +41,20 @@ function hrefFor(draft: LocalDraft): string | null {
 
 export function ResumeWork() {
   const state = useSyncState();
-  const [drafts, setDrafts] = useState<LocalDraft[] | null>(null);
+  const device = useDeviceName();
+  const [rows, setRows] = useState<{ draft: LocalDraft; snapshot?: ServerSnapshot }[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void listDrafts().then((all) => {
+    void Promise.all([listDrafts(), listSnapshots()]).then(([drafts, snapshots]) => {
       if (cancelled) return;
-      setDrafts(all.filter((draft) => hrefFor(draft) !== null).slice(0, 3));
+      const byKey = new Map(snapshots.map((snapshot) => [snapshot.key, snapshot]));
+      setRows(
+        drafts
+          .filter((draft) => hrefFor(draft) !== null)
+          .slice(0, 3)
+          .map((draft) => ({ draft, snapshot: byKey.get(draft.key) }))
+      );
     });
     return () => {
       cancelled = true;
@@ -50,37 +62,42 @@ export function ResumeWork() {
     // Re-read after a sync clears a draft it had saved.
   }, [state.queued, state.lastSyncedAt]);
 
-  if (!drafts || drafts.length === 0) return null;
+  if (!rows || rows.length === 0) return null;
 
   return (
-    <section aria-labelledby="resume-heading" className="rounded-lg border border-hl/40 bg-hl-soft/15 p-4">
-      <h2 id="resume-heading" className="font-display text-base font-bold text-ink">
-        Pick up where you left off
+    <section aria-labelledby="resume-heading" className="space-y-2.5">
+      <h2 id="resume-heading" className="font-mono text-2xs uppercase tracking-widest text-faint">
+        Continue
       </h2>
-      <p className="mt-1 text-sm text-soft">
-        Unsaved on this device. Opening one refills the editor — it still only reaches the site
-        when you save.
-      </p>
-      <ul className="mt-3 space-y-2">
-        {drafts.map((draft) => {
-          const href = hrefFor(draft)!;
-          return (
-            <li key={draft.key}>
-              <Link
-                href={href}
-                className="flex min-h-12 items-center justify-between gap-3 rounded-md border border-line bg-surface px-3.5 transition-colors hover:border-pen"
-              >
-                <span className="min-w-0 truncate text-sm font-semibold text-ink">
-                  {draft.label ?? "Untitled"}
+      <ul className="space-y-2.5">
+        {rows.map(({ draft, snapshot }) => (
+          <li key={draft.key}>
+            <Link
+              href={hrefFor(draft)!}
+              prefetch={false}
+              className="flex min-h-[68px] items-center gap-3 rounded-lg border border-hl/50 bg-hl-soft/15 px-3.5 py-3 transition-colors hover:border-pen"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+                    {draft.label ?? "Untitled"}
+                  </span>
+                  <PublishBadge label={snapshot?.status === "published" ? "Live" : "Draft"} />
                 </span>
-                <span className="shrink-0 font-mono text-2xs uppercase tracking-wide text-faint">
-                  {relative(draft.editedAt)}
+                <span className="mt-0.5 block truncate text-xs text-faint">
+                  Edited {relative(draft.editedAt)} · on {device}
                 </span>
-              </Link>
-            </li>
-          );
-        })}
+              </span>
+              <span aria-hidden className="shrink-0 text-faint">
+                →
+              </span>
+            </Link>
+          </li>
+        ))}
       </ul>
+      <p className="text-xs text-faint">
+        These are on {device} and the site has not got them. Opening one refills the editor.
+      </p>
     </section>
   );
 }

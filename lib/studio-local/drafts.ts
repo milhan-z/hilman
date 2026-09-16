@@ -31,8 +31,9 @@ export async function readDraft<T>(key: string): Promise<LocalDraft<T> | null> {
   return dbGet<LocalDraft<T>>("drafts", key);
 }
 
-export async function writeDraft<T>(draft: LocalDraft<T>): Promise<void> {
-  await dbPut("drafts", draft);
+/** Returns false when this browser stores nothing — see enqueue()'s `stored`. */
+export async function writeDraft<T>(draft: LocalDraft<T>): Promise<boolean> {
+  return dbPut("drafts", draft);
 }
 
 export async function deleteDraft(key: string): Promise<void> {

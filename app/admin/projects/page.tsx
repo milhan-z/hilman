@@ -1,7 +1,8 @@
 import { createServerSupabase } from "@/lib/supabase/server";
-import { ProjectsDirectory } from "@/components/admin/projects-directory";
+import { ContentDirectory } from "@/components/admin/content-directory";
 import { QueryError } from "@/components/admin/query-error";
 import { findHiddenPublished } from "@/lib/studio-visibility";
+import { STREAMS, type Stream } from "@/lib/types";
 
 export const metadata = {
   title: "Projects — Studio",
@@ -17,18 +18,28 @@ export default async function AdminProjectsPage() {
   const hidden = await findHiddenPublished("project", projects ?? []);
 
   return (
-    <div className="max-w-6xl space-y-5">
+    <div className="space-y-5">
       <QueryError what="the project list" error={error?.message} />
-      <ProjectsDirectory
-        initialProjects={(projects ?? []).map((project) => ({
+      <ContentDirectory
+        kind="project"
+        title="Projects"
+        newHref="/admin/projects/new"
+        publicBase="/works"
+        searchPlaceholder="Search projects"
+        groups={Object.entries(STREAMS).map(([value, stream]) => ({
+          value,
+          label: stream.name,
+        }))}
+        items={(projects ?? []).map((project) => ({
           id: project.id,
           title: project.title,
           slug: project.slug,
-          stream: project.stream,
           status: project.status,
           featured: project.featured,
-          year: project.year,
-          sort_order: project.sort_order,
+          group: project.stream,
+          meta: [STREAMS[project.stream as Stream]?.name ?? project.stream, project.year]
+            .filter(Boolean)
+            .join(" · "),
           hiddenReasons: hidden.get(project.id),
         }))}
       />

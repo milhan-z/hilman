@@ -111,12 +111,16 @@ export function StructuredPageEditor({
         ))}
       </div>
 
-      <div className="sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-1 py-4 backdrop-blur">
+      <div
+        className="sticky -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-1 sm:px-1"
+        // Rides above the keyboard — see <KeyboardInset />.
+        style={{ bottom: "var(--keyboard-inset, 0px)" }}
+      >
         <button
           type="button"
           onClick={onSave}
           disabled={pending || draft.save.kind === "saving"}
-          className="rounded bg-hl px-5 py-2.5 text-sm font-semibold text-hl-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="min-h-12 rounded-md bg-hl px-5 text-sm font-semibold text-hl-ink transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {pending ? "Saving…" : "Save page"}
         </button>

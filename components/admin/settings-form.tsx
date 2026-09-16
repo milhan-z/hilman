@@ -281,12 +281,16 @@ export function SettingsForm({ settings }: { settings: Settings }) {
         </button>
       </fieldset>
 
-      <div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 py-4 backdrop-blur">
+      <div
+        className="sticky flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 pt-3 pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+68px))] backdrop-blur lg:pb-4"
+        // Clears the keyboard, and on a phone the tab bar below it too.
+        style={{ bottom: "var(--keyboard-inset, 0px)" }}
+      >
         <button
           type="button"
           onClick={onSave}
           disabled={pending}
-          className="rounded bg-hl px-5 py-2.5 text-sm font-semibold text-hl-ink disabled:opacity-50"
+          className="min-h-12 rounded-md bg-hl px-5 text-sm font-semibold text-hl-ink disabled:opacity-50"
         >
           {pending ? "Saving…" : "Save settings"}
         </button>

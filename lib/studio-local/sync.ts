@@ -3,6 +3,7 @@
 import {
   describeConflict,
   rebaseQueued,
+  type SyncMutation,
   type SyncOutcome,
   type SyncResponse,
 } from "../studio-sync-contract";
@@ -352,6 +353,61 @@ async function applyOutcome(outcome: SyncOutcome, batch: QueuedMutation[]) {
   }
 
   await recordAttempt(outcome.mutationId, outcome.message);
+}
+
+/**
+ * Sends one save without going through the queue.
+ *
+ * The queue is the only path for a browser that has storage; this is for the
+ * one that does not — Safari's private mode, or site data switched off. There
+ * the outbox write silently fails, and pretending it succeeded would mean
+ * telling someone their writing is on their phone when it is nowhere at all.
+ * So the save goes straight out and the answer is reported honestly, including
+ * "this could not be saved".
+ */
+export async function sendDirect(mutation: SyncMutation): Promise<SyncOutcome | null> {
+  let response: Response;
+  try {
+    response = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ mutations: [mutation] }),
+    });
+  } catch {
+    setState({ reachable: false });
+    return null;
+  }
+
+  if (!response.ok) {
+    const message = await readError(response);
+    setState({ reachable: true, lastError: message });
+    return { status: "rejected", mutationId: mutation.mutationId, localId: mutation.localId, message };
+  }
+
+  const payload = (await response.json().catch(() => null)) as SyncResponse | null;
+  const outcome = payload?.results?.[0] ?? null;
+
+  if (outcome?.status === "saved") {
+    await touchSnapshot(mutation.entity, outcome.id, outcome.updatedAt, {
+      title: String(mutation.payload.fields.title ?? ""),
+      status: String(mutation.payload.fields.status ?? "draft"),
+    });
+    setState({ reachable: true, lastSyncedAt: new Date().toISOString(), lastError: null });
+    emit({
+      type: "applied",
+      save: {
+        localId: outcome.localId,
+        entity: mutation.entity,
+        id: outcome.id,
+        updatedAt: outcome.updatedAt,
+      },
+    });
+  } else {
+    setState({ reachable: true });
+  }
+
+  return outcome;
 }
 
 /** Only the fields the server's contract knows about. */

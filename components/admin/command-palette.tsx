@@ -24,7 +24,7 @@ interface PaletteItem {
 const STATIC_ITEMS: PaletteItem[] = [
   { key: "new-project", label: "New project", group: "Create", href: "/admin/projects/new", hint: "draft a case study" },
   { key: "new-journal", label: "New journal entry", group: "Create", href: "/admin/journal/new", hint: "write a note" },
-  { key: "go-dashboard", label: "Dashboard", group: "Go to", href: "/admin" },
+  { key: "go-home", label: "Home", group: "Go to", href: "/admin" },
   { key: "go-projects", label: "Projects", group: "Go to", href: "/admin/projects" },
   { key: "go-journal", label: "Journal", group: "Go to", href: "/admin/journal" },
   { key: "go-pages", label: "Pages", group: "Go to", href: "/admin/pages" },

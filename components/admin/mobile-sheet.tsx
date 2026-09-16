@@ -144,7 +144,12 @@ export function MobileSheet({
         </div>
 
         {actions && (
-          <div className="shrink-0 border-t border-line bg-surface/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
+          <div
+            className="shrink-0 border-t border-line bg-surface/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6"
+            // The sheet's own actions have to clear the keyboard too: a Quick
+            // note's Save button is directly under the field you are typing in.
+            style={{ marginBottom: "var(--keyboard-inset, 0px)" }}
+          >
             {actions}
           </div>
         )}

@@ -2,7 +2,7 @@
 
 import type { SyncEntity, SyncPayload } from "../studio-sync-contract";
 import { enqueue, listQueue } from "./outbox";
-import { flushOutbox, subscribeSyncEvents } from "./sync";
+import { flushOutbox, sendDirect, subscribeSyncEvents } from "./sync";
 
 /**
  * The one way the studio saves content.
@@ -38,7 +38,7 @@ export type SaveResult =
 export async function saveThroughQueue(request: SaveRequest): Promise<SaveResult> {
   const mutationId = newMutationId();
 
-  const queued = await enqueue({
+  const { mutation: queued, stored } = await enqueue({
     mutationId,
     entity: request.entity,
     entityId: request.entityId,
@@ -46,6 +46,10 @@ export async function saveThroughQueue(request: SaveRequest): Promise<SaveResult
     baseUpdatedAt: request.baseUpdatedAt,
     payload: request.payload,
   });
+
+  // No storage on this device — see sendDirect(). Nothing is in the queue to
+  // flush, so the save has to go out by itself or not at all.
+  if (!stored) return resultFromDirect(queued);
 
   // Collect what the flush says about *this* row while it runs, so the answer
   // does not depend on inspecting a queue that has already moved on.
@@ -79,6 +83,64 @@ export async function saveThroughQueue(request: SaveRequest): Promise<SaveResult
     return { status: "rejected", message: entry.lastError ?? "The studio server refused this save." };
   }
   return { status: "queued" };
+}
+
+/** What a save that has been written down but not yet answered looks like. */
+export type HandoffResult =
+  /** Safely on this device. The sending is happening in the background. */
+  | { status: "stored"; mutationId: string; localId: string }
+  /** This browser stores nothing, so the save went straight out and landed. */
+  | { status: "saved"; id: string; updatedAt: string }
+  | { status: "conflict"; id: string }
+  | { status: "rejected"; message: string };
+
+/**
+ * Hands a save to the queue and returns as soon as it is safe, not as soon as
+ * it is public.
+ *
+ * This is the difference between an editor that feels instant and one that
+ * doesn't. `saveThroughQueue` waits for the flush so it can report what the
+ * server said; on a good connection that is a few hundred milliseconds of a
+ * dead button, and on a bad one it is much worse. The writing was already safe
+ * after the first await here — an IndexedDB put — so that is where the UI gets
+ * its answer, and the server's verdict arrives later as a sync event the
+ * editor is already listening for.
+ */
+export async function handOffSave(request: SaveRequest): Promise<HandoffResult> {
+  const { mutation: queued, stored } = await enqueue({
+    mutationId: newMutationId(),
+    entity: request.entity,
+    entityId: request.entityId,
+    localId: request.localId,
+    baseUpdatedAt: request.baseUpdatedAt,
+    payload: request.payload,
+  });
+
+  if (!stored) return resultFromDirect(queued);
+
+  // Not awaited: the point of this function is that the caller doesn't.
+  void flushOutbox();
+  return { status: "stored", mutationId: queued.mutationId, localId: queued.localId };
+}
+
+async function resultFromDirect(
+  mutation: Parameters<typeof sendDirect>[0]
+): Promise<Exclude<HandoffResult, { status: "stored" }>> {
+  const outcome = await sendDirect(mutation);
+
+  if (!outcome) {
+    return {
+      status: "rejected",
+      message:
+        "This browser isn't letting Studio keep a copy, and the site couldn't be reached. " +
+        "Nothing was saved — keep this screen open until you have a connection.",
+    };
+  }
+  if (outcome.status === "saved") {
+    return { status: "saved", id: outcome.id, updatedAt: outcome.updatedAt };
+  }
+  if (outcome.status === "conflict") return { status: "conflict", id: outcome.id };
+  return { status: "rejected", message: outcome.message };
 }
 
 /**

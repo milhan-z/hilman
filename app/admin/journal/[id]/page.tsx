@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LiveEditor } from "@/components/admin/live-editor";
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -32,16 +31,7 @@ export default async function JournalEditorPage(props: { params: Promise<{ id: s
 
   const { data: allTags } = await supabase.from("tags").select("*").order("name");
 
-  return (
-    <div className="w-full">
-      {initial?.status === "published" && (
-        <div className="mb-2 flex justify-end">
-          <Link href={`/journal/${initial.slug}`} className="text-sm text-pen hover:underline font-mono">
-            View live ↗
-          </Link>
-        </div>
-      )}
-      <LiveEditor kind="journal" initial={initial} allTags={allTags ?? []} />
-    </div>
-  );
+  // No chrome around the editor: it owns the whole screen, including its
+  // own back button, status line and "View live" link.
+  return <LiveEditor kind="journal" initial={initial} allTags={allTags ?? []} />;
 }

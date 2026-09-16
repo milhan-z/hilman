@@ -24,6 +24,14 @@ export function SyncIndicator() {
     });
   }, []);
 
+  // "Review changes" in an editor's save bar, which is a long way from this
+  // header and has no business importing it.
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener("hilman:sync", show);
+    return () => window.removeEventListener("hilman:sync", show);
+  }, []);
+
   return (
     <>
       <ConnectivityPill onOpen={() => setOpen(true)} />

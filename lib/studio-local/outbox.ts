@@ -61,6 +61,19 @@ export interface EnqueueInput {
   payload: SyncPayload;
 }
 
+export interface EnqueueResult {
+  mutation: QueuedMutation;
+  /**
+   * Whether the entry actually reached this device's storage.
+   *
+   * False in Safari's private mode and anywhere site data is blocked. The
+   * caller has to know: "Saved on this iPhone" is the studio's central
+   * promise, and a queue write that quietly evaporated would make it a lie at
+   * exactly the moment it matters.
+   */
+  stored: boolean;
+}
+
 /**
  * Adds a save to the queue, collapsing it with an earlier unsent save of the
  * same row.
@@ -70,7 +83,7 @@ export interface EnqueueInput {
  * does not make the edit any fresher with respect to a change someone else
  * made in the meantime.
  */
-export async function enqueue(input: EnqueueInput): Promise<QueuedMutation> {
+export async function enqueue(input: EnqueueInput): Promise<EnqueueResult> {
   const queue = await listQueue();
   const previous = queue.find(
     (entry) =>
@@ -91,8 +104,8 @@ export async function enqueue(input: EnqueueInput): Promise<QueuedMutation> {
     attempts: previous?.attempts ?? 0,
   };
 
-  await dbPut("outbox", mutation);
-  return mutation;
+  const stored = await dbPut("outbox", mutation);
+  return { mutation, stored };
 }
 
 export async function markSending(mutationId: string, sending: boolean): Promise<void> {

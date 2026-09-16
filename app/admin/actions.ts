@@ -284,67 +284,6 @@ export async function initCorePages(): Promise<ActionState> {
   return ok();
 }
 
-export async function quickUpdateItem(
-  kind: "project" | "journal",
-  id: string,
-  updates: {
-    title: string;
-    slug?: string;
-    status: "published" | "draft";
-    featured: boolean;
-    stream?: string;
-    year?: number | null;
-    sort_order?: number;
-  }
-): Promise<ActionState> {
-  const denied = await guard();
-  if (denied) return denied;
-
-  const supabase = await createServerSupabase();
-  const table = kind === "project" ? "projects" : "journal_posts";
-
-  const title = updates.title.trim();
-  if (!title) return fail("A title is required.");
-
-  const row: Record<string, any> = {
-    title,
-    slug: slugify(updates.slug || "") || slugify(title),
-    status: updates.status,
-    featured: updates.featured,
-  };
-
-  if (kind === "project") {
-    if (updates.stream) row.stream = updates.stream;
-    row.year = updates.year ?? null;
-    if (updates.sort_order !== undefined) row.sort_order = updates.sort_order;
-  }
-
-  try {
-    if (updates.status === "published") {
-      const { data: existing, error: readErr } = await supabase
-        .from(table)
-        .select("*")
-        .eq("id", id)
-        .single();
-      if (readErr) return fail(saveError(readErr));
-      const blocks = await readPublicationBlocks(supabase, kind, [id]);
-      const issue = publicationError(kind, { ...existing, ...row, blocks: blocks.get(id) ?? [] });
-      if (issue) return fail(issue);
-      if (!existing?.published_at) {
-        row.published_at = new Date().toISOString();
-      }
-    }
-
-    const { error } = await supabase.from(table).update(row).eq("id", id);
-    if (error) return fail(saveError(error));
-
-    revalidateSite();
-    return ok();
-  } catch (e: any) {
-    return fail(e.message ?? "Quick edit failed.");
-  }
-}
-
 export async function bulkUpdateItems(
   kind: "project" | "journal",
   ids: string[],

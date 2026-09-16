@@ -186,8 +186,29 @@ one static offline page. Nothing authenticated is ever put in Cache Storage:
 drafts, the queue and server snapshots live in IndexedDB (`lib/studio-local/`),
 where the app can reason about them and sign-out can clear them.
 
-Status is stated rather than implied. "Saved" means saved on this device;
-"Queued" means it has not left it; only "Synced" means the site has it.
+### Two questions, never one answer
+
+The studio used to answer "where is my work?" and "who can read it?" with the
+single word *saved*, which made a queued save look like a published one and
+turned editing a live article into something labelled Draft. They are separate
+axes now, and `lib/studio-editor-state.ts` is the only thing allowed to phrase
+either of them:
+
+| Where it is | `Unsaved changes` · `Saved on this iPhone` · `Syncing…` · `Synced` · `Waiting for connection` · `Couldn't sync` · `Needs review` |
+| Who can read it | `Draft` · `Live` |
+
+So an edited published article reads **`Live · Unsaved changes`** — still Live,
+because the old version is still what the public gets, and still unsaved,
+because the new words are nowhere but the textarea. A publish made with no
+signal reads `Draft · Waiting for connection` with *"Publish queued — will go
+live when Studio reconnects"*; it is never called Live before the site has
+accepted it. `tests/studio-editor-state.test.ts` asserts that no combination of
+states can produce "Live · Synced" for work the server has not got.
+
+Because there is one row per project rather than a draft revision alongside a
+published one, a published item's two actions are **Save changes** (writes the
+version to this device and leaves the site alone) and **Update live** (replaces
+what the public reads). The bar says which of the two has happened.
 
 ### Block engine
 
