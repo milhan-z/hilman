@@ -60,6 +60,7 @@ Run the migrations **in order** in the SQL editor (or `supabase db push`):
 | `0003_owner_and_integrity.sql` | real ownership, message lifecycle, spam guard |
 | `0004_atomic_saves.sql` | transactional saves, page bootstrap, media reference lookup |
 | `0005_function_hardening.sql` | revokes the RPC surface Postgres grants to PUBLIC by default |
+| `0006_studio_sync.sql` | offline sync: mutation ledger, version guard, durable PIN lockout |
 
 Note on `0004`: it uses `jsonb_exists(b, 'data')` rather than the `?` operator.
 The Supabase SQL editor reads a bare `?` as a bind parameter and fails to parse
@@ -147,8 +148,46 @@ messages        Connect inbox — public INSERT (rate-limited), owner read/updat
 and tags inside one plpgsql function, so the client makes a single call and
 Postgres wraps it in one transaction. Before that, a save was four round-trips that
 started by deleting the old blocks — a failure halfway through left a published
-project with its body wiped. Malformed payloads are now rejected before anything
-is written, both in the server action and again in the function.
+project with its body wiped. Malformed payloads are rejected before anything
+is written, both in the client and again in the function.
+
+### Saving also survives a bad connection
+
+Studio is a mobile web app you can install to a phone's home screen, so a save
+has to assume the network might not be there. Every content save is written to a
+local queue first and sent from there — there is no faster path that skips the
+queue, because that path is where a save goes missing when a connection dies
+mid-request.
+
+```
+editor → IndexedDB outbox → /api/studio/sync → checkOwner() → save_content_synced() → RLS
+```
+
+`save_content_synced()` (migration 0006) wraps the 0004 functions with two
+questions a queued save has to answer:
+
+- **"have I already applied this?"** Every queued save carries a `mutationId`.
+  The ledger remembers the ones that landed, so a retry after a lost response
+  reports the first attempt's result instead of writing twice.
+- **"was this written against the version that is still there?"** Every save
+  carries `baseUpdatedAt`. If the row moved on — edited on a laptop while the
+  phone was in a tunnel — the save is refused and both versions are offered,
+  rather than one silently erasing the other.
+
+Photographs are the one thing that cannot be deferred into a row: Cloudinary
+needs the bytes. So a photo taken with no signal is written to IndexedDB as a
+Blob and the block holds a `pending:<uuid>` placeholder until the upload lands.
+A save whose payload still names a placeholder is **held back** rather than
+sent, so the public site is never asked to render a picture that exists only on
+someone's phone. See `lib/studio-media-refs.ts`.
+
+The service worker (`public/sw.js`) caches only the app shell, build assets and
+one static offline page. Nothing authenticated is ever put in Cache Storage:
+drafts, the queue and server snapshots live in IndexedDB (`lib/studio-local/`),
+where the app can reason about them and sign-out can clear them.
+
+Status is stated rather than implied. "Saved" means saved on this device;
+"Queued" means it has not left it; only "Synced" means the site has it.
 
 ### Block engine
 

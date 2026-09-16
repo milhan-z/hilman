@@ -7,6 +7,8 @@ import { SaveStatus, DraftRecoveryNotice } from "./save-status";
 import { useEditorDraft } from "./use-editor-draft";
 import { MediaSelectorButton } from "./media-library-context";
 import { savePageData } from "@/app/admin/actions";
+import { hasPendingRefs, replacePendingRefs } from "@/lib/studio-media-refs";
+import { flushPendingMedia } from "@/lib/studio-local/media";
 import {
   cleanPageData,
   readField,
@@ -58,7 +60,23 @@ export function StructuredPageEditor({
       // Older recovered drafts can lack newly added fields. Keep their initial
       // values, while explicitly cleared fields still override the defaults.
       const fields = { ...initial.fields, ...snapshot.fields };
-      const payload = cleanPageData(schema, fields, data, preserveEmptyFields);
+      let payload = cleanPageData(schema, fields, data, preserveEmptyFields);
+
+      /* Pages are saved straight to the server rather than through the outbox,
+         so nothing here holds a photo back on their behalf. Upload whatever is
+         still stashed on the device first, and refuse rather than write a
+         reference the public site could never resolve. */
+      if (hasPendingRefs(payload)) {
+        const { resolved } = await flushPendingMedia();
+        payload = replacePendingRefs(payload, resolved);
+      }
+      if (hasPendingRefs(payload)) {
+        draft.markError(
+          "a photo is still waiting to upload — reconnect, or remove it before saving"
+        );
+        return;
+      }
+
       const res = await savePageData(schema.slug, snapshot.title.trim(), payload);
       if (res.status === "error") draft.markError(res.message ?? "save failed");
       else draft.markSaved(snapshot, res.savedAt);

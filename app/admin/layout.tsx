@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { AdminNav } from "@/components/admin/nav";
 import { CommandPalette } from "@/components/admin/command-palette";
@@ -9,10 +9,29 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { checkOwner } from "@/lib/owner";
 import { signOut } from "./actions";
 import { MediaSelectorProvider } from "@/components/admin/media-library-context";
+import { StudioRuntime } from "@/components/admin/studio-runtime";
+import { SyncIndicator } from "@/components/admin/sync-indicator";
+import { SignOutButton } from "@/components/admin/sign-out-button";
 
 export const metadata: Metadata = {
   title: { default: "Studio", template: "%s — Hilman. Studio" },
   robots: { index: false, follow: false },
+  // Linked here rather than from app/manifest.ts: the file convention would put
+  // an "install Hilman. Studio" prompt in front of every reader of the public
+  // notebook, for an admin tool they cannot open.
+  manifest: "/studio.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Studio",
+    // The status bar blends into --paper instead of sitting as a white band
+    // above a black app.
+    statusBarStyle: "black-translucent",
+  },
+  icons: { apple: "/icons/apple-touch-icon.png" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -38,8 +57,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     data: { user },
   } = await supabase.auth.getUser();
 
-  // unauthenticated → /admin/login renders without the shell
-  if (!user) return <div className="min-h-screen">{children}</div>;
+  // unauthenticated → /admin/login renders without the shell. No runtime here:
+  // there is no session to sync with, and a service worker registered from the
+  // login screen would outlive a visit that never got in.
+  if (!user) return <div className="min-h-[100dvh]">{children}</div>;
 
   // Signed in is not the same as owning the site. A non-owner gets a door,
   // not a studio — and RLS would refuse their writes anyway.
@@ -66,15 +87,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <MediaSelectorProvider>
-      <div className="flex min-h-screen flex-col lg:flex-row">
+      <StudioRuntime />
+      {/* min-h-[100dvh], not 100vh: Safari's toolbar makes vh taller than the
+          space you can actually see, which pushes the bottom bar off-screen. */}
+      <div className="flex min-h-[100dvh] flex-col lg:flex-row">
         {/* Mobile: compact top bar. Desktop: full sidebar. */}
-        <aside className="border-b border-line bg-surface lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between px-4 py-3 lg:block lg:p-5">
-            <Link href="/admin" className="font-display text-lg font-bold">
+        <aside className="border-b border-line bg-surface pt-[env(safe-area-inset-top)] lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r lg:pt-0">
+          <div className="flex items-center justify-between gap-2 px-4 py-2.5 lg:block lg:p-5">
+            <Link href="/admin" className="shrink-0 font-display text-lg font-bold">
               Hilman<span className="text-pen">.</span>{" "}
               <span className="font-hand text-lg text-faint">studio</span>
             </Link>
-            <div className="flex items-center gap-1 lg:mt-2">
+            <div className="flex items-center gap-1.5 lg:mt-3">
+              {/* Where your work actually is — queued, syncing, or on the site. */}
+              <SyncIndicator />
               <ThemeToggle />
             </div>
           </div>
@@ -88,14 +114,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/" className="text-pen hover:underline">
                 View site ↗
               </Link>
-              <form action={signOut}>
-                <button className="text-soft hover:text-red">Sign out</button>
-              </form>
+              <SignOutButton />
             </div>
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 lg:py-8">{children}</main>
+        {/* Landscape on a notched phone puts the rounded corner over the left
+            or right edge, so the gutters honour those insets too. */}
+        <main className="min-w-0 flex-1 py-6 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pl-[max(2rem,env(safe-area-inset-left))] sm:pr-[max(2rem,env(safe-area-inset-right))] lg:py-8">
+          {children}
+        </main>
       </div>
 
       <CommandPalette />

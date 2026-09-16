@@ -11,6 +11,10 @@ export function mediaSrc(
   opts: { width?: number; quality?: string } = {}
 ) {
   if (!publicIdOrUrl) return null;
+  // A photo still stashed on someone's phone has no delivery URL, and building
+  // one from the placeholder would put a permanent 404 on the public site.
+  // The studio shows these through components/admin/pending-media.tsx instead.
+  if (publicIdOrUrl.startsWith("pending:")) return null;
   if (/^https?:\/\//.test(publicIdOrUrl)) return publicIdOrUrl;
   if (!CLOUD_NAME) return null;
   const t = ["f_auto", `q_${opts.quality ?? "auto"}`];
@@ -20,6 +24,7 @@ export function mediaSrc(
 
 export function fileSrc(publicIdOrUrl: string | null | undefined) {
   if (!publicIdOrUrl) return null;
+  if (publicIdOrUrl.startsWith("pending:")) return null;
   if (/^https?:\/\//.test(publicIdOrUrl)) return publicIdOrUrl;
   if (!CLOUD_NAME) return null;
   return `https://res.cloudinary.com/${CLOUD_NAME}/raw/upload/${publicIdOrUrl}`;

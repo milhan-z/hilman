@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      # The build needs no live Supabase: lib/supabase/config.ts reports the
+      # project as unconfigured and the public site renders from lib/mock.ts,
+      # which is exactly the path a first clone takes.
+      - run: npm run build
+
+      # The icons are committed, but they are generated. If the generator and
+      # the files disagree, one of them is stale.
+      - name: Icons match their generator
+        run: |
+          npx tsx scripts/make-studio-icons.ts
+          git diff --exit-code -- public/icons

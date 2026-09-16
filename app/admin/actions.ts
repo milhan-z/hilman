@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { checkOwner } from "@/lib/owner";
@@ -8,7 +9,20 @@ import { destroyAsset } from "@/lib/cloudinary-server";
 import { slugify } from "@/lib/utils";
 import type { Block } from "@/lib/types";
 import { getJournalQualityIssues, getProjectQualityIssues, type ContentQualityInput } from "@/lib/content-quality";
-import { checkPin, NO_ATTEMPTS, type PinAttempts } from "@/lib/studio-pin";
+import {
+  checkPinBuckets,
+  GLOBAL_MAX_ATTEMPTS,
+  LOCKOUT_MS,
+  MAX_ATTEMPTS,
+  NO_ATTEMPTS,
+} from "@/lib/studio-pin";
+import {
+  addressFromHeaders,
+  attemptKeyForAddress,
+  GLOBAL_KEY,
+  readPinAttempts,
+  writePinAttempts,
+} from "@/lib/studio-pin-store";
 
 /**
  * All CMS mutations.
@@ -58,46 +72,7 @@ async function guardOrThrow() {
   if (!check.ok) throw new Error(check.message);
 }
 
-/* ── payload parsing ───────────────────────────────────── */
-
-type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
-
-/**
- * Strict JSON parse. The old version swallowed a broken payload and returned
- * a default — for a blocks field that meant "save an empty body over the
- * article you were editing". Now the save is refused instead.
- */
-function parseJson<T>(raw: FormDataEntryValue | null, label: string, fallback: T): Parsed<T> {
-  const text = raw == null ? "" : String(raw).trim();
-  if (!text) return { ok: true, value: fallback };
-  try {
-    return { ok: true, value: JSON.parse(text) as T };
-  } catch (e: any) {
-    return { ok: false, error: `${label} isn't valid JSON — nothing was saved. (${e.message})` };
-  }
-}
-
-function validateBlocks(blocks: unknown): string | null {
-  if (!Array.isArray(blocks)) return "The content payload isn't a list of blocks.";
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-    if (!b || typeof b !== "object") return `Block ${i + 1} is malformed.`;
-    const type = (b as any).type;
-    if (typeof type !== "string" || !type.trim()) return `Block ${i + 1} has no type.`;
-    const data = (b as any).data;
-    if (data != null && (typeof data !== "object" || Array.isArray(data)))
-      return `Block ${i + 1} has a malformed payload.`;
-  }
-  return null;
-}
-
-function validateTagIds(ids: unknown): string | null {
-  if (!Array.isArray(ids)) return "The tag list is malformed.";
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (ids.some((id) => typeof id !== "string" || !uuid.test(id)))
-    return "The tag list contains an invalid id.";
-  return null;
-}
+/* ── publication rules ─────────────────────────────────── */
 
 function publicationError(kind: "project" | "journal", content: ContentQualityInput): string | null {
   const issues = kind === "project" ? getProjectQualityIssues(content) : getJournalQualityIssues(content);
@@ -138,20 +113,46 @@ export async function signIn(_prev: ActionState, formData: FormData): Promise<Ac
 }
 
 /**
- * Wrong-PIN attempts, counted for the whole door rather than per visitor: this
- * studio has exactly one owner, and a request's IP can be spoofed. A lockout
- * therefore also locks out the owner — the email form below is the way back in.
- * The count lives in memory, so it resets when the server restarts.
+ * Wrong-PIN attempts are counted twice: once for the address that is knocking,
+ * and once for the door as a whole. Per-address alone is beatable by spreading
+ * guesses around; the whole-door count catches that, at the cost of being able
+ * to lock the owner out too — the email form below is the way back in.
+ *
+ * The counts live in the database rather than in this module. See
+ * lib/studio-pin-store.ts for why that distinction matters on Vercel.
  */
-let pinAttempts: PinAttempts = NO_ATTEMPTS;
-
 export async function signInWithPin(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const decision = checkPin({
+  const requestHeaders = await headers();
+  const addressKey = attemptKeyForAddress(addressFromHeaders(requestHeaders));
+  const stored = await readPinAttempts([addressKey, GLOBAL_KEY]);
+
+  const decision = checkPinBuckets({
     entered: String(formData.get("pin") ?? ""),
     expected: process.env.STUDIO_PIN,
-    attempts: pinAttempts,
+    buckets: [
+      {
+        key: addressKey,
+        attempts: stored.attempts[addressKey] ?? NO_ATTEMPTS,
+        maxAttempts: MAX_ATTEMPTS,
+        lockoutMs: LOCKOUT_MS,
+      },
+      {
+        key: GLOBAL_KEY,
+        attempts: stored.attempts[GLOBAL_KEY] ?? NO_ATTEMPTS,
+        maxAttempts: GLOBAL_MAX_ATTEMPTS,
+        lockoutMs: LOCKOUT_MS,
+      },
+    ],
   });
-  pinAttempts = decision.attempts;
+
+  await writePinAttempts(decision.buckets);
+
+  if (!stored.durable) {
+    console.warn(
+      "[studio] PIN attempts are being counted in memory only — set SUPABASE_SERVICE_ROLE_KEY so the lockout survives a cold start."
+    );
+  }
+
   if (!decision.gate.ok) return fail(decision.gate.message);
 
   // The PIN only decides whether to attempt the real sign-in. The credentials
@@ -198,62 +199,13 @@ function saveError(error: { code?: string; message: string }): string {
 
 /* ── projects ──────────────────────────────────────────── */
 
-export async function saveProject(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const denied = await guard();
-  if (denied) return denied;
-
-  const supabase = await createServerSupabase();
-  const id = String(formData.get("id") ?? "").trim();
-  const title = String(formData.get("title") ?? "").trim();
-  if (!title) return fail("A project needs a title.");
-
-  const meta = parseJson<Record<string, any>>(formData.get("meta"), "The meta field", {});
-  if (!meta.ok) return fail(meta.error);
-  const blocks = parseJson<Block[]>(formData.get("blocks"), "The content", []);
-  if (!blocks.ok) return fail(blocks.error);
-  const tagIds = parseJson<string[]>(formData.get("tag_ids"), "The tag list", []);
-  if (!tagIds.ok) return fail(tagIds.error);
-
-  const blockError = validateBlocks(blocks.value);
-  if (blockError) return fail(`${blockError} Nothing was saved.`);
-  const tagError = validateTagIds(tagIds.value);
-  if (tagError) return fail(`${tagError} Nothing was saved.`);
-
-  const payload = {
-    title,
-    slug: slugify(String(formData.get("slug") ?? "")) || slugify(title),
-    subtitle: String(formData.get("subtitle") ?? "").trim(),
-    excerpt: String(formData.get("excerpt") ?? "").trim(),
-    stream: String(formData.get("stream") ?? "visual-design"),
-    year: String(formData.get("year") ?? "").trim(),
-    status: formData.get("status") === "published" ? "published" : "draft",
-    featured: formData.get("featured") === "on",
-    sort_order: String(formData.get("sort_order") ?? "").trim(),
-    thumbnail_public_id: String(formData.get("thumbnail_public_id") ?? "").trim(),
-    cover_public_id: String(formData.get("cover_public_id") ?? "").trim(),
-    meta: meta.value,
-  };
-
-  if (payload.status === "published") {
-    const issue = publicationError("project", { ...payload, blocks: blocks.value });
-    if (issue) return fail(issue);
-  }
-
-  const { data, error } = await supabase.rpc("save_project", {
-    p_id: id || null,
-    p_data: payload,
-    p_blocks: blocks.value,
-    p_tag_ids: tagIds.value,
-  });
-  if (error) return fail(saveError(error));
-
-  revalidateSite();
-  revalidatePath("/admin/projects");
-  // `stay` lets a widget save without navigating away from where it lives.
-  if (!id && formData.get("stay") !== "1") redirect(`/admin/projects/${data}`);
-  return ok(String(data ?? id));
-}
-
+/**
+ * Content saves are not here any more. Both editors write through the outbox
+ * in lib/studio-local/ and out through /api/studio/sync, so that an unreliable
+ * connection cannot turn a save into a lost one. What remains in this file are
+ * the mutations that only make sense with a server in reach: deletes, quick
+ * status changes, taxonomy, media and the inbox.
+ */
 export async function deleteProject(id: string) {
   await guardOrThrow();
   const supabase = await createServerSupabase();
@@ -264,55 +216,6 @@ export async function deleteProject(id: string) {
 }
 
 /* ── journal ───────────────────────────────────────────── */
-
-export async function saveJournal(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const denied = await guard();
-  if (denied) return denied;
-
-  const supabase = await createServerSupabase();
-  const id = String(formData.get("id") ?? "").trim();
-  const title = String(formData.get("title") ?? "").trim();
-  if (!title) return fail("An entry needs a title.");
-
-  const blocks = parseJson<Block[]>(formData.get("blocks"), "The content", []);
-  if (!blocks.ok) return fail(blocks.error);
-  const tagIds = parseJson<string[]>(formData.get("tag_ids"), "The tag list", []);
-  if (!tagIds.ok) return fail(tagIds.error);
-
-  const blockError = validateBlocks(blocks.value);
-  if (blockError) return fail(`${blockError} Nothing was saved.`);
-  const tagError = validateTagIds(tagIds.value);
-  if (tagError) return fail(`${tagError} Nothing was saved.`);
-
-  const payload = {
-    title,
-    slug: slugify(String(formData.get("slug") ?? "")) || slugify(title),
-    excerpt: String(formData.get("excerpt") ?? "").trim(),
-    cover_public_id: String(formData.get("cover_public_id") ?? "").trim(),
-    status: formData.get("status") === "published" ? "published" : "draft",
-    featured: formData.get("featured") === "on",
-    reading_minutes: String(formData.get("reading_minutes") ?? "").trim(),
-  };
-
-  if (payload.status === "published") {
-    const issue = publicationError("journal", { ...payload, blocks: blocks.value });
-    if (issue) return fail(issue);
-  }
-
-  const { data, error } = await supabase.rpc("save_journal_post", {
-    p_id: id || null,
-    p_data: payload,
-    p_blocks: blocks.value,
-    p_tag_ids: tagIds.value,
-  });
-  if (error) return fail(saveError(error));
-
-  revalidateSite();
-  revalidatePath("/admin/journal");
-  // `stay` lets a widget save without navigating away from where it lives.
-  if (!id && formData.get("stay") !== "1") redirect(`/admin/journal/${data}`);
-  return ok(String(data ?? id));
-}
 
 export async function deleteJournal(id: string) {
   await guardOrThrow();

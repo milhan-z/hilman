@@ -2,6 +2,8 @@
 
 import { useRef, useEffect, useState } from "react";
 import { Reorder, useDragControls } from "framer-motion";
+import { collectPendingRefs } from "@/lib/studio-media-refs";
+import { PendingPhoto } from "./pending-media";
 import { renderers } from "../blocks/renderer";
 import { BLOCK_TYPES } from "./block-editors";
 import type { Block, BlockType } from "@/lib/types";
@@ -179,6 +181,9 @@ export function EditableBlock({
   onConvert,
 }: EditableBlockProps) {
   const dragControls = useDragControls();
+
+  // Photos in this block that have not reached Cloudinary yet.
+  const stashedPhotos = collectPendingRefs(block.data);
   const blockRef = useRef<HTMLDivElement>(null);
 
   // Keyboard navigation & slash menu states
@@ -399,143 +404,203 @@ export function EditableBlock({
             : "border-transparent hover:border-line-strong hover:bg-raise/30"
         }`}
       >
-        {/* Floating Toolbar on Hover */}
-        <div className="absolute -top-3.5 right-2 hidden group-hover/block:flex items-center gap-1 rounded-full border border-line bg-raise/95 px-2 py-0.5 shadow-card backdrop-blur z-20 transition-all">
-          {/* Drag Handle */}
-          <button
-            type="button"
-            onPointerDown={(e) => dragControls.start(e)}
-            className="cursor-grab touch-none p-1 text-faint hover:text-ink active:cursor-grabbing"
-            title="Drag to reorder"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="8" cy="5" r="2" />
-              <circle cx="16" cy="5" r="2" />
-              <circle cx="8" cy="12" r="2" />
-              <circle cx="16" cy="12" r="2" />
-              <circle cx="8" cy="19" r="2" />
-              <circle cx="16" cy="19" r="2" />
-            </svg>
-          </button>
+        {/*
+          The block's controls.
 
-          {/* Up Control */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onMove(-1);
-            }}
-            className="p-1 text-faint hover:text-ink"
-            title="Move block up"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="18 15 12 9 6 15"></polyline>
-            </svg>
-          </button>
-
-          {/* Down Control */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onMove(1);
-            }}
-            className="p-1 text-faint hover:text-ink"
-            title="Move block down"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
-
-          {/* Duplicate Control */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDuplicate?.();
-            }}
-            className="p-1 text-faint hover:text-pen"
-            title="Duplicate block (⧉)"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-          </button>
-
-          {/* Settings / Open Property Drawer */}
-          {hasDrawerConfig && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onActivate();
-                onOpenDrawer();
-              }}
-              className="p-1 text-faint hover:text-pen"
-              title="Block settings"
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-              </svg>
-            </button>
-          )}
-
-          {/* Delete Button */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-            className="p-1 text-faint hover:text-red"
-            title="Delete block"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
-          </button>
-        </div>
+          They used to exist only inside `group-hover:flex`, which on a phone
+          means they do not exist at all: there is no hover, so moving,
+          duplicating or deleting a block was unreachable by touch. They now
+          appear when the block is tapped as well — and on a small screen they
+          sit in the flow underneath it rather than floating over the text you
+          are editing, at a size a thumb can actually hit.
+        */}
+        <BlockControls
+          variant="floating"
+          active={active}
+          dragControls={dragControls}
+          hasDrawerConfig={hasDrawerConfig}
+          onActivate={onActivate}
+          onOpenDrawer={onOpenDrawer}
+          onMove={onMove}
+          onDuplicate={onDuplicate}
+          onRemove={onRemove}
+        />
 
         {/* Content Render/Editor switcher */}
         {active && ["heading", "paragraph", "quote", "button"].includes(block.type) ? (
           <div onClick={(e) => e.stopPropagation()}>{renderInlineEditor()}</div>
+        ) : stashedPhotos.length > 0 ? (
+          /* The block's picture is still a Blob on this device, so the normal
+             renderer would draw an empty frame. Show the photo itself, and say
+             plainly that the site has not got it yet. */
+          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+            {stashedPhotos.map((ref) => (
+              <PendingPhoto key={ref} photoRef={ref} />
+            ))}
+          </div>
         ) : Renderer ? (
           <Renderer data={block.data ?? {}} />
         ) : (
           <div className="text-xs text-faint italic">Unknown block type: {block.type}</div>
         )}
+
+        <BlockControls
+          variant="inline"
+          active={active}
+          dragControls={dragControls}
+          hasDrawerConfig={hasDrawerConfig}
+          onActivate={onActivate}
+          onOpenDrawer={onOpenDrawer}
+          onMove={onMove}
+          onDuplicate={onDuplicate}
+          onRemove={onRemove}
+        />
       </div>
     </Reorder.Item>
+  );
+}
+
+
+interface BlockControlsProps {
+  variant: "floating" | "inline";
+  active: boolean;
+  dragControls: ReturnType<typeof useDragControls>;
+  hasDrawerConfig: boolean;
+  onActivate: () => void;
+  onOpenDrawer: () => void;
+  onMove: (dir: -1 | 1) => void;
+  onDuplicate?: () => void;
+  onRemove: () => void;
+}
+
+/**
+ * Move / duplicate / settings / delete for one block.
+ *
+ * `floating` is the desktop pill that appears on hover and, now, whenever the
+ * block is selected. Below `sm` it turns into a row underneath the block:
+ * 44px targets in a pill hanging over the text would cover the words being
+ * edited, which is the one thing a block toolbar must not do.
+ */
+function BlockControls({
+  variant,
+  active,
+  dragControls,
+  hasDrawerConfig,
+  onActivate,
+  onOpenDrawer,
+  onMove,
+  onDuplicate,
+  onRemove,
+}: BlockControlsProps) {
+  const button =
+    "flex min-h-11 min-w-11 items-center justify-center rounded text-faint transition-colors sm:min-h-0 sm:min-w-0 sm:p-1";
+
+  const stop = (run: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    run();
+  };
+
+  const buttons = (
+    <>
+      <button
+        type="button"
+        onPointerDown={(e) => dragControls.start(e)}
+        aria-label="Drag to reorder this block"
+        className={`${button} hidden cursor-grab touch-none hover:text-ink active:cursor-grabbing sm:flex`}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <circle cx="8" cy="5" r="2" />
+          <circle cx="16" cy="5" r="2" />
+          <circle cx="8" cy="12" r="2" />
+          <circle cx="16" cy="12" r="2" />
+          <circle cx="8" cy="19" r="2" />
+          <circle cx="16" cy="19" r="2" />
+        </svg>
+      </button>
+
+      <button
+        type="button"
+        onClick={stop(() => onMove(-1))}
+        aria-label="Move this block up"
+        className={`${button} hover:text-ink`}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+          <polyline points="18 15 12 9 6 15" />
+        </svg>
+      </button>
+
+      <button
+        type="button"
+        onClick={stop(() => onMove(1))}
+        aria-label="Move this block down"
+        className={`${button} hover:text-ink`}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      <button
+        type="button"
+        onClick={stop(() => onDuplicate?.())}
+        aria-label="Duplicate this block"
+        className={`${button} hover:text-pen`}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      </button>
+
+      {hasDrawerConfig && (
+        <button
+          type="button"
+          onClick={stop(() => {
+            onActivate();
+            onOpenDrawer();
+          })}
+          aria-label="Block settings"
+          className={`${button} hover:text-pen`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      )}
+
+      <button
+        type="button"
+        onClick={stop(onRemove)}
+        aria-label="Delete this block"
+        className={`${button} hover:text-red`}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+      </button>
+    </>
+  );
+
+  // Phone: a row under the block, only for the block you tapped.
+  if (variant === "inline") {
+    if (!active) return null;
+    return (
+      <div className="mt-3 flex items-center justify-end gap-1 border-t border-line pt-2 sm:hidden">
+        {buttons}
+      </div>
+    );
+  }
+
+  // Pointer: the familiar floating pill, on hover or while selected.
+  return (
+    <div
+      className={`absolute -top-3.5 right-2 z-20 items-center gap-1 rounded-full border border-line bg-raise/95 px-2 py-0.5 shadow-card backdrop-blur transition-all ${
+        active ? "hidden sm:flex" : "hidden sm:group-hover/block:flex"
+      }`}
+    >
+      {buttons}
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { signOut } from "@/app/admin/actions";
+import { SignOutButton } from "./sign-out-button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -66,7 +66,7 @@ export function MobileTabs() {
 
   const tabCls = (active: boolean) =>
     cn(
-      "flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 rounded-md font-mono text-2xs uppercase tracking-wide transition-colors",
+      "flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-md font-mono text-2xs uppercase tracking-wide transition-colors",
       active ? "text-pen" : "text-faint hover:text-soft"
     );
 
@@ -94,7 +94,7 @@ export function MobileTabs() {
                   key={l.href}
                   href={l.href}
                   className={cn(
-                    "flex min-h-[48px] items-center rounded-md border px-4 text-sm font-medium transition-colors",
+                    "flex min-h-12 items-center rounded-md border px-4 text-sm font-medium transition-colors",
                     isActive(l.href)
                       ? "border-hl bg-hl-soft text-ink"
                       : "border-line bg-raise text-soft hover:text-ink"
@@ -107,15 +107,11 @@ export function MobileTabs() {
                 href="/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex min-h-[48px] items-center rounded-md border border-line bg-raise px-4 text-sm font-medium text-pen"
+                className="flex min-h-12 items-center rounded-md border border-line bg-raise px-4 text-sm font-medium text-pen"
               >
                 View site ↗
               </a>
-              <form action={signOut} className="contents">
-                <button className="flex min-h-[48px] items-center rounded-md border border-line bg-raise px-4 text-left text-sm font-medium text-red">
-                  Sign out
-                </button>
-              </form>
+              <SignOutButton className="flex min-h-12 items-center rounded-md border border-line bg-raise px-4 text-left text-sm font-medium !text-red" />
             </div>
           </div>
         </div>

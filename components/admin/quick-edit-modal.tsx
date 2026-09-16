@@ -1,10 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useId, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { quickUpdateItem } from "@/app/admin/actions";
 import { Field, Select, TextInput, CheckRow } from "./fields";
+import { MobileSheet, SheetActions } from "./mobile-sheet";
 import { STREAMS } from "@/lib/types";
+
+/**
+ * Change the few things you change most — title, slug, status — without
+ * opening the whole editor.
+ *
+ * It used to be a 400px box pinned to the middle of the screen with 38px
+ * buttons, which is a desktop dialog wearing a phone's clothes. It is a bottom
+ * sheet now: full width where the thumb is, 48px actions, and the rarely-used
+ * fields folded away so the common case is two taps.
+ */
 
 interface QuickEditModalProps {
   isOpen: boolean;
@@ -24,10 +35,11 @@ interface QuickEditModalProps {
 
 export function QuickEditModal({ isOpen, kind, item, onClose }: QuickEditModalProps) {
   const router = useRouter();
+  const formId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
-  // Form states
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [status, setStatus] = useState<"published" | "draft">("draft");
@@ -38,28 +50,25 @@ export function QuickEditModal({ isOpen, kind, item, onClose }: QuickEditModalPr
 
   const isProject = kind === "project";
 
-  // Sync form state when item changes
   useEffect(() => {
-    if (item) {
-      setTitle(item.title || "");
-      setSlug(item.slug || "");
-      setStatus(item.status || "draft");
-      setFeatured(item.featured || false);
-      if (item.stream) setStream(item.stream);
-      setYear(item.year !== undefined && item.year !== null ? String(item.year) : "");
-      setSortOrder(item.sort_order ?? 0);
-      setError(null);
-    }
+    if (!item) return;
+    setTitle(item.title || "");
+    setSlug(item.slug || "");
+    setStatus(item.status || "draft");
+    setFeatured(item.featured || false);
+    if (item.stream) setStream(item.stream);
+    setYear(item.year !== undefined && item.year !== null ? String(item.year) : "");
+    setSortOrder(item.sort_order ?? 0);
+    setError(null);
+    setShowDetails(false);
   }, [item]);
 
   if (!isOpen || !item) return null;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setBusy(true);
     setError(null);
-
-    const yearNum = year.trim() !== "" ? Number(year) : null;
 
     try {
       const res = await quickUpdateItem(kind, item!.id, {
@@ -68,7 +77,7 @@ export function QuickEditModal({ isOpen, kind, item, onClose }: QuickEditModalPr
         status,
         featured,
         stream,
-        year: yearNum,
+        year: year.trim() !== "" ? Number(year) : null,
         sort_order: sortOrder,
       });
 
@@ -86,130 +95,117 @@ export function QuickEditModal({ isOpen, kind, item, onClose }: QuickEditModalPr
   }
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity"
-        onClick={onClose}
-      />
+    <MobileSheet
+      open={isOpen}
+      onClose={onClose}
+      title="Quick edit"
+      subtitle={item.title}
+      actions={
+        <SheetActions
+          onCancel={onClose}
+          confirmLabel={busy ? "Updating…" : "Update"}
+          confirmDisabled={busy || !title.trim()}
+          form={formId}
+        />
+      }
+    >
+      <form id={formId} onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Title">
+          <TextInput value={title} onChange={(e) => setTitle(e.target.value)} required />
+        </Field>
 
-      {/* Modal Dialog */}
-      <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-surface p-6 shadow-sticky animate-in fade-in zoom-in-95 duration-fast">
-        <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
-          <h3 className="font-display text-base font-bold text-ink">
-            Quick Edit: <span className="font-hand font-normal text-faint">{item.title}</span>
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-faint hover:bg-line hover:text-ink transition-colors"
-            aria-label="Close"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+        {/* Publishing is the decision this sheet exists for, so it is a pair of
+            real targets rather than a select hiding one of two options. */}
+        <fieldset>
+          <legend className="mb-1.5 block font-mono text-2xs uppercase tracking-widest text-faint">
+            Status
+          </legend>
+          <div className="grid grid-cols-2 gap-2">
+            {(["draft", "published"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStatus(value)}
+                aria-pressed={status === value}
+                className={`min-h-12 rounded-md border text-sm font-semibold capitalize transition-colors ${
+                  status === value
+                    ? "border-hl bg-hl-soft text-ink"
+                    : "border-line bg-raise text-soft hover:text-ink"
+                }`}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="rounded-md border border-line bg-raise px-3">
+          <CheckRow
+            label="Featured"
+            checked={featured}
+            onChange={(e) => setFeatured(e.target.checked)}
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Title">
-            <TextInput
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              className="text-sm py-2"
-            />
-          </Field>
+        <button
+          type="button"
+          onClick={() => setShowDetails((open) => !open)}
+          aria-expanded={showDetails}
+          className="flex min-h-12 w-full items-center justify-between rounded-md border border-line px-3.5 text-sm font-medium text-soft transition-colors hover:text-ink"
+        >
+          More details
+          <span aria-hidden className={showDetails ? "rotate-180 transition-transform" : "transition-transform"}>
+            ⌄
+          </span>
+        </button>
 
-          <Field label="Slug">
-            <TextInput
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              className="text-sm py-2"
-            />
-          </Field>
-
-          {isProject && (
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Stream">
-                <Select
-                  value={stream}
-                  onChange={(e) => setStream(e.target.value)}
-                  className="text-sm py-2"
-                >
-                  {Object.entries(STREAMS).map(([key, s]) => (
-                    <option key={key} value={key}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              <Field label="Year">
-                <TextInput
-                  type="number"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className="text-sm py-2"
-                />
-              </Field>
-            </div>
-          )}
-
-          {isProject && (
-            <Field label="Sort Order">
-              <TextInput
-                type="number"
-                value={sortOrder}
-                onChange={(e) => setSortOrder(Number(e.target.value) || 0)}
-                className="text-sm py-2"
-              />
+        {showDetails && (
+          <div className="space-y-4">
+            <Field label="Slug" hint="The address this appears at on the public site.">
+              <TextInput value={slug} onChange={(e) => setSlug(e.target.value)} />
             </Field>
-          )}
 
-          <div className="flex flex-wrap items-center justify-between pt-2 border-t border-line">
-            <div className="flex items-center gap-4">
-              <Field label="Status">
-                <Select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as "published" | "draft")}
-                  className="text-xs py-1.5 min-h-0 w-28"
-                >
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                </Select>
-              </Field>
-              <div className="mt-5">
-                <CheckRow
-                  label="Featured"
-                  checked={featured}
-                  onChange={(e) => setFeatured(e.target.checked)}
-                />
-              </div>
-            </div>
+            {isProject && (
+              <>
+                <Field label="Stream">
+                  <Select value={stream} onChange={(e) => setStream(e.target.value)}>
+                    {Object.entries(STREAMS).map(([key, s]) => (
+                      <option key={key} value={key}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Year">
+                    <TextInput
+                      type="number"
+                      inputMode="numeric"
+                      value={year}
+                      onChange={(e) => setYear(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Sort order">
+                    <TextInput
+                      type="number"
+                      inputMode="numeric"
+                      value={sortOrder}
+                      onChange={(e) => setSortOrder(Number(e.target.value) || 0)}
+                    />
+                  </Field>
+                </div>
+              </>
+            )}
           </div>
+        )}
 
-          {error && <p className="text-xs font-medium text-red">{error}</p>}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex min-h-[38px] items-center rounded border border-line bg-surface px-4 text-xs font-semibold text-soft hover:bg-line hover:text-ink transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="inline-flex min-h-[38px] items-center rounded bg-hl px-4 text-xs font-semibold text-hl-ink shadow-card transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {busy ? "Updating..." : "Update"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
+        {error && (
+          <p role="alert" className="rounded border border-red/40 bg-red-soft px-3 py-2 text-sm font-medium text-red">
+            {error}
+          </p>
+        )}
+      </form>
+    </MobileSheet>
   );
 }

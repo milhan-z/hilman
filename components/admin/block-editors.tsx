@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { Field, Select, TextArea, TextInput } from "./fields";
-import { uploadToCloudinary } from "./upload";
+import { MediaCapture } from "./media-capture";
+import { PendingPhoto } from "./pending-media";
+import { isPendingRef } from "@/lib/studio-media-refs";
+import { discardPendingMedia } from "@/lib/studio-local/media";
 import { useMediaSelector } from "./media-library-context";
 import type { BlockType } from "@/lib/types";
 
@@ -84,7 +87,8 @@ export function MediaField({
   onSelectAsset?: (publicId: string, altText?: string) => void;
   accept?: string;
 }) {
-  const [busy, setBusy] = useState(false);
+  // MediaCapture owns its own "keeping…" state; this is only for errors that
+  // come from the library picker.
   const [error, setError] = useState<string | null>(null);
   
   // Safe invocation of media selector context
@@ -107,49 +111,53 @@ export function MediaField({
     }
   }
 
-  return (
-    <Field label={label} hint="Cloudinary public_id or URL — upload directly or choose from library.">
-      <div className="flex gap-2">
-        <TextInput value={value} onChange={(e) => onChange(e.target.value)} placeholder="folder/asset-id or https://…" />
-        
-        {mediaSelector && (
-          <button
-            type="button"
-            onClick={handleChooseFromLibrary}
-            className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded border border-line bg-raise px-3 text-sm text-soft hover:border-pen hover:text-pen transition-colors"
-            title="Choose from media library"
-          >
-            Library
-          </button>
-        )}
+  const pending = isPendingRef(value);
 
-        <label className="inline-flex min-h-[44px] shrink-0 cursor-pointer items-center rounded border border-line px-3 text-sm text-soft transition-colors hover:border-pen hover:text-pen">
-          {busy ? "Uploading…" : "Upload"}
-          <input
-            type="file"
-            accept={accept}
-            className="sr-only"
-            disabled={busy}
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              setBusy(true);
-              setError(null);
-              try {
-                const asset = await uploadToCloudinary(file);
-                if (onSelectAsset) {
-                  onSelectAsset(asset.public_id);
-                } else {
-                  onChange(asset.public_id);
-                }
-              } catch (err: any) {
-                setError(err.message);
-              } finally {
-                setBusy(false);
-              }
+  return (
+    <Field
+      label={label}
+      hint="Take one now, choose one you already have, or paste a Cloudinary public_id."
+    >
+      <div className="space-y-2">
+        {/* The camera first: on a phone the photo usually does not exist yet. */}
+        <MediaCapture
+          accept={accept}
+          onCaptured={(ref) => {
+            setError(null);
+            if (onSelectAsset) onSelectAsset(ref);
+            else onChange(ref);
+          }}
+        />
+
+        {pending && (
+          <PendingPhoto
+            photoRef={value}
+            onDiscard={() => {
+              void discardPendingMedia(value);
+              onChange("");
             }}
           />
-        </label>
+        )}
+
+        <div className="flex gap-2">
+          <TextInput
+            value={pending ? "" : value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={pending ? "Waiting for the photo above" : "folder/asset-id or https://…"}
+            disabled={pending}
+          />
+
+          {mediaSelector && (
+            <button
+              type="button"
+              onClick={handleChooseFromLibrary}
+              className="inline-flex min-h-12 shrink-0 items-center justify-center rounded border border-line bg-raise px-3.5 text-sm text-soft transition-colors hover:border-pen hover:text-pen"
+              title="Choose from media library"
+            >
+              Library
+            </button>
+          )}
+        </div>
       </div>
       {error && <span className="mt-1 block text-xs text-red">{error}</span>}
     </Field>

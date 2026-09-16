@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
-import { useActionState } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Reorder } from "framer-motion";
 import { InsertZone } from "./insert-zone";
 import { EditableBlock } from "./editable-block";
@@ -15,13 +15,11 @@ import { templatesFor } from "./block-templates";
 import { DeleteButton } from "./delete-button";
 import { Pic } from "../cld-image";
 import { STREAMS, type Stream } from "@/lib/types";
-import {
-  deleteJournal,
-  deleteProject,
-  saveJournal,
-  saveProject,
-  type ActionState,
-} from "@/app/admin/actions";
+import { deleteJournal, deleteProject, type ActionState } from "@/app/admin/actions";
+import { saveThroughQueue } from "@/lib/studio-local/save";
+import { subscribeSyncEvents } from "@/lib/studio-local/sync";
+import { deleteDraft, readDraft, writeDraft } from "@/lib/studio-local/drafts";
+import { hasPendingRefs, replacePendingRefs } from "@/lib/studio-media-refs";
 import { cn, uid } from "@/lib/utils";
 import type { Block, BlockType, JournalPost, Project, TagRow } from "@/lib/types";
 
@@ -33,6 +31,10 @@ interface SaveBarProps {
   isVisual: boolean;
   /** True when the form has changed since the last successful save. */
   dirty: boolean;
+  /** The last save is in the outbox — kept here, not on the site yet. */
+  queued?: boolean;
+  /** It is waiting on a photograph rather than on a network. */
+  waitingOnPhoto?: boolean;
   /** Blocks submission and explains why. */
   blockedReason?: string | null;
 }
@@ -42,7 +44,7 @@ interface SaveBarProps {
  * describing a version that no longer existed. It now yields to
  * "Unsaved changes" as soon as anything moves.
  */
-function SaveBar({ state, isNew, isVisual, dirty, blockedReason }: SaveBarProps) {
+function SaveBar({ state, isNew, isVisual, dirty, queued, waitingOnPhoto, blockedReason }: SaveBarProps) {
   const { pending } = useFormStatus();
   return (
     <div className="sticky bottom-0 z-30 -mx-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line bg-paper/95 px-4 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] shadow-sticky backdrop-blur sm:-mx-8 sm:px-8">
@@ -50,7 +52,7 @@ function SaveBar({ state, isNew, isVisual, dirty, blockedReason }: SaveBarProps)
         <button
           type="submit"
           disabled={pending || Boolean(blockedReason)}
-          className="inline-flex min-h-[44px] items-center rounded bg-hl px-6 text-sm font-semibold text-hl-ink shadow-card transition-all hover:opacity-90 active:scale-98 disabled:opacity-50"
+          className="inline-flex min-h-12 items-center rounded bg-hl px-6 text-sm font-semibold text-hl-ink shadow-card transition-all hover:opacity-90 active:scale-98 disabled:opacity-50"
         >
           {pending ? "Saving..." : isNew ? "Create" : "Save changes"}
         </button>
@@ -69,6 +71,13 @@ function SaveBar({ state, isNew, isVisual, dirty, blockedReason }: SaveBarProps)
           <span className="inline-flex items-center gap-1.5 text-sm text-soft">
             <span aria-hidden className="h-2 w-2 rounded-full bg-hl" />
             Unsaved changes
+          </span>
+        ) : queued ? (
+          <span className="inline-flex items-center gap-1.5 text-sm text-soft">
+            <span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-hl" />
+            {waitingOnPhoto
+              ? "Kept on this phone — waiting for the photo to upload"
+              : "Kept on this phone — waiting to send"}
           </span>
         ) : state.status === "success" ? (
           <span className="flex items-center gap-1 text-sm font-medium text-pen">
@@ -156,7 +165,26 @@ interface LiveEditorProps {
 export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const isProject = kind === "project";
   const isNew = !initial;
-  const [formState, action] = useActionState(isProject ? saveProject : saveJournal, initialState);
+  const router = useRouter();
+
+  /* -- saving goes through the outbox --
+     Both connected and not. A save is written to the local queue first and
+     sent from there, so a lost signal mid-request cannot become lost writing.
+     What changes with connectivity is only how soon the answer comes back. */
+  const [formState, setFormState] = useState<ActionState>(initialState);
+  const [entityId, setEntityId] = useState<string | null>(initial?.id ?? null);
+
+  // Which server version this editor is working from. Sent with every save so
+  // the database can tell "you edited the current one" from "someone changed
+  // it while your phone was in a tunnel".
+  const [baseUpdatedAt, setBaseUpdatedAt] = useState<string | null>(initial?.updated_at ?? null);
+
+  // Stable for the life of this editor, including across the save that turns a
+  // new entry into a real row, so the queue and the draft stay attached to it.
+  const [localId] = useState(() => `${kind}:${initial?.id ?? `new-${uid()}`}`);
+
+  // True when the last save is sitting in the outbox rather than on the site.
+  const [queuedSave, setQueuedSave] = useState(false);
 
   // Core content states
   const [blocks, setBlocks] = useState<Block[]>(initial?.blocks ?? []);
@@ -194,7 +222,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
      year, sortOrder, rawMeta, readingMinutes, status, featured, tagIds, blocks]
   );
 
-  const draftKey = "hilman-draft:" + kind + ":" + (initial?.id ?? "new");
+  const draftKey = `${kind}:${initial?.id ?? "new"}`;
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const submittedSnapshot = useRef(snapshot);
   const [recovered, setRecovered] = useState<{ snapshot: string; savedAt: string } | null>(null);
@@ -202,33 +230,43 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
 
   // Offer a local draft rather than applying it -- restoring is a decision.
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(draftKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { snapshot: string; savedAt: string };
-      if (parsed.snapshot === savedSnapshot) {
-        window.localStorage.removeItem(draftKey);
+    let cancelled = false;
+    void readDraft<{ snapshot: string; savedAt: string }>(draftKey).then((stored) => {
+      if (cancelled || !stored?.value?.snapshot) return;
+      if (stored.value.snapshot === savedSnapshot) {
+        void deleteDraft(draftKey);
         return;
       }
-      setRecovered(parsed);
-    } catch {
-      /* a corrupt draft is not worth interrupting the editor over */
-    }
+      setRecovered(stored.value);
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey]);
 
+  /* The body of a case study is a lot of text to serialise on every keystroke.
+     localStorage did it synchronously, on the same tick as the keypress; this
+     waits for a pause in typing and writes to IndexedDB off the main path. */
   useEffect(() => {
-    try {
-      if (dirty) {
-        window.localStorage.setItem(
-          draftKey,
-          JSON.stringify({ snapshot, savedAt: new Date().toISOString() })
-        );
-      } else {
-        window.localStorage.removeItem(draftKey);
-      }
-    } catch {}
-  }, [dirty, snapshot, draftKey]);
+    if (!dirty) {
+      void deleteDraft(draftKey);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void writeDraft({
+        key: draftKey,
+        entity: kind,
+        entityId: initial?.id ?? null,
+        localId: draftKey,
+        value: { snapshot, savedAt: new Date().toISOString() },
+        baseUpdatedAt: initial?.updated_at ?? null,
+        editedAt: new Date().toISOString(),
+        label: title.trim() || `Untitled ${kind}`,
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [dirty, snapshot, draftKey, kind, initial?.id, initial?.updated_at, title]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -245,11 +283,36 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     if (formState.status === "success") {
       setSavedSnapshot(submittedSnapshot.current);
       setRecovered(null);
-      try {
-        window.localStorage.removeItem(draftKey);
-      } catch {}
+      void deleteDraft(draftKey);
     }
   }, [formState.status, formState.savedAt, draftKey]);
+
+  /* A save made with no signal finishes later, in the background. When it
+     does, this editor has to learn the id the row was given and the version it
+     now sits at -- otherwise the next save would look like an edit to
+     something that does not exist.
+
+     The same applies to a photo: once its bytes reach Cloudinary the block
+     holding the `pending:` placeholder has to be pointed at the real id, or
+     the editor would keep resubmitting a reference to something that has
+     already been uploaded. */
+  useEffect(
+    () =>
+      subscribeSyncEvents((event) => {
+        if (event.type === "media") {
+          setBlocks((current) => replacePendingRefs(current, event.resolved));
+          setCoverPublicId((current) => replacePendingRefs(current, event.resolved));
+          setThumbnailPublicId((current) => replacePendingRefs(current, event.resolved));
+          return;
+        }
+        if (event.type !== "applied" || event.save.localId !== localId) return;
+        setEntityId(event.save.id);
+        setBaseUpdatedAt(event.save.updatedAt);
+        setQueuedSave(false);
+        if (isNew) router.replace(`/admin/${isProject ? "projects" : "journal"}/${event.save.id}`);
+      }),
+    [localId, isNew, isProject, router]
+  );
 
   function restoreDraft(raw: string) {
     try {
@@ -286,18 +349,103 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     }
   })();
 
-  const blockedReason = !title.trim()
-    ? "Add a title before saving."
-    : !metaIsValid
-      ? "The meta field is not a valid JSON object."
-      : null;
-
   let parsedMeta: Record<string, any> = {};
   try {
     parsedMeta = JSON.parse(rawMeta);
   } catch {
     // ignore
   }
+
+  const blockedReason = !title.trim()
+    ? "Add a title before saving."
+    : !metaIsValid
+      ? "The meta field is not a valid JSON object."
+      : null;
+
+  /**
+   * Save.
+   *
+   * Passed straight to <form action>, so React keeps the submit button pending
+   * for exactly as long as this runs and useFormStatus in the save bar stays
+   * truthful. The payload is built from the editor's own state rather than
+   * read back out of FormData: the same object has to survive in IndexedDB
+   * until there is a network, and a FormData cannot.
+   */
+  const handleSave = useCallback(async () => {
+    if (blockedReason) {
+      setFormState({ status: "error", message: blockedReason });
+      return;
+    }
+
+    submittedSnapshot.current = snapshot;
+    setFormState({ status: "idle" });
+    setQueuedSave(false);
+
+    const fields = isProject
+      ? {
+          title,
+          slug,
+          subtitle,
+          excerpt,
+          stream,
+          year,
+          status,
+          featured,
+          sort_order: sortOrder,
+          thumbnail_public_id: thumbnailPublicId,
+          cover_public_id: coverPublicId,
+          meta: parsedMeta,
+        }
+      : {
+          title,
+          slug,
+          excerpt,
+          cover_public_id: coverPublicId,
+          status,
+          featured,
+          reading_minutes: readingMinutes,
+        };
+
+    const result = await saveThroughQueue({
+      entity: kind,
+      entityId,
+      localId,
+      baseUpdatedAt,
+      payload: { fields, blocks, tagIds },
+    });
+
+    if (result.status === "rejected") {
+      setFormState({ status: "error", message: result.message });
+      return;
+    }
+
+    if (result.status === "conflict") {
+      setFormState({
+        status: "error",
+        message:
+          "This changed somewhere else while your version was waiting. Open Sync to compare the two.",
+      });
+      return;
+    }
+
+    if (result.status === "queued") {
+      // Deliberately not "success": the work is on this phone and the site has
+      // not seen it. The save bar says so, and the sync panel lists it.
+      setQueuedSave(true);
+      setSavedSnapshot(submittedSnapshot.current);
+      return;
+    }
+
+    setEntityId(result.id);
+    setBaseUpdatedAt(result.updatedAt);
+    setFormState({ status: "success", savedAt: result.updatedAt, id: result.id });
+    if (isNew) router.replace(`/admin/${isProject ? "projects" : "journal"}/${result.id}`);
+    else router.refresh();
+  }, [
+    blockedReason, snapshot, isProject, title, slug, subtitle, excerpt, stream, year, status,
+    featured, sortOrder, thumbnailPublicId, coverPublicId, parsedMeta, readingMinutes, kind,
+    entityId, localId, baseUpdatedAt, blocks, tagIds, isNew, router,
+  ]);
 
   const handleUpdateMetaField = (key: string, value: any) => {
     let current: Record<string, any> = {};
@@ -418,18 +566,15 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
 
   const activeBlock = blocks.find((b) => b.id === activeBlockId) || null;
 
+  // A save holding a photo that is still on the device is held back by the
+  // outbox, so the save bar should say which of the two things it waits for.
+  const waitingOnPhoto = hasPendingRefs({ blocks, coverPublicId, thumbnailPublicId });
+
   return (
     <form
-      action={action}
-      onSubmit={() => {
-        submittedSnapshot.current = snapshot;
-      }}
-      className="relative flex min-h-[calc(100vh-140px)] flex-col justify-between"
+      action={handleSave}
+      className="relative flex min-h-[calc(100dvh-140px)] flex-col justify-between"
     >
-      {/* Hidden serialization fields */}
-      <input type="hidden" name="id" value={initial?.id ?? ""} />
-      <input type="hidden" name="blocks" value={JSON.stringify(blocks)} />
-      <input type="hidden" name="tag_ids" value={JSON.stringify(tagIds)} />
 
       {recovered && (
         <div className="mb-5 rounded-md border border-hl bg-hl-soft/25 p-4">
@@ -752,6 +897,8 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
           isNew={isNew}
           isVisual={isVisual}
           dirty={dirty}
+          queued={queuedSave}
+          waitingOnPhoto={waitingOnPhoto}
           blockedReason={blockedReason}
         />
 

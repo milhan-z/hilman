@@ -28,6 +28,17 @@ export function SaveStatus({ state }: { state: SaveState }) {
       </span>
     );
   }
+  // "Kept" rather than "Saved": the work is on this phone, and the site has
+  // not seen it yet. Calling that Saved is the lie this whole component exists
+  // to avoid.
+  if (state.kind === "queued") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm text-soft">
+        <span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-hl" />
+        Kept on this phone — waiting to send
+      </span>
+    );
+  }
   if (state.kind === "error") {
     return (
       <span role="alert" className="text-sm font-medium text-red">

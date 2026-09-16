@@ -13,8 +13,16 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   );
 }
 
+/**
+ * min-h-12 is the studio's floor for anything you tap. Apple asks for 44pt;
+ * the bottom tabs and the PIN keypad already sit at 48px, so 48 is the number
+ * the whole studio uses rather than two different "big enough"s.
+ *
+ * text-base matters as much: iOS zooms the page when you focus an input whose
+ * text is under 16px, and a form that jumps on every field is unusable.
+ */
 export const inputCls =
-  "w-full rounded border border-line bg-raise px-3.5 py-2.5 text-base text-ink outline-none transition-colors focus:border-pen disabled:opacity-50";
+  "w-full min-h-12 rounded border border-line bg-raise px-3.5 py-2.5 text-base text-ink outline-none transition-colors focus:border-pen disabled:opacity-50";
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(inputCls, props.className)} />;
@@ -33,8 +41,8 @@ export function CheckRow({
   ...props
 }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 text-sm">
-      <input type="checkbox" {...props} className="h-4 w-4 accent-[var(--pen)]" />
+    <label className="flex min-h-12 cursor-pointer items-center gap-2.5 text-sm">
+      <input type="checkbox" {...props} className="h-5 w-5 accent-[var(--pen)]" />
       {label}
     </label>
   );

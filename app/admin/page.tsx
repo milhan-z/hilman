@@ -6,6 +6,8 @@ import { checkOwner } from "@/lib/owner";
 import { cloudinaryServerConfigured } from "@/lib/cloudinary-server";
 import { siteUrl, siteUrlIsPlaceholder } from "@/lib/site";
 import { findHiddenPublished } from "@/lib/studio-visibility";
+import { InstallHelp } from "@/components/admin/install-help";
+import { ResumeWork } from "@/components/admin/resume-work";
 
 /** "2 projects" / "1 journal entry" — the count reads as a sentence. */
 function journalOrProject(count: number, singular: string, plural = "") {
@@ -110,6 +112,13 @@ export default async function AdminDashboard() {
         <p className="mt-1 font-hand text-xl text-soft">the desk behind the desk</p>
       </div>
 
+      {/* On a phone the two things worth seeing first are "what was I in the
+          middle of" and "how do I keep this app around". Both read from the
+          browser, so they render after hydration and push nothing down when
+          there is nothing to say. */}
+      <ResumeWork />
+      <InstallHelp />
+
       <section className="rounded-lg border border-line bg-surface p-5" aria-labelledby="personal-content-heading">
         <h2 id="personal-content-heading" className="font-display text-lg font-semibold">Make this notebook yours</h2>
         <p className="mt-2 max-w-3xl text-sm text-soft">Your personal introduction is ready to edit in Pages. Add your own portraits, moments, and project stories there. Unchanged demo projects, example links, and unfinished template text are kept out of the public site; their originals stay here in Studio.</p>
@@ -135,34 +144,40 @@ export default async function AdminDashboard() {
         statusColumnMissing={Boolean(openMessages.error)}
       />
 
-      {/* Quick actions — one tap to the things you actually do */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        <Link
-          href="/admin/projects/new"
-          className="flex min-h-[52px] items-center justify-center rounded-md bg-hl px-3 text-sm font-semibold text-hl-ink shadow-card transition-opacity hover:opacity-90"
-        >
-          + New project
-        </Link>
-        <Link
-          href="/admin/journal/new"
-          className="flex min-h-[52px] items-center justify-center rounded-md border border-line-strong bg-surface px-3 text-sm font-semibold text-ink transition-colors hover:border-pen hover:text-pen"
-        >
-          + New journal
-        </Link>
-        <Link
-          href="/admin/pages/about"
-          className="flex min-h-[52px] items-center justify-center rounded-md border border-line bg-surface px-3 text-sm font-medium text-soft transition-colors hover:border-pen hover:text-pen"
-        >
-          Edit profile
-        </Link>
-        <a
-          href="/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex min-h-[52px] items-center justify-center rounded-md border border-line bg-surface px-3 text-sm font-medium text-soft transition-colors hover:border-pen hover:text-pen"
-        >
-          View site ↗
-        </a>
+      {/* Quick actions — one tap to the things you actually do. The two that
+          start something are given the height and the weight; the two that go
+          somewhere existing sit behind them. */}
+      <div className="space-y-2.5">
+        <div className="grid grid-cols-2 gap-2.5">
+          <Link
+            href="/admin/journal/new"
+            className="flex min-h-[64px] items-center justify-center rounded-md bg-hl px-3 text-center text-sm font-semibold text-hl-ink shadow-card transition-opacity hover:opacity-90"
+          >
+            + New journal
+          </Link>
+          <Link
+            href="/admin/projects/new"
+            className="flex min-h-[64px] items-center justify-center rounded-md border border-line-strong bg-surface px-3 text-center text-sm font-semibold text-ink transition-colors hover:border-pen hover:text-pen"
+          >
+            + New project
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Link
+            href="/admin/pages/about"
+            className="flex min-h-12 items-center justify-center rounded-md border border-line bg-surface px-3 text-sm font-medium text-soft transition-colors hover:border-pen hover:text-pen"
+          >
+            Edit profile
+          </Link>
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-h-12 items-center justify-center rounded-md border border-line bg-surface px-3 text-sm font-medium text-soft transition-colors hover:border-pen hover:text-pen"
+          >
+            View site ↗
+          </a>
+        </div>
       </div>
 
       {/* Stats — compact, 3-up even on mobile */}

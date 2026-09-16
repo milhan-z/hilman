@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveJournal } from "@/app/admin/actions";
 import { Field, TextInput, TextArea } from "./fields";
 import { DraftRecoveryNotice, SaveStatus } from "./save-status";
 import { useEditorDraft } from "./use-editor-draft";
+import { saveThroughQueue } from "@/lib/studio-local/save";
+import { uid } from "@/lib/utils";
 
 const EXCERPT_LIMIT = 200;
 
@@ -15,12 +16,16 @@ const EXCERPT_LIMIT = 200;
  * The note text becomes a real paragraph block, not just an excerpt: an idea
  * saved only into the card summary is an idea you have to retype when you
  * open the editor properly.
+ *
+ * It saves through the outbox rather than calling the server directly, which
+ * is the whole point on a phone — the thought is caught whether or not there
+ * is a signal in the room you had it in.
  */
 export function QuickDraft() {
   const router = useRouter();
   const draft = useEditorDraft("quick-draft", { title: "", note: "" });
   const [pending, startTransition] = useTransition();
-  const [saved, setSaved] = useState<{ id: string; title: string } | null>(null);
+  const [saved, setSaved] = useState<{ id: string | null; title: string } | null>(null);
 
   function onSave() {
     const { title, note } = draft.value;
@@ -37,7 +42,7 @@ export function QuickDraft() {
 
     const blocks = paragraphs.map((text, i) => ({
       id: `qd-${i}`,
-      type: "paragraph",
+      type: "paragraph" as const,
       position: i,
       data: { text },
     }));
@@ -47,24 +52,41 @@ export function QuickDraft() {
         ? `${paragraphs[0].slice(0, EXCERPT_LIMIT).trimEnd()}…`
         : (paragraphs[0] ?? "");
 
-    const fd = new FormData();
-    fd.set("id", "");
-    fd.set("title", title.trim());
-    fd.set("status", "draft");
-    fd.set("excerpt", excerpt);
-    fd.set("blocks", JSON.stringify(blocks));
-    fd.set("tag_ids", "[]");
-    fd.set("stay", "1");
-
     startTransition(async () => {
-      const res = await saveJournal({ status: "idle" }, fd);
-      if (res.status === "error") {
-        draft.markError(res.message ?? "save failed");
+      const result = await saveThroughQueue({
+        entity: "journal",
+        entityId: null,
+        localId: `journal:quick-${uid()}`,
+        baseUpdatedAt: null,
+        payload: {
+          fields: { title: title.trim(), status: "draft", excerpt },
+          blocks,
+          tagIds: [],
+        },
+      });
+
+      if (result.status === "rejected") {
+        draft.markError(result.message);
         return;
       }
-      draft.markSaved({ title: "", note: "" }, res.savedAt);
+      if (result.status === "conflict") {
+        // A create cannot conflict, but the type says it could — say something
+        // true rather than pretending it saved.
+        draft.markError("that entry already exists on the site");
+        return;
+      }
+
+      const savedTitle = title.trim();
+      if (result.status === "queued") {
+        draft.markQueued();
+        draft.setValue({ title: "", note: "" });
+        setSaved({ id: null, title: savedTitle });
+        return;
+      }
+
+      draft.markSaved({ title: "", note: "" });
       draft.setValue({ title: "", note: "" });
-      setSaved({ id: res.id ?? "", title: title.trim() });
+      setSaved({ id: result.id, title: savedTitle });
       router.refresh();
     });
   }
@@ -90,7 +112,6 @@ export function QuickDraft() {
             value={draft.value.title}
             onChange={(e) => draft.setValue((p) => ({ ...p, title: e.target.value }))}
             placeholder="What are you thinking about?"
-            className="text-sm"
           />
         </Field>
 
@@ -100,7 +121,6 @@ export function QuickDraft() {
             onChange={(e) => draft.setValue((p) => ({ ...p, note: e.target.value }))}
             placeholder="Start typing — you can finish it later."
             rows={4}
-            className="text-sm"
           />
         </Field>
 
@@ -109,7 +129,7 @@ export function QuickDraft() {
             type="button"
             onClick={onSave}
             disabled={pending}
-            className="inline-flex min-h-[38px] items-center rounded bg-hl px-4 text-xs font-semibold text-hl-ink shadow-card transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="inline-flex min-h-12 items-center rounded-md bg-hl px-5 text-sm font-semibold text-hl-ink shadow-card transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {pending ? "Saving…" : "Save draft"}
           </button>
@@ -118,15 +138,17 @@ export function QuickDraft() {
 
         {saved && (
           <p className="text-xs text-soft">
-            Saved “{saved.title}” as a draft —{" "}
             {saved.id ? (
-              <a href={`/admin/journal/${saved.id}`} className="text-pen hover:underline">
-                keep writing
-              </a>
+              <>
+                Saved “{saved.title}” as a draft —{" "}
+                <a href={`/admin/journal/${saved.id}`} className="text-pen hover:underline">
+                  keep writing
+                </a>
+                .
+              </>
             ) : (
-              <span>find it under Journal</span>
+              <>“{saved.title}” is kept on this phone and will appear under Journal once it sends.</>
             )}
-            .
           </p>
         )}
       </div>
