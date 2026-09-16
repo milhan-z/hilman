@@ -5,19 +5,19 @@ export type Status = "draft" | "published";
 
 export const STREAMS: Record<Stream, { name: string; tagline: string; blurb: string }> = {
   "visual-design": {
-    name: "Visual Design",
+    name: "Design",
     tagline: "Layout, posters, brand, UI",
     blurb:
       "Visual systems, posters, brand explorations, and interfaces — where composition and intent meet.",
   },
   "visual-stories": {
-    name: "Visual Stories",
+    name: "Film & Photo",
     tagline: "Editing, photo, video, documentation",
     blurb:
       "Editing, photography, videography, and documentation — telling stories through moving and still frames.",
   },
   "digital-lab": {
-    name: "Digital Lab",
+    name: "Code",
     tagline: "Web, tools, creative code",
     blurb:
       "Programming, web builds, tools, and creative coding — finished tech projects with a story behind them.",

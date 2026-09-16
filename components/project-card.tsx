@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 
 const STREAM_SHORT: Record<string, string> = {
   "visual-design": "DESIGN",
-  "visual-stories": "STORIES",
-  "digital-lab": "LAB",
+  "visual-stories": "FILM & PHOTO",
+  "digital-lab": "CODE",
 };
 
 const STREAM_COLOR: Record<string, string> = {
@@ -71,7 +71,8 @@ export function ProjectCard({
             </span>
           )}
         </div>
-        {project.subtitle && <p className="mt-1.5 text-sm leading-relaxed text-soft">{project.subtitle}</p>}
+        {(project.subtitle || project.excerpt) && <p className="mt-1.5 text-sm leading-relaxed text-soft">{project.subtitle || project.excerpt}</p>}
+        {project.meta?.role && <p className="mt-3 text-xs text-soft"><span className="text-ink">My part:</span> {project.meta.role}</p>}
         {project.tags && project.tags.length > 0 && (
           <div className="mt-auto flex flex-wrap gap-1.5 pt-4">
             {project.tags.slice(0, 3).map((t) => (

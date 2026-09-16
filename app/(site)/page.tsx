@@ -1,260 +1,99 @@
 import Link from "next/link";
-import { DrawAccent } from "@/components/draw-accent";
-import { HeroRoles } from "@/components/hero-roles";
+import { Pic } from "@/components/cld-image";
 import { JournalCard } from "@/components/journal-card";
-import { SectionReveal, Stagger, StaggerItem } from "@/components/motion";
 import { ProjectCard } from "@/components/project-card";
-import { Button, EmptyState, EntryMeta, Kicker, Marginalia, SectionHeading } from "@/components/ui";
-import { getJournalPosts, getPage, getProjects, getSettings, load } from "@/lib/data";
-import { ContentUnavailable, ContentUnavailablePage } from "@/components/content-unavailable";
-import { STREAMS, type Stream } from "@/lib/types";
+import { Button, ArrowLink, Kicker, SectionHeading } from "@/components/ui";
+import { ContentUnavailable } from "@/components/content-unavailable";
+import { NotebookPlay } from "@/components/notebook-play";
+import { getJournalPosts, getPage, getProjects, load } from "@/lib/data";
+import { resolveProfileData } from "@/lib/profile";
+import { mediaSrc } from "@/lib/cloudinary";
 
 export const revalidate = 60;
 
-const STREAM_ORDER: Stream[] = ["visual-design", "visual-stories", "digital-lab"];
-const STREAM_DOT: Record<Stream, string> = {
-  "visual-design": "bg-pen",
-  "visual-stories": "bg-red",
-  "digital-lab": "bg-cyan",
-};
+const practices = [
+  { label: "Design", note: "Giving ideas a visual voice.", detail: "Graphic design, layouts, and visual communication.", href: "/works?stream=visual-design", mark: "Aa", color: "text-pen" },
+  { label: "Film & photo", note: "Keeping a moment, telling a story.", detail: "Photography, video editing, and motion.", href: "/works?stream=visual-stories", mark: "↗", color: "text-red" },
+  { label: "Code", note: "Making the idea work.", detail: "Web experiences, little tools, and experiments.", href: "/works?stream=digital-lab", mark: "{ }", color: "text-cyan" },
+];
 
 export default async function HomePage() {
-  const [settingsRes, projectsRes, journalRes, homeRes, aboutRes] = await Promise.all([
-    load(getSettings),
-    load(() => getProjects()),
-    load(getJournalPosts),
-    load(() => getPage("home")),
-    load(() => getPage("about")),
+  const [projectsRes, journalRes, homeRes, aboutRes] = await Promise.all([
+    load(getProjects), load(getJournalPosts), load(() => getPage("home")), load(() => getPage("about")),
   ]);
-
-  // Without settings there is no hero to render honestly.
-  if (!settingsRes.ok) {
-    return <ContentUnavailablePage what="the cover" detail={settingsRes.error} />;
-  }
-
-  const settings = settingsRes.value;
+  const home = resolveProfileData("home", homeRes.ok ? homeRes.value?.data : undefined);
+  const about = resolveProfileData("about", aboutRes.ok ? aboutRes.value?.data : undefined);
   const projects = projectsRes.ok ? projectsRes.value : [];
-  const journal = journalRes.ok ? journalRes.value : [];
-  const home = homeRes.ok ? homeRes.value : null;
-  const about = aboutRes.ok ? aboutRes.value : null;
-
-  const featured = projects.filter((p) => p.featured).slice(0, 3);
-  // Falls back to the most recent published work so the home page never shows
-  // an empty strip just because nothing has been starred yet.
-  const showcase = featured.length ? featured : projects.slice(0, 3);
-  const latestJournal = journal.slice(0, 2);
-  const streamCounts = Object.fromEntries(
-    STREAM_ORDER.map((s) => [s, projects.filter((p) => p.stream === s).length])
-  ) as Record<Stream, number>;
-  const currently: string[] = about?.data?.currently ?? [];
-
-  // Identity rows only appear when they have been filled in — the template
-  // used to state a campus and a city as fact.
-  const plateRows: [string, string][] = [
-    ["Keeper", "Hilman"],
-    ...(home?.data?.field ? ([["Field", home.data.field]] as [string, string][]) : []),
-    ...(home?.data?.based ? ([["Based", home.data.based]] as [string, string][]) : []),
-    ["Edition", `No. ${new Date().getFullYear()}`],
-  ];
-
-  const indexRows = [
-    { num: "01", name: "Works", href: "/works", desc: "Design, stories & code — filed by stream.", meta: `${projects.length} entries` },
-    { num: "02", name: "Journal", href: "/journal", desc: "Notes that grow slowly, dated and in public.", meta: `${journal.length} entries` },
-    { num: "03", name: "Lab", href: "/lab", desc: "Live experiments you can actually touch.", meta: "playground" },
-    { num: "04", name: "About", href: "/about", desc: "Who’s behind the filing system.", meta: "profile" },
-    { num: "05", name: "Connect", href: "/connect", desc: "Start a conversation — design, film, or code.", meta: "say hi" },
-  ];
+  const featured = projects.filter((project) => project.featured);
+  const showcase = (featured.length ? featured : projects).slice(0, 3);
+  const journal = journalRes.ok ? journalRes.value.slice(0, 2) : [];
+  const portrait = mediaSrc(home.portrait) ? home.portrait : undefined;
 
   return (
-    <div className="mx-auto max-w-wide px-5 sm:px-8">
-      {/* ══ Cover ══════════════════════════════════════════ */}
-      <section className="glow-yellow grid gap-10 pb-16 pt-14 sm:pt-20 lg:grid-cols-[1.5fr_1fr] lg:gap-14 lg:pb-24">
-        <div className="flex flex-col justify-center">
-          <Kicker>this notebook belongs to —</Kicker>
-          <div className="relative mt-4 inline-block w-fit">
-            <h1 className="flex items-start font-display text-6xl font-bold leading-[0.95] tracking-tight sm:text-7xl">
-              Hilman
-              <span aria-hidden className="ml-2 mt-3 inline-block h-3 w-3 rounded-[2px] bg-red sm:mt-4" />
-            </h1>
-            <div className="absolute -bottom-2 left-0">
-              <DrawAccent variant="underline2" color="yellow" width={260} strokeWidth={5} delay={0.35} />
-            </div>
+    <div className="mx-auto max-w-wide px-5 sm:px-8 lg:px-12">
+      <section className="personal-hero relative grid gap-10 pb-12 pt-10 sm:py-16 lg:grid-cols-[1.25fr_1fr] lg:items-center lg:gap-16 lg:py-20" aria-labelledby="hello-heading">
+        <div className="relative z-10">
+          <Kicker className="text-pen">a little corner of my world</Kicker>
+          <h1 id="hello-heading" className="mt-5 font-display text-[clamp(3.4rem,7.5vw,7.4rem)] font-semibold leading-[0.95] tracking-[-0.055em]">
+            Hello, I’m<br /><span className="personal-name">Hilman<span className="text-pen">.</span></span>
+          </h1>
+          {home.headline && <p className="mt-7 max-w-md whitespace-pre-line text-xl font-medium leading-snug sm:text-2xl">{home.headline}</p>}
+          {home.intro && <p className="mt-4 max-w-xl text-base leading-relaxed text-soft sm:text-lg">{home.intro}</p>}
+          <div className="mt-7 flex flex-wrap gap-3">
+            <Button href={showcase.length ? "#selected-work" : "/about"}>{showcase.length ? "Explore my work" : "A little about me"}<span aria-hidden>↗</span></Button>
+            <Button href="/connect" variant="ghost">Let’s make something</Button>
           </div>
-          <p className="mt-7 max-w-xl text-2xl font-semibold leading-snug">
-            <HeroRoles roles={settings.hero_roles} />
-          </p>
-          {/* No invented biography here: if the Home page record has no
-              positioning sentence, nothing is claimed on Hilman's behalf. */}
-          {home?.data?.intro && (
-            <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-soft">
-              {home.data.intro}
-            </p>
-          )}
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Button href="/works">See selected work</Button>
-            <Button href="/connect" variant="ghost">
-              Get in touch
-            </Button>
-          </div>
+          <div className="mt-7 flex items-center gap-3 text-xs text-soft"><span className="h-px w-8 shrink-0 bg-line-strong" aria-hidden /><span>Informatics at ITS{home.field ? ` · ${home.field}` : ""}{home.based ? ` · ${home.based}` : ""}</span></div>
         </div>
-
-        {/* specimen plate — the notebook's front-plate */}
-        <div className="flex items-center">
-          <div className="dotgrid w-full rounded-md border border-line-strong bg-surface p-6 shadow-lift sm:p-7 lg:rotate-1">
-            <div className="flex items-center justify-between border-b-2 border-pen/70 pb-3">
-              <span className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-pen">Field Notebook</span>
-              <span aria-hidden className="font-hand text-2xl leading-none text-red">✦</span>
+        <div className="relative hidden min-w-0 lg:block">
+          {portrait ? (
+            <figure className="portrait-paper mx-auto max-w-sm rotate-2">
+              <Pic src={portrait} alt={home.portrait_alt || "Hilman"} width={720} height={850} priority className="aspect-[4/5] w-full object-cover" sizes="380px" />
+              {home.portrait_caption && <figcaption className="px-2 pb-1 pt-4 font-hand text-xl text-cream-ink">{home.portrait_caption}</figcaption>}
+            </figure>
+          ) : (
+            <div className="notebook-cover relative ml-auto max-w-[430px] -rotate-2 px-9 pb-10 pt-9">
+              <div className="flex items-center justify-between border-b border-cream-line pb-4 font-mono text-xs uppercase tracking-[0.15em]"><span>A personal notebook</span><span aria-hidden>✳</span></div>
+              <p className="mt-9 font-display text-[3.7rem] font-semibold leading-[0.95] tracking-tight">Ideas.<br />People.<br /><span className="italic">Possibilities.</span></p>
+              <p className="mt-8 max-w-[15rem] font-hand text-2xl leading-tight">{home.note}</p>
+              <div className="mt-9 flex items-center justify-between border-t border-cream-line pt-4"><span className="font-mono text-xs">HILMAN / OPEN NOTEBOOK</span><span className="font-hand text-3xl">h.</span></div>
+              <span aria-hidden className="absolute -right-4 top-20 rotate-12 rounded-sm bg-hl px-5 py-3 font-hand text-2xl text-hl-ink shadow-sticky">stay curious ↗</span>
             </div>
-            <dl className="mt-4 space-y-2.5 font-mono text-xs">
-              {plateRows.map(([k, v]) => (
-                <div key={k} className="flex items-baseline justify-between gap-3">
-                  <dt className="uppercase tracking-widest text-soft">{k}</dt>
-                  <dd className="text-right font-semibold text-ink">{v}</dd>
-                </div>
-              ))}
-            </dl>
-            <div className="mt-5 border-t border-dashed border-line-strong pt-4">
-              <p className="font-mono text-xs uppercase tracking-widest text-soft">Contents</p>
-              <ul className="mt-2.5 space-y-1.5">
-                {STREAM_ORDER.map((s) => (
-                  <li key={s}>
-                    <Link
-                      href={`/works?stream=${s}`}
-                      className="group flex items-center justify-between gap-3 text-sm transition-colors hover:text-pen"
-                    >
-                      <span className="flex items-center gap-2.5 font-medium">
-                        <span aria-hidden className={`h-2 w-2 rounded-full ${STREAM_DOT[s]}`} />
-                        {STREAMS[s].name}
-                      </span>
-                      <span className="font-mono text-xs text-soft tnum group-hover:text-pen">
-                        {String(streamCounts[s]).padStart(2, "0")}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+          )}
+          <span aria-hidden className="absolute -bottom-8 left-2 -rotate-6 font-hand text-2xl text-soft">a work in progress, like me</span>
         </div>
       </section>
-
-      {/* ══ Pinned work ═══════════════════════════════════ */}
-      {/* Selected work comes before the index: a visitor should meet real work
-          in the first scroll, not a table of contents. */}
-      <section className="border-t-2 border-line-strong pt-10" aria-label="Selected work">
-        <SectionReveal>
-          <SectionHeading
-            index="✦"
-            title={showcase.length ? "Selected work" : "Work"}
-            hint={featured.length ? "the highlighter ones" : undefined}
-            href="/works"
-            hrefLabel="All works"
-          />
-        </SectionReveal>
-        {!projectsRes.ok ? (
-          <ContentUnavailable what="the work" detail={projectsRes.error} compact />
-        ) : showcase.length > 0 ? (
-          <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" gap={0.1}>
-            {showcase.map((p, i) => (
-              <StaggerItem key={p.id}>
-                <ProjectCard project={p} priority={i === 0} index={i} />
-              </StaggerItem>
-            ))}
-          </Stagger>
+      <section id="selected-work" className="scroll-mt-24 border-t border-line-strong pt-9" aria-label={showcase.length ? "Selected work" : "Creative interests"}>
+        <SectionHeading index="01" title={showcase.length ? "A few things I’ve made" : "The things I love exploring"} href={showcase.length ? "/works" : undefined} hrefLabel="All work" />
+        {!projectsRes.ok ? <ContentUnavailable what="the work" compact /> : showcase.length ? (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{showcase.map((project, index) => <ProjectCard key={project.id} project={project} index={index} />)}</div>
         ) : (
-          <EmptyState
-            title="No published work yet."
-            hint="the archive is being filled — check back soon"
-          />
+          <div className="grid gap-0 overflow-hidden rounded-lg border border-line sm:grid-cols-3">
+            {practices.map((practice) => <Link key={practice.label} href={practice.href} className="practice-link group flex flex-col border-b border-line bg-surface p-6 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 lg:p-8">
+              <span aria-hidden className={`mb-7 font-display text-4xl ${practice.color}`}>{practice.mark}</span>
+              <h3 className="font-display text-xl font-semibold">{practice.label}<span aria-hidden className="float-right text-soft transition-transform group-hover:-translate-y-1 group-hover:translate-x-1">↗</span></h3>
+              <p className="mt-2 text-sm text-ink">{practice.note}</p><p className="mt-2 text-sm leading-relaxed text-soft">{practice.detail}</p>
+            </Link>)}
+          </div>
         )}
       </section>
-
-      {/* ══ The Index — table of contents ═════════════════ */}
-      <SectionReveal>
-        <section aria-labelledby="index-heading" className="mt-20 border-t-2 border-line-strong pt-10">
-          <div className="mb-6 flex items-center justify-between">
-            <h2 id="index-heading" className="font-mono text-xs uppercase tracking-[0.2em] text-soft">
-              Index — the worlds inside
-            </h2>
-            <Marginalia className="hidden -rotate-2 sm:block">start anywhere</Marginalia>
-          </div>
-          <ul className="border-t border-line">
-            {indexRows.map((row) => (
-              <li key={row.href}>
-                <Link
-                  href={row.href}
-                  className="group grid grid-cols-[2.5rem_1fr_auto] items-center gap-4 border-b border-line py-5 transition-colors duration-fast hover:bg-surface sm:grid-cols-[3rem_1fr_auto] sm:py-6"
-                >
-                  <span className="font-mono text-sm font-semibold text-soft tnum transition-colors group-hover:text-pen">
-                    {row.num}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="font-display text-xl font-semibold tracking-tight transition-colors group-hover:text-pen sm:text-2xl">
-                      {row.name}
-                    </span>
-                    <span className="mt-0.5 block truncate text-sm text-soft">{row.desc}</span>
-                  </span>
-                  <span className="flex items-center gap-3 sm:gap-5">
-                    <span className="hidden font-mono text-xs uppercase tracking-wider text-soft sm:inline">
-                      {row.meta}
-                    </span>
-                    <span aria-hidden className="text-soft transition-transform duration-fast group-hover:translate-x-1 group-hover:text-pen">
-                      →
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </SectionReveal>
-
-      {/* ══ From the journal ══════════════════════════════ */}
-      {latestJournal.length > 0 && (
-        <section className="mt-20" aria-label="From the journal">
-          <SectionReveal>
-            <SectionHeading index="✎" title="How I think, in public" href="/journal" hrefLabel={home?.data?.journal_hook ?? "Wander the journal"} />
-          </SectionReveal>
-          <Stagger className="grid gap-5 lg:grid-cols-2" gap={0.1}>
-            {latestJournal.map((post) => (
-              <StaggerItem key={post.id}>
-                <JournalCard post={post} />
-              </StaggerItem>
-            ))}
-          </Stagger>
-        </section>
-      )}
-
-      {/* ══ Currently + Connect — the closing desk note ═══ */}
-      <SectionReveal>
-        <section className="mb-12 mt-20 grid gap-6 lg:grid-cols-[1fr_1fr]" aria-labelledby="closing-heading">
-          {currently.length > 0 && (
-            <div className="ruled rounded-md border border-line bg-raise p-7 shadow-card">
-              <EntryMeta items={["Currently", "in progress"]} />
-              <ul className="mt-4 space-y-3">
-                {currently.map((c, i) => (
-                  <li key={i} className="flex gap-2.5 text-soft">
-                    <span aria-hidden className="text-pen">→</span>
-                    <span>{c}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+      {about.community_story && <section className="my-16 grid gap-8 border-y border-line py-10 sm:my-20 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16 lg:py-14" aria-label="People and collaboration">
+        <div><Kicker>more than what’s on the screen</Kicker>{about.community_heading && <h2 id="people-heading" className="mt-4 max-w-md font-display text-3xl font-semibold tracking-tight sm:text-4xl">{about.community_heading}</h2>}</div>
+        <div><p className="max-w-xl text-lg leading-relaxed text-soft">{about.community_story}</p><div className="mt-6"><ArrowLink href="/about#people">Meet the person behind the work</ArrowLink></div></div>
+      </section>}
+      <section className="mt-16 grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:gap-14" aria-label="Notes and experiments">
+        <div>
+          <SectionHeading index="02" title="Notes along the way" href="/journal" hrefLabel={home.journal_hook} />
+          {!journalRes.ok ? <ContentUnavailable what="the journal" compact /> : journal.length ? <div className="space-y-4">{journal.map((post) => <JournalCard key={post.id} post={post} />)}</div> : (
+            <div className="ruled rounded-lg border border-line bg-surface p-7 sm:p-9"><span className="font-hand text-2xl text-pen">There’s room for the unfinished.</span><p className="mt-4 max-w-md text-soft">This is where I’ll share moments, things I’m learning, and the thinking behind the work. The first notes are still taking shape.</p><div className="mt-6"><ArrowLink href="/about">For now, get to know me</ArrowLink></div></div>
           )}
-          <div className="glow-yellow flex flex-col justify-center rounded-md border border-line bg-surface p-7 shadow-card">
-            <h2 id="closing-heading" className="font-display text-2xl font-semibold leading-snug tracking-tight">
-              Building something that needs <span className="hl-mark">design, story, and code</span>?
-            </h2>
-            <p className="mt-3 text-soft">
-              That overlap is exactly where I like to work. Tell me about it — my inbox is friendlier
-              than it looks.
-            </p>
-            <div className="mt-6">
-              <Button href="/connect">Start a conversation</Button>
-            </div>
-          </div>
-        </section>
-      </SectionReveal>
+        </div>
+        <div><SectionHeading index="03" title="A little room to play" /><NotebookPlay /><div className="mt-5"><ArrowLink href="/lab">More experiments in the Lab</ArrowLink></div></div>
+      </section>
+      <section className="my-16 flex flex-col justify-between gap-7 rounded-lg border border-line-strong bg-surface p-7 sm:my-20 sm:p-10 lg:flex-row lg:items-center" aria-labelledby="connect-heading">
+        <div><Kicker className="text-pen">new ideas start with a hello</Kicker><h2 id="connect-heading" className="mt-4 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Let’s make something <span className="italic">together.</span></h2><p className="mt-3 max-w-xl text-soft">A creative project, a tech idea, a new opportunity — or just a good conversation.</p></div>
+        <Button href="/connect" className="self-start lg:shrink-0">Say hello <span aria-hidden>↗</span></Button>
+      </section>
     </div>
   );
 }

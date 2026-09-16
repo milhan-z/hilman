@@ -69,7 +69,7 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search entries, ideas, tags…"
-            className="w-full rounded-md border border-line-strong bg-surface py-2.5 pl-10 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-faint focus:border-pen focus:ring-1 focus:ring-pen"
+            className="w-full rounded-md border border-line-strong bg-surface py-2.5 pl-10 pr-3 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-pen focus:ring-1 focus:ring-pen"
           />
         </label>
         {tags.length > 0 && (
@@ -84,7 +84,7 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
                   onClick={() => setTag(active ? undefined : t.slug)}
                   aria-pressed={active}
                   className={cn(
-                    "inline-flex items-center rounded-[4px] border px-2 py-0.5 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
+                    "inline-flex min-h-11 items-center rounded-[4px] border px-3 py-1 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
                     active ? "border-transparent bg-hl text-hl-ink font-semibold" : "border-line-strong text-soft hover:border-pen hover:text-pen"
                   )}
                 >

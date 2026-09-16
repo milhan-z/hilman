@@ -14,7 +14,7 @@ red pen — disciplined, not scrapbook.
 
 | Layer | Choice |
 |---|---|
-| Framework | Next.js 14 (App Router) + TypeScript, Server Actions |
+| Framework | Next.js 16.3 (App Router) + React 19, TypeScript, Server Actions |
 | Styling | Tailwind CSS + CSS-variable design tokens (dark/light) |
 | Animation | Framer Motion (respects `prefers-reduced-motion`) |
 | DB + Auth | Supabase (Postgres, Auth, RLS) via `@supabase/ssr` |
@@ -22,8 +22,8 @@ red pen — disciplined, not scrapbook.
 | Video | YouTube facade embed (iframe loads only on click) |
 | Deploy | Vercel (ISR, `revalidatePath` on CMS saves) |
 
-> **Next.js 14 is on the unsupported list.** The upgrade is planned, not done —
-> see [`docs/UPGRADE-NEXT.md`](docs/UPGRADE-NEXT.md).
+> Requires Node.js 20.9 or later. See [`docs/UPGRADE-NEXT.md`](docs/UPGRADE-NEXT.md)
+> for migration details, verification, and remaining deployment checks.
 
 ## Setup
 
@@ -80,9 +80,8 @@ policies, so the app itself cannot read or change who owns the site; only the SQ
 editor and the service-role key can. Disabling public sign-ups is still sensible,
 but the CMS no longer depends on it.
 
-Until 0003 is applied, `lib/owner.ts` detects the missing `is_site_owner()`
-function, keeps you signed in, and shows a banner on the dashboard saying that
-enforcement is app-side only.
+If `is_site_owner()` is missing or unavailable, Studio access is denied. Apply
+migration 0003 and grant the owner explicitly; sign-in alone never grants access.
 
 ### 3. Content
 
@@ -98,6 +97,12 @@ that already holds content unless you pass `-- --force`.
 Mock content is **development-only**. A production build with no Supabase
 credentials used to serve `lib/mock.ts` to visitors, which put invented project
 slugs into the live sitemap while the real pages 404'd. Now that case is an error.
+
+Known seeded stories, unedited authoring prompts, sample links, and confirmed
+test text are also screened from public lists, detail routes, and the sitemap.
+They remain editable in Studio. Publishing checks explain what needs replacing;
+drafts can still be saved. See [the personal notebook guide](docs/PERSONAL-NOTEBOOK.md)
+for the editorial direction and how to add genuine work and moments.
 
 ### 4. Cloudinary (signed uploads)
 
@@ -169,7 +174,8 @@ Adding a type = two map entries:
 - `authenticated` **that is an owner** (`is_site_owner()`): full read/write.
 
 Server Actions call `checkOwner()` first and RLS enforces the same rule at the
-database, so a route that slipped past middleware still cannot write.
+database, so a route that slipped past the proxy still cannot write. Missing or
+unavailable ownership checks deny CMS access; signed-in status alone is insufficient.
 
 ### Failures are visible
 
@@ -192,10 +198,10 @@ Tokens live in `app/globals.css` (CSS variables, single source) and are mapped i
   primary-action colour, `#8a6a00` on light for contrast) · 🔴 coral `#ff6b5b`
   for emphasis and marginalia · 🟢 teal `#18d9b4` as the third stream marker.
   Colour never carries meaning alone — stream dots are always paired with a label.
-- **The notebook is the layout.** A ledger-strip masthead, a numbered home Index,
-  filing-tabs on Works, a diary date-rail on journal entries, and `EntryMeta` mono
-  ledger lines tie every page to one archival language. Selected work sits *above*
-  the Index: a visitor should meet real work before a table of contents.
+- **The notebook feels personal.** A warm introduction, a paper composition,
+  handwritten details, and a small interactive sketch introduce Hilman. Published
+  work comes next, followed by people, notes, experiments, and an invitation to
+  collaborate. The simpler navigation leaves the personality to the content.
 - **Type:** Fraunces (display) + Inter (body, 16px floor, 1.7 line-height) +
   JetBrains Mono (metadata) + Caveat strictly for marginalia. Smallest step is
   12px; `--faint` was re-derived to clear 4.5:1 against both themes' surfaces
@@ -213,10 +219,11 @@ Tokens live in `app/globals.css` (CSS variables, single source) and are mapped i
    `components/admin/page-schemas.ts`. Updating a bio should not mean editing JSON,
    and a stray comma should not be able to blank a page. Any page without a schema
    falls back to a JSON editor that refuses to save invalid input.
-4. **Nothing about Hilman is hard-coded.** The footer blurb, the location line and
-   the specimen-plate rows come from the Home page record; `DEFAULT_SETTINGS.socials`
-   is empty on purpose, and the "Elsewhere" lists stay hidden until real accounts
-   are entered. Placeholder profile links shipped to the live site once already.
+4. **Personal defaults use Hilman's own brief.** `lib/profile.ts` supplies an
+   editable introduction based on confirmed interests, Informatics at ITS, and
+   ITS Global Engagement. It replaces exact seeded field values while preserving
+   customized fields and intentional blanks. No portrait or career history is
+   invented. Exact demo social links stay hidden until replaced with real accounts.
 5. **Editors never lose work silently.** The live editor and the page/settings
    forms track a dirty flag, warn before unload, keep a local draft, and *offer* it
    back on return. "Saved" describes the version that was saved and disappears the
@@ -226,8 +233,8 @@ Tokens live in `app/globals.css` (CSS variables, single source) and are mapped i
 7. **Gallery items and custom-block props** edit as inline JSON inside the block
    builder — pragmatic now, swappable for richer sub-forms later.
 8. **Markdown is trusted** (rendered via `marked`): the only author is the owner.
-9. **Lab ≠ Digital Lab**: Lab is the live playground (`ink-field`, `doodle-pad`);
-   Digital Lab is the stream of finished tech projects.
+9. **Lab is the playground** (`ink-field`, `doodle-pad`); the Code filter in Works
+   holds published technical projects. Stored stream keys remain compatible.
 10. ESLint isn't wired in — `next build` runs full TypeScript checks.
 
 ## Scripts
@@ -238,5 +245,6 @@ Tokens live in `app/globals.css` (CSS variables, single source) and are mapped i
 | `npm run build` | production build (type-checked) |
 | `npm start` | serve the production build |
 | `npm run typecheck` | TypeScript only, no build |
+| `npm test` | owner policy, content screening, and profile/editor regression checks |
 | `npm run owner` | list owners; `-- add <email>` / `-- remove <email>` |
 | `npm run seed -- --force` | **destructive** — wipes content, inserts demo material |

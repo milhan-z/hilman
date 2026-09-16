@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
-export const runtime = "edge";
-export const alt = "Hilman. — a living creative archive";
+export const runtime = "nodejs";
+export const alt = "Hilman — Design, media & code";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -34,7 +34,7 @@ export default function OgImage() {
             fontFamily: "monospace",
           }}
         >
-          Field Notebook · No. 2026
+          A personal notebook
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", marginTop: 18, fontSize: 150, fontWeight: 700 }}>
           Hilman
@@ -50,7 +50,7 @@ export default function OgImage() {
           />
         </div>
         <div style={{ display: "flex", marginTop: 20, fontSize: 40, color: "#a3a097" }}>
-          design · stories · code — a living creative archive
+          design · media · code — made with curiosity
         </div>
         <div
           style={{

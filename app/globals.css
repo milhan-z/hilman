@@ -2,6 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+.personal-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 60% 40%, var(--pen-soft), transparent 65%);
+  opacity: 0.3;
+  pointer-events: none;
+}
+.personal-name { position: relative; display: inline-block; }
+.personal-name::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 8%;
+  bottom: -0.09em;
+  height: 0.045em;
+  border-radius: 50%;
+  background: var(--hl);
+  transform: rotate(-2deg);
+}
+.notebook-cover, .portrait-paper {
+  color: var(--cream-ink);
+  background: var(--cream);
+  border: 1px solid var(--cream-line);
+  box-shadow: 5px 5px 0 var(--paper), 6px 6px 0 var(--line-strong), 0 20px 60px #0002;
+}
+.notebook-cover {
+  border-radius: 3px 12px 12px 3px;
+  background-image: linear-gradient(90deg, transparent 17px, var(--cream-line) 18px, transparent 19px);
+}
+.portrait-paper { padding: 12px; }
+.practice-link { transition: background-color 200ms ease; }
+.practice-link:hover { background-color: var(--raise); }
+.play-glyph { display: inline-block; animation: idea-appear 400ms ease both; }
+.play-motion { color: var(--red); transform: rotate(-12deg); }
+.play-code { color: var(--cyan); font-family: var(--font-mono), monospace; }
+@keyframes idea-appear {
+  from { opacity: 0.4; translate: 0 8px; }
+  to { opacity: 1; translate: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .play-glyph { animation: none; }
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
+
 /* ═══════════════════════════════════════════════════════════
    Hilman. — design tokens (single source of truth)
 

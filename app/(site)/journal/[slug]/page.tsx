@@ -11,11 +11,12 @@ import { formatDate } from "@/lib/utils";
 
 export const revalidate = 60;
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { slug: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ slug: string }>;
+  }
+): Promise<Metadata> {
+  const params = await props.params;
   const res = await load(() => getJournalBySlug(params.slug));
   const post = res.ok ? res.value : null;
   if (!post) return {};
@@ -27,7 +28,8 @@ export async function generateMetadata({
   };
 }
 
-export default async function JournalEntryPage({ params }: { params: { slug: string } }) {
+export default async function JournalEntryPage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   // A failed read is not a missing entry — see the works detail page.
   const postRes = await load(() => getJournalBySlug(params.slug));
   if (!postRes.ok) {

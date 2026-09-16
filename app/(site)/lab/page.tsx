@@ -50,11 +50,12 @@ export default function LabPage() {
           </div>
         </div>
         <p className="mt-4 text-lg text-pretty leading-relaxed text-soft">
-          Small interactive experiments — sketches in code rather than ink. Unlike the{" "}
+          Little ideas you can play with. A place to follow my curiosity, try something,
+          and see what happens. You’ll find finished projects in{" "}
           <Link href="/works?stream=digital-lab" className="text-pen underline underline-offset-4">
-            Digital Lab stream
+            Code
           </Link>{" "}
-          (finished projects), everything here is live and a little unfinished on purpose.
+          . Everything here is an experiment.
         </p>
       </header>
 

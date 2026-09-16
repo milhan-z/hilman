@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { ProjectCard } from "./project-card";
 import { EntryMeta } from "./ui";
@@ -45,6 +45,17 @@ export function WorksExplorer({
   const [tag, setTag] = useState<string | undefined>(initialTag);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("curated");
+  useEffect(() => { setStream(initialStream); setTag(initialTag); }, [initialStream, initialTag]);
+  useEffect(() => {
+    const restore = () => {
+      const params = new URLSearchParams(window.location.search);
+      const value = params.get("stream") as Stream;
+      setStream(streamKeys.includes(value) ? value : undefined);
+      setTag(params.get("tag") || undefined);
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -60,7 +71,10 @@ export function WorksExplorer({
       }
       return true;
     });
-    const time = (p: Project) => (p.published_at ? Date.parse(p.published_at) : (p.year ?? 0) * 1e10);
+    const time = (p: Project) => {
+      const published = p.published_at ? Date.parse(p.published_at) : NaN;
+      return Number.isFinite(published) ? published : p.year ? Date.UTC(p.year, 0, 1) : 0;
+    };
     list.sort((a, b) => {
       if (sort === "newest") return time(b) - time(a);
       if (sort === "oldest") return time(a) - time(b);
@@ -113,7 +127,7 @@ export function WorksExplorer({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search titles, tags, descriptions…"
-            className="w-full rounded-md border border-line-strong bg-surface py-2.5 pl-10 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-faint focus:border-pen focus:ring-1 focus:ring-pen"
+            className="w-full rounded-md border border-line-strong bg-surface py-2.5 pl-10 pr-3 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-pen focus:ring-1 focus:ring-pen"
           />
         </label>
         <div className="flex items-center gap-2 font-mono text-2xs uppercase tracking-wider text-faint">
@@ -126,7 +140,7 @@ export function WorksExplorer({
                 onClick={() => setSort(s.key)}
                 aria-pressed={sort === s.key}
                 className={cn(
-                  "rounded px-2.5 py-1 transition-colors",
+                  "min-h-11 rounded px-2.5 py-1 transition-colors",
                   sort === s.key ? "bg-hl text-hl-ink font-semibold" : "text-soft hover:text-ink"
                 )}
               >
@@ -171,7 +185,7 @@ export function WorksExplorer({
               onClick={() => pickTag(active ? undefined : t.slug)}
               aria-pressed={active}
               className={cn(
-                "inline-flex items-center rounded-[4px] border px-2 py-0.5 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
+                "inline-flex min-h-11 items-center rounded-[4px] border px-3 py-1 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
                 active ? "border-transparent bg-hl text-hl-ink font-semibold" : "border-line-strong text-soft hover:border-pen hover:text-pen"
               )}
             >
@@ -186,6 +200,7 @@ export function WorksExplorer({
         )}
       </div>
 
+      <p className="sr-only" role="status" aria-live="polite">{filtered.length} projects found.</p>
       <EntryMeta
         className="mt-6"
         items={[

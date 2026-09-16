@@ -1,42 +1,28 @@
 import Link from "next/link";
-import { EntryMeta } from "./ui";
 import type { Settings } from "@/lib/types";
-
-const SECTION_NUM: Record<string, string> = {
-  "/works": "01",
-  "/journal": "02",
-  "/lab": "03",
-  "/about": "04",
-  "/connect": "05",
-};
 
 export function SiteFooter({ settings, blurb, based }: { settings: Settings; blurb?: string; based?: string }) {
   const year = new Date().getFullYear();
   return (
-    <footer className="mt-28 border-t-2 border-ink/85">
-      {/* ledger strip, mirroring the masthead */}
-      <div className="border-b border-line">
-        <div className="mx-auto max-w-wide px-5 py-1.5 sm:px-8">
-          <EntryMeta items={["Colophon", "Hilman.", `Edition ${year}`, ...(based ? [based] : [])]} />
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-wide px-5 py-14 sm:px-8">
+    <footer className="mt-16 border-t border-line-strong">
+      <div className="mx-auto max-w-wide px-5 py-12 sm:px-8 lg:px-12">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]">
           {/* identity */}
           <div>
             <p className="flex items-baseline gap-0.5 font-display text-2xl font-bold">
               Hilman
-              <span aria-hidden className="inline-block h-[7px] w-[7px] rounded-[1px] bg-red" />
+              <span className="text-pen">.</span>
             </p>
             {blurb && (
               <p className="mt-3 max-w-sm text-sm leading-relaxed text-soft">{blurb}</p>
             )}
+            {based && <p className="mt-2 text-sm text-soft">{based}</p>}
+            <p className="mt-5 font-hand text-xl text-pen">Thanks for stopping by.</p>
           </div>
 
           {/* index */}
           <nav aria-label="Site index">
-            <h2 className="font-mono text-xs uppercase tracking-widest text-soft">Index</h2>
+            <h2 className="font-mono text-xs uppercase tracking-widest text-soft">Explore</h2>
             <ul className="mt-4 space-y-1.5">
               {settings.nav.map((item) => (
                 <li key={item.href}>
@@ -44,9 +30,6 @@ export function SiteFooter({ settings, blurb, based }: { settings: Settings; blu
                     href={item.href}
                     className="group flex items-baseline gap-2 text-sm text-soft transition-colors hover:text-pen"
                   >
-                    <span className="font-mono text-xs text-soft tnum group-hover:text-pen">
-                      {SECTION_NUM[item.href] ?? "··"}
-                    </span>
                     {item.label}
                   </Link>
                 </li>
@@ -76,13 +59,13 @@ export function SiteFooter({ settings, blurb, based }: { settings: Settings; blu
 
         <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-dashed border-line pt-6">
           <p className="font-mono text-xs uppercase tracking-wider text-soft">
-            © {year} Hilman · Set in Fraunces &amp; Inter · Archived with care
+            © {year} Hilman · Made with curiosity
           </p>
           <Link
             href="/admin"
             className="font-mono text-xs uppercase tracking-wider text-soft transition-colors hover:text-pen"
           >
-            studio door →
+            Studio ↗
           </Link>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { getPage, getSettings, load } from "@/lib/data";
 import { DEFAULT_SETTINGS } from "@/lib/types";
+import { resolveProfileData } from "@/lib/profile";
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   // The footer blurb and location come from the Home page record, so nothing
@@ -11,7 +12,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   // the visitor a banner, not the whole site.
   const [settingsRes, homeRes] = await Promise.all([load(getSettings), load(() => getPage("home"))]);
   const settings = settingsRes.ok ? settingsRes.value : DEFAULT_SETTINGS;
-  const home = homeRes.ok ? homeRes.value : null;
+  const home = resolveProfileData("home", homeRes.ok ? homeRes.value?.data : undefined);
   const chromeDegraded = !settingsRes.ok;
   return (
     <div className="flex min-h-screen flex-col">
@@ -34,7 +35,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <main id="main" className="flex-1">
         {children}
       </main>
-      <SiteFooter settings={settings} blurb={home?.data?.intro} based={home?.data?.based} />
+      <SiteFooter settings={settings} blurb={home.note} based={home.based} />
     </div>
   );
 }

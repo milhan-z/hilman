@@ -22,11 +22,11 @@ const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Hilman. — a living creative archive",
+    default: "Hilman — Design, media & code",
     template: "%s — Hilman.",
   },
   description:
-    "Hilman works between design, media, and code. This is his living archive — selected work, a journal, and live experiments.",
+    "Meet Hilman, an Informatics student at ITS exploring design, film, photography, motion, and code. Work, notes, and things made together.",
   openGraph: {
     siteName: "Hilman.",
     type: "website",

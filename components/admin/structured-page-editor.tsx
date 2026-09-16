@@ -24,16 +24,20 @@ export function StructuredPageEditor({
   schema,
   title,
   data,
+  initialData = data,
+  preserveEmptyFields = [],
   previewHref,
 }: {
   schema: PageSchema;
   title: string;
   data: Record<string, any>;
+  initialData?: Record<string, any>;
+  preserveEmptyFields?: string[];
   previewHref?: string;
 }) {
   const initial = {
     title,
-    fields: Object.fromEntries(schema.fields.map((f) => [f.key, readField(data, f)])),
+    fields: Object.fromEntries(schema.fields.map((f) => [f.key, readField(initialData, f)])),
   };
 
   const draft = useEditorDraft(`page:${schema.slug}`, initial);
@@ -51,7 +55,10 @@ export function StructuredPageEditor({
     }
     draft.markSaving();
     startTransition(async () => {
-      const payload = cleanPageData(schema, snapshot.fields, data);
+      // Older recovered drafts can lack newly added fields. Keep their initial
+      // values, while explicitly cleared fields still override the defaults.
+      const fields = { ...initial.fields, ...snapshot.fields };
+      const payload = cleanPageData(schema, fields, data, preserveEmptyFields);
       const res = await savePageData(schema.slug, snapshot.title.trim(), payload);
       if (res.status === "error") draft.markError(res.message ?? "save failed");
       else draft.markSaved(snapshot, res.savedAt);
@@ -80,7 +87,7 @@ export function StructuredPageEditor({
           <FieldRenderer
             key={field.key}
             field={field}
-            value={draft.value.fields[field.key]}
+            value={draft.value.fields[field.key] ?? initial.fields[field.key]}
             onChange={(v) => setField(field.key, v)}
           />
         ))}
@@ -274,7 +281,7 @@ function StringListField({
       )}
       {value.map((item, i) => (
         <div key={i} className="flex gap-2">
-          <label className="flex-1">
+          <label className="min-w-0 flex-1">
             <span className="sr-only">{`${field.itemLabel} ${i + 1}`}</span>
             {field.multiline ? (
               <TextArea
@@ -333,7 +340,7 @@ function ObjectListField({
       )}
       {value.map((row, i) => (
         <div key={i} className="flex gap-2 rounded border border-line bg-raise p-3">
-          <div className="flex-1 space-y-2">
+          <div className="min-w-0 flex-1 space-y-2">
             {field.columns.map((col) => (
               <label key={col.key} className="block">
                 <span className="mb-1 block text-xs font-medium text-soft">{col.label}</span>

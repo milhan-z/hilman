@@ -7,7 +7,7 @@ import { cloudinaryServerConfigured } from "@/lib/cloudinary-server";
 import { siteUrl, siteUrlIsPlaceholder } from "@/lib/site";
 
 export default async function AdminDashboard() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const owner = await checkOwner();
 
   const [
@@ -91,6 +91,12 @@ export default async function AdminDashboard() {
         <h1 className="font-display text-3xl font-bold">Dashboard</h1>
         <p className="mt-1 font-hand text-xl text-soft">the desk behind the desk</p>
       </div>
+
+      <section className="rounded-lg border border-line bg-surface p-5" aria-labelledby="personal-content-heading">
+        <h2 id="personal-content-heading" className="font-display text-lg font-semibold">Make this notebook yours</h2>
+        <p className="mt-2 max-w-3xl text-sm text-soft">Your personal introduction is ready to edit in Pages. Add your own portraits, moments, and project stories there. Unchanged demo projects, example links, and unfinished template text are kept out of the public site; their originals stay here in Studio.</p>
+        <div className="mt-3 flex flex-wrap gap-5 text-sm text-pen"><Link href="/admin/pages/home" className="underline-offset-4 hover:underline">Edit the introduction ↗</Link><Link href="/admin/pages/about" className="underline-offset-4 hover:underline">Add photos & moments ↗</Link><Link href="/admin/projects" className="underline-offset-4 hover:underline">Prepare your real projects ↗</Link></div>
+      </section>
 
       {/* Things that are wrong right now, stated plainly. */}
       <Warnings

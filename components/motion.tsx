@@ -34,7 +34,7 @@ export function SectionReveal({
   return (
     <motion.div
       className={className}
-      initial={HIDDEN[variant]}
+      initial={false}
       whileInView={SHOWN}
       viewport={{ once: true, margin: "0px 0px -60px 0px" }}
       transition={{ duration: 0.7, ease: EASE, delay }}
@@ -103,7 +103,7 @@ export function PageFade({ children }: { children: ReactNode }) {
   if (reduced) return <>{children}</>;
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.32, ease: EASE }}
     >

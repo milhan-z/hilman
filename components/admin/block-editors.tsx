@@ -192,7 +192,7 @@ function JsonField({
   );
 }
 
-const EDITORS: Record<BlockType, (p: EditorProps) => JSX.Element> = {
+const EDITORS: Record<BlockType, (p: EditorProps) => React.JSX.Element> = {
   heading: ({ data, onChange }) => (
     <div className="grid gap-3 sm:grid-cols-[100px_1fr]">
       <Field label="Level">

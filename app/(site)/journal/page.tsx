@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { DrawAccent } from "@/components/draw-accent";
 import { JournalExplorer } from "@/components/journal-explorer";
-import { EmptyState, Kicker } from "@/components/ui";
+import { ArrowLink, Kicker } from "@/components/ui";
 import { getJournalPosts, load } from "@/lib/data";
 import { ContentUnavailable } from "@/components/content-unavailable";
 
@@ -19,7 +19,7 @@ export default async function JournalPage() {
   return (
     <div className="mx-auto max-w-3xl px-5 py-14 sm:px-8">
       <header>
-        <Kicker>a garden, not a feed</Kicker>
+        <Kicker>things I want to remember</Kicker>
         <div className="relative mt-3 inline-block">
           <h1 className="font-display text-4xl font-bold leading-none tracking-tight sm:text-5xl">Journal</h1>
           <div className="absolute -bottom-2 left-0">
@@ -27,8 +27,8 @@ export default async function JournalPage() {
           </div>
         </div>
         <p className="mt-5 text-lg text-pretty leading-relaxed text-soft">
-          Notes that grow slowly. Some are finished thoughts, most are thoughts in progress — dated so
-          old me is allowed to be wrong. Search or filter by topic to dig in.
+          Moments with people, creative detours, and things I’m learning.
+          A little space to think out loud and keep the stories behind the work.
         </p>
       </header>
 
@@ -37,8 +37,10 @@ export default async function JournalPage() {
           <ContentUnavailable what="the journal" detail={postsRes.error} />
         </div>
       ) : posts.length === 0 ? (
-        <div className="mt-12">
-          <EmptyState title="The garden is freshly tilled." hint="entries coming soon" />
+        <div className="ruled mt-12 rounded-lg border border-line bg-surface p-7 sm:p-10">
+          <p className="font-display text-2xl font-medium">The first pages are taking shape.</p>
+          <p className="mt-4 text-soft">I’m gathering the stories I’d like to share here. For now, there’s a little more about my interests and the people side of my life on the About page.</p>
+          <ArrowLink href="/about#people" className="mt-6">Get to know me</ArrowLink>
         </div>
       ) : (
         <JournalExplorer posts={posts} />

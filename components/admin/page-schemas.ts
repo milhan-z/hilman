@@ -37,11 +37,27 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
     fields: [
       {
         kind: "longtext",
+        key: "headline",
+        label: "Opening headline",
+        hint: "A short introduction that sounds like you. Keep it easy to read on a phone.",
+        rows: 3,
+      },
+      {
+        kind: "longtext",
         key: "intro",
         label: "Positioning sentence",
         hint: "One or two sentences a stranger can understand. Shown under your name.",
         rows: 3,
       },
+      {
+        kind: "text",
+        key: "note",
+        label: "Personal note",
+        hint: "A small detail, interest, or thought. Appears on the notebook cover when no Home photo is set.",
+      },
+      { kind: "media", key: "portrait", label: "Home photo", hint: "An optional real photo of you or a moment you want to share. Cloudinary public_id or Cloudinary image URL." },
+      { kind: "text", key: "portrait_alt", label: "Photo description", hint: "Describe the image for people using a screen reader." },
+      { kind: "text", key: "portrait_caption", label: "Photo caption", hint: "A short story or detail about this moment." },
       {
         kind: "text",
         key: "journal_hook",
@@ -51,14 +67,14 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
       {
         kind: "text",
         key: "field",
-        label: "Field (specimen plate)",
-        hint: "e.g. “Design · Media · Tech”. Leave empty to hide the row.",
+        label: "Creative interests",
+        hint: "Shown beside your studies, e.g. “Design · Media · Code”. Leave empty to omit your interests.",
       },
       {
         kind: "text",
         key: "based",
-        label: "Based in (specimen plate)",
-        hint: "Only fill this in if you want it public. Leave empty to hide the row.",
+        label: "Based in",
+        hint: "An optional public location beside your studies and interests. Leave empty to omit it.",
       },
     ],
   },
@@ -67,9 +83,12 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
     slug: "about",
     title: "About",
     blurb:
-      "Everything a visitor needs to know who you are. All of it is optional — empty fields simply don't render.",
+      "Your story, interests, and the people who are part of it. Add real photos and memories when you're ready. Your introduction starts with the profile you shared; optional photos, experience, and tools only appear when filled in.",
     fields: [
-      { kind: "media", key: "portrait", label: "Portrait", hint: "Cloudinary public_id, or a full image URL." },
+      { kind: "media", key: "portrait", label: "Portrait", hint: "Cloudinary public_id or Cloudinary image URL." },
+      { kind: "text", key: "portrait_alt", label: "Portrait description", hint: "Describe your photo for people using a screen reader." },
+      { kind: "text", key: "portrait_caption", label: "Portrait caption", hint: "Tell us a little about the moment in this photo." },
+      { kind: "text", key: "personal_note", label: "Personal note", hint: "A short aside in your own voice. Appears next to your story." },
       {
         kind: "longtext",
         key: "lede",
@@ -84,6 +103,39 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
         itemLabel: "Paragraph",
         multiline: true,
         hint: "One entry per paragraph.",
+      },
+      {
+        kind: "stringList",
+        key: "interests",
+        label: "Personal interests",
+        itemLabel: "Interest",
+        hint: "Things you enjoy, inside or outside your work. Short phrases work well.",
+      },
+      {
+        kind: "text",
+        key: "community_heading",
+        label: "People & community heading",
+        hint: "Introduce the people and shared experiences that matter to you.",
+      },
+      {
+        kind: "longtext",
+        key: "community_story",
+        label: "People & community story",
+        hint: "Share what collaboration, organizations, or ITS Global Engagement mean to you. Keep it specific and true.",
+        rows: 6,
+      },
+      {
+        kind: "objectList",
+        key: "moments",
+        label: "Personal moments",
+        itemLabel: "Moment",
+        hint: "A photo and a small story from your life. Photos are optional; text-only moments also work. Use a Cloudinary public_id or Cloudinary image URL.",
+        columns: [
+          { key: "title", label: "Moment title", placeholder: "A moment worth remembering" },
+          { key: "image", label: "Photo", placeholder: "Cloudinary public_id or Cloudinary URL" },
+          { key: "alt", label: "Image description", placeholder: "Describe what is in the photo" },
+          { key: "caption", label: "The story", multiline: true },
+        ],
       },
       {
         kind: "stringList",
@@ -115,7 +167,7 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
         key: "currently",
         label: "Currently",
         itemLabel: "Line",
-        hint: "What you're working on right now. Also appears on the home page.",
+        hint: "What you're working on right now. Appears on your About page.",
       },
       { kind: "url", key: "cv_url", label: "CV link", hint: "Optional. A public link to your CV." },
     ],
@@ -161,36 +213,38 @@ export function readField(data: Record<string, any>, field: FieldSpec): any {
   }
 }
 
-/** Drops empty values so an untouched field never writes `""` into the page. */
+/** Drop unused optional fields, but retain an intentional blank over a public default. */
 export function cleanPageData(
   schema: PageSchema,
   form: Record<string, any>,
-  existing: Record<string, any>
+  existing: Record<string, any>,
+  preserveEmptyFields: readonly string[] = []
 ): Record<string, any> {
   // Keys the schema doesn't manage are preserved untouched.
   const known = new Set(schema.fields.map((f) => f.key));
   const out: Record<string, any> = Object.fromEntries(
     Object.entries(existing ?? {}).filter(([k]) => !known.has(k))
   );
+  const preserveEmpty = new Set(preserveEmptyFields);
 
   for (const field of schema.fields) {
     const value = form[field.key];
     if (field.kind === "stringList") {
-      const list = (value as string[]).map((v) => v.trim()).filter(Boolean);
-      if (list.length) out[field.key] = list;
+      const list = (Array.isArray(value) ? value : []).map((v) => String(v ?? "").trim()).filter(Boolean);
+      if (list.length || preserveEmpty.has(field.key)) out[field.key] = list;
       continue;
     }
     if (field.kind === "objectList") {
-      const rows = (value as Record<string, string>[])
+      const rows = (Array.isArray(value) ? value : [])
         .map((row) =>
-          Object.fromEntries(Object.entries(row).map(([k, v]) => [k, String(v ?? "").trim()]))
+          Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, String(v ?? "").trim()]))
         )
         .filter((row) => Object.values(row).some(Boolean));
-      if (rows.length) out[field.key] = rows;
+      if (rows.length || preserveEmpty.has(field.key)) out[field.key] = rows;
       continue;
     }
     const text = String(value ?? "").trim();
-    if (text) out[field.key] = text;
+    if (text || preserveEmpty.has(field.key)) out[field.key] = text;
   }
   return out;
 }

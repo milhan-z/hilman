@@ -4,6 +4,7 @@ import { DrawAccent } from "@/components/draw-accent";
 import { Kicker, Marginalia, Stamp } from "@/components/ui";
 import { getPage, getSettings, load } from "@/lib/data";
 import { DEFAULT_SETTINGS } from "@/lib/types";
+import { resolveProfileData } from "@/lib/profile";
 
 export const revalidate = 60;
 
@@ -20,15 +21,15 @@ export default async function ConnectPage() {
     load(getSettings),
   ]);
   const settings = settingsRes.ok ? settingsRes.value : DEFAULT_SETTINGS;
-  const d = pageRes.ok ? (pageRes.value?.data ?? {}) : {};
+  const d = resolveProfileData("connect", pageRes.ok ? pageRes.value?.data : undefined);
 
   return (
     <div className="mx-auto max-w-wide px-5 py-14 sm:px-8">
       <div className="grid gap-12 lg:grid-cols-[1fr_1.3fr]">
         <header>
-          <Kicker>the inbox is open</Kicker>
+          <Kicker>a small hello goes a long way</Kicker>
           <div className="relative mt-3 inline-block">
-            <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Connect</h1>
+            <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Let’s talk.</h1>
             <div className="absolute -bottom-1 left-0">
               <DrawAccent variant="underline2" color="yellow" width={150} strokeWidth={4} />
             </div>
