@@ -9,7 +9,6 @@ import { Button } from "./ui";
  */
 export function ContentUnavailable({
   what = "this page",
-  detail,
   compact = false,
 }: {
   what?: string;
@@ -30,7 +29,6 @@ export function ContentUnavailable({
       <p className="mx-auto mt-2 max-w-md text-soft">
         This is a fault on my side, not an empty shelf. Please try again in a moment.
       </p>
-      {detail && <p className="mt-3 font-mono text-xs text-soft">{detail}</p>}
       {!compact && (
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button href="/">Back to the cover</Button>

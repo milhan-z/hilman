@@ -7,6 +7,7 @@ import { checkOwner } from "@/lib/owner";
 import { destroyAsset } from "@/lib/cloudinary-server";
 import { slugify } from "@/lib/utils";
 import type { Block } from "@/lib/types";
+import { getJournalQualityIssues, getProjectQualityIssues, type ContentQualityInput } from "@/lib/content-quality";
 
 /**
  * All CMS mutations.
@@ -97,12 +98,31 @@ function validateTagIds(ids: unknown): string | null {
   return null;
 }
 
+function publicationError(kind: "project" | "journal", content: ContentQualityInput): string | null {
+  const issues = kind === "project" ? getProjectQualityIssues(content) : getJournalQualityIssues(content);
+  return issues.length ? `${issues.map((issue) => issue.message).join(" ")} You can still save this as a draft.` : null;
+}
+
+/** Quick and bulk publishing must check the same full content as the editor. */
+async function readPublicationBlocks(supabase: Awaited<ReturnType<typeof createServerSupabase>>, kind: "project" | "journal", ids: string[]) {
+  const { data, error } = await supabase.from("content_blocks").select("owner_id, type, position, data")
+    .eq("owner_type", kind).in("owner_id", ids).order("position");
+  if (error) throw new Error(saveError(error));
+  const grouped = new Map<string, Block[]>();
+  for (const block of data ?? []) {
+    const blocks = grouped.get(block.owner_id) ?? [];
+    blocks.push(block as unknown as Block);
+    grouped.set(block.owner_id, blocks);
+  }
+  return grouped;
+}
+
 /* ── auth ──────────────────────────────────────────────── */
 
 export async function signIn(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return fail("Wrong key for this door. Check your email & password.");
 
@@ -117,7 +137,7 @@ export async function signIn(_prev: ActionState, formData: FormData): Promise<Ac
 }
 
 export async function signOut() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   await supabase.auth.signOut();
   redirect("/admin/login");
 }
@@ -138,7 +158,7 @@ export async function saveProject(_prev: ActionState, formData: FormData): Promi
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const id = String(formData.get("id") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return fail("A project needs a title.");
@@ -170,6 +190,11 @@ export async function saveProject(_prev: ActionState, formData: FormData): Promi
     meta: meta.value,
   };
 
+  if (payload.status === "published") {
+    const issue = publicationError("project", { ...payload, blocks: blocks.value });
+    if (issue) return fail(issue);
+  }
+
   const { data, error } = await supabase.rpc("save_project", {
     p_id: id || null,
     p_data: payload,
@@ -187,7 +212,7 @@ export async function saveProject(_prev: ActionState, formData: FormData): Promi
 
 export async function deleteProject(id: string) {
   await guardOrThrow();
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   await supabase.from("content_blocks").delete().eq("owner_type", "project").eq("owner_id", id);
   await supabase.from("projects").delete().eq("id", id);
   revalidateSite();
@@ -200,7 +225,7 @@ export async function saveJournal(_prev: ActionState, formData: FormData): Promi
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const id = String(formData.get("id") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return fail("An entry needs a title.");
@@ -225,6 +250,11 @@ export async function saveJournal(_prev: ActionState, formData: FormData): Promi
     reading_minutes: String(formData.get("reading_minutes") ?? "").trim(),
   };
 
+  if (payload.status === "published") {
+    const issue = publicationError("journal", { ...payload, blocks: blocks.value });
+    if (issue) return fail(issue);
+  }
+
   const { data, error } = await supabase.rpc("save_journal_post", {
     p_id: id || null,
     p_data: payload,
@@ -242,7 +272,7 @@ export async function saveJournal(_prev: ActionState, formData: FormData): Promi
 
 export async function deleteJournal(id: string) {
   await guardOrThrow();
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   await supabase.from("content_blocks").delete().eq("owner_type", "journal").eq("owner_id", id);
   await supabase.from("journal_posts").delete().eq("id", id);
   revalidateSite();
@@ -265,7 +295,7 @@ export async function savePageData(
   if (!slug.trim()) return fail("Missing page slug.");
   if (!title.trim()) return fail("A page needs a title.");
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { error } = await supabase
     .from("pages")
     .upsert({ slug: slug.trim(), title: title.trim(), data }, { onConflict: "slug" });
@@ -284,7 +314,7 @@ export async function initCorePages(): Promise<ActionState> {
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { error } = await supabase.rpc("ensure_core_pages");
   if (error) {
     if (error.code === "PGRST202") {
@@ -323,7 +353,7 @@ export async function quickUpdateItem(
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const table = kind === "project" ? "projects" : "journal_posts";
 
   const title = updates.title.trim();
@@ -346,10 +376,13 @@ export async function quickUpdateItem(
     if (updates.status === "published") {
       const { data: existing, error: readErr } = await supabase
         .from(table)
-        .select("published_at")
+        .select("*")
         .eq("id", id)
         .single();
       if (readErr) return fail(saveError(readErr));
+      const blocks = await readPublicationBlocks(supabase, kind, [id]);
+      const issue = publicationError(kind, { ...existing, ...row, blocks: blocks.get(id) ?? [] });
+      if (issue) return fail(issue);
       if (!existing?.published_at) {
         row.published_at = new Date().toISOString();
       }
@@ -373,16 +406,21 @@ export async function bulkUpdateItems(
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const table = kind === "project" ? "projects" : "journal_posts";
 
   try {
     if (updates.status === "published") {
       const { data: existing, error: fetchErr } = await supabase
         .from(table)
-        .select("id, published_at")
+        .select("*")
         .in("id", ids);
       if (fetchErr) return fail(saveError(fetchErr));
+      const blocks = await readPublicationBlocks(supabase, kind, ids);
+      for (const item of existing ?? []) {
+        const issue = publicationError(kind, { ...item, blocks: blocks.get(item.id) ?? [] });
+        if (issue) return fail(`${item.title}: ${issue} Nothing in this batch was published.`);
+      }
 
       const never = (existing ?? []).filter((r) => !r.published_at).map((r) => r.id);
       const already = (existing ?? []).filter((r) => r.published_at).map((r) => r.id);
@@ -420,7 +458,7 @@ export async function bulkDeleteItems(
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const table = kind === "project" ? "projects" : "journal_posts";
 
   try {
@@ -447,7 +485,7 @@ export async function createTag(formData: FormData) {
   await guardOrThrow();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   await supabase.from("tags").insert({ name, slug: slugify(name) });
   revalidatePath("/admin/taxonomy");
   revalidateSite();
@@ -455,7 +493,7 @@ export async function createTag(formData: FormData) {
 
 export async function deleteTag(id: string) {
   await guardOrThrow();
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   await supabase.from("tags").delete().eq("id", id);
   revalidatePath("/admin/taxonomy");
   revalidateSite();
@@ -466,7 +504,7 @@ export async function createCategory(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   const stream = String(formData.get("stream") ?? "") || null;
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   await supabase.from("categories").insert({
     name,
     slug: slugify(name),
@@ -478,7 +516,7 @@ export async function createCategory(formData: FormData) {
 
 export async function deleteCategory(id: string) {
   await guardOrThrow();
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   await supabase.from("categories").delete().eq("id", id);
   revalidatePath("/admin/taxonomy");
 }
@@ -497,7 +535,7 @@ export async function recordMedia(asset: {
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { error } = await supabase.from("media").upsert(
     {
       public_id: asset.public_id,
@@ -518,7 +556,7 @@ export async function updateMediaMeta(_prev: ActionState, formData: FormData): P
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { error } = await supabase
     .from("media")
     .update({
@@ -541,7 +579,7 @@ export interface MediaReference {
 export async function getMediaReferences(publicId: string): Promise<MediaReference[]> {
   const check = await checkOwner();
   if (!check.ok) return [];
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data, error } = await supabase.rpc("media_references", { p_public_id: publicId });
   if (error) {
     console.error("[media] reference lookup failed:", error.message);
@@ -574,7 +612,7 @@ export async function deleteMedia(
     }
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   try {
     await destroyAsset(publicId, kind === "file" ? "raw" : "image");
   } catch (e: any) {
@@ -601,7 +639,7 @@ export async function saveSettingsData(input: {
   const bad = input.socials.find((s) => !s.label.trim() || !s.url.trim());
   if (bad) return fail("Every link needs both a label and a URL.");
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { error } = await supabase.from("settings").upsert([
     { key: "hero_roles", value: input.hero_roles },
     { key: "socials", value: input.socials },
@@ -629,7 +667,7 @@ export async function setMessageStatus(
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { error } = await supabase
     .from("messages")
     .update({
@@ -655,7 +693,7 @@ export async function deleteMessage(id: string): Promise<ActionState> {
   const denied = await guard();
   if (denied) return denied;
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { error } = await supabase.from("messages").delete().eq("id", id);
   if (error) return fail(saveError(error));
   revalidatePath("/admin/messages");
@@ -676,7 +714,7 @@ export async function getCommandIndex(): Promise<CommandIndex> {
   const check = await checkOwner();
   if (!check.ok) return { projects: [], journal: [], pages: [] };
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const [projects, journal, pages] = await Promise.all([
     supabase.from("projects").select("id, title, status").order("updated_at", { ascending: false }).limit(50),
     supabase.from("journal_posts").select("id, title, status").order("updated_at", { ascending: false }).limit(50),

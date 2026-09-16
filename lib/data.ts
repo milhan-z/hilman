@@ -1,4 +1,6 @@
 import { mockJournal, mockPages, mockProjects, mockSettings, mockTags } from "./mock";
+import { isPublicJournalPost, isPublicProject, sanitizePublicSettings } from "./content-quality";
+import { resolveProfileData } from "./profile";
 import { createPublicClient } from "./supabase/public";
 import { supabaseConfigured } from "./supabase/config";
 import {
@@ -76,16 +78,38 @@ async function fetchBlocks(ownerType: string, ownerId: string): Promise<Block[]>
   return (unwrap(`${ownerType} content`, res) as Block[] | null) ?? [];
 }
 
+/** One batched read keeps list/detail quality checks consistent without N+1 queries. */
+async function withBlocks<T extends { id: string }>(ownerType: "project" | "journal", rows: T[]): Promise<(T & { blocks: Block[] })[]> {
+  if (!rows.length) return [];
+  const sb = createPublicClient();
+  const res = await sb.from("content_blocks").select("id, owner_id, type, position, data")
+    .eq("owner_type", ownerType).in("owner_id", rows.map((row) => row.id)).order("position");
+  const blocks = unwrap(`${ownerType} content`, res) ?? [];
+  const byOwner = new Map<string, Block[]>();
+  for (const block of blocks) {
+    const grouped = byOwner.get(block.owner_id) ?? [];
+    grouped.push(block as Block);
+    byOwner.set(block.owner_id, grouped);
+  }
+  return rows.map((row) => ({ ...row, blocks: byOwner.get(row.id) ?? [] }));
+}
+
+/** List consumers do not need full body payloads in their client props. */
+function withoutBlocks<T extends { blocks?: Block[] }>(item: T): T {
+  const { blocks: _blocks, ...summary } = item;
+  return summary as T;
+}
+
 /* ── Settings ──────────────────────────────────────────── */
 
 export async function getSettings(): Promise<Settings> {
-  if (usingMockContent) return mockSettings;
+  if (usingMockContent) return sanitizePublicSettings(mockSettings);
   assertConfigured("site settings");
   const sb = createPublicClient();
   const res = await sb.from("settings").select("key, value");
   const rows = unwrap("site settings", res) ?? [];
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  return { ...DEFAULT_SETTINGS, ...map } as Settings;
+  return sanitizePublicSettings({ ...DEFAULT_SETTINGS, ...map } as Settings);
 }
 
 /* ── Projects ──────────────────────────────────────────── */
@@ -102,11 +126,12 @@ export async function getProjects(filter?: { stream?: Stream; tag?: string }): P
       .select(PROJECT_SELECT)
       .eq("status", "published")
       .order("sort_order");
-    projects = (unwrap("works", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) }));
+    projects = await withBlocks("project", (unwrap("works", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) })));
   }
+  projects = projects.filter(isPublicProject);
   if (filter?.stream) projects = projects.filter((p) => p.stream === filter.stream);
   if (filter?.tag) projects = projects.filter((p) => p.tags?.some((t) => t.slug === filter.tag));
-  return projects;
+  return projects.map(withoutBlocks);
 }
 
 export async function getFeaturedProjects(limit = 3): Promise<Project[]> {
@@ -116,7 +141,7 @@ export async function getFeaturedProjects(limit = 3): Promise<Project[]> {
 
 export async function getProjectBySlug(slug: string): Promise<Project | null> {
   if (usingMockContent) {
-    return mockProjects.find((p) => p.slug === slug && p.status === "published") ?? null;
+    return mockProjects.find((p) => p.slug === slug && isPublicProject(p)) ?? null;
   }
   assertConfigured("this project");
   const sb = createPublicClient();
@@ -129,7 +154,8 @@ export async function getProjectBySlug(slug: string): Promise<Project | null> {
   const data = unwrap("this project", res);
   if (!data) return null;
   const blocks = await fetchBlocks("project", (data as any).id);
-  return { ...(data as any), tags: mapTags(data), blocks };
+  const project = { ...(data as any), tags: mapTags(data), blocks } as Project;
+  return isPublicProject(project) ? project : null;
 }
 
 /* ── Journal ───────────────────────────────────────────── */
@@ -137,8 +163,9 @@ export async function getProjectBySlug(slug: string): Promise<Project | null> {
 export async function getJournalPosts(): Promise<JournalPost[]> {
   if (usingMockContent) {
     return [...mockJournal]
-      .filter((j) => j.status === "published")
-      .sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? ""));
+      .filter(isPublicJournalPost)
+      .sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? ""))
+      .map(withoutBlocks);
   }
   assertConfigured("the journal");
   const sb = createPublicClient();
@@ -147,12 +174,13 @@ export async function getJournalPosts(): Promise<JournalPost[]> {
     .select(JOURNAL_SELECT)
     .eq("status", "published")
     .order("published_at", { ascending: false });
-  return (unwrap("the journal", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) }));
+  const posts: JournalPost[] = await withBlocks("journal", (unwrap("the journal", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) })));
+  return posts.filter(isPublicJournalPost).map(withoutBlocks);
 }
 
 export async function getJournalBySlug(slug: string): Promise<JournalPost | null> {
   if (usingMockContent) {
-    return mockJournal.find((j) => j.slug === slug && j.status === "published") ?? null;
+    return mockJournal.find((j) => j.slug === slug && isPublicJournalPost(j)) ?? null;
   }
   assertConfigured("this entry");
   const sb = createPublicClient();
@@ -165,7 +193,8 @@ export async function getJournalBySlug(slug: string): Promise<JournalPost | null
   const data = unwrap("this entry", res);
   if (!data) return null;
   const blocks = await fetchBlocks("journal", (data as any).id);
-  return { ...(data as any), tags: mapTags(data), blocks };
+  const post = { ...(data as any), tags: mapTags(data), blocks } as JournalPost;
+  return isPublicJournalPost(post) ? post : null;
 }
 
 export async function getRelatedJournal(post: JournalPost, limit = 2): Promise<JournalPost[]> {
@@ -184,7 +213,8 @@ export async function getRelatedJournal(post: JournalPost, limit = 2): Promise<J
 
 export async function getPage(slug: string): Promise<PageRow | null> {
   if (usingMockContent) {
-    return mockPages.find((p) => p.slug === slug) ?? null;
+    const page = mockPages.find((p) => p.slug === slug);
+    return page ? { ...page, data: resolveProfileData(slug, page.data) } : null;
   }
   assertConfigured(`the ${slug} page`);
   const sb = createPublicClient();
@@ -192,7 +222,7 @@ export async function getPage(slug: string): Promise<PageRow | null> {
   const data = unwrap(`the ${slug} page`, res);
   if (!data) return null;
   const blocks = await fetchBlocks("page", (data as any).id);
-  return { ...(data as any), blocks };
+  return { ...(data as any), data: resolveProfileData(slug, (data as any).data), blocks };
 }
 
 /* ── Tags ──────────────────────────────────────────────── */
