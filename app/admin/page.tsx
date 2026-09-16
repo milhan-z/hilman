@@ -5,6 +5,12 @@ import { MessageCard, type InboxMessage } from "@/components/admin/message-card"
 import { checkOwner } from "@/lib/owner";
 import { cloudinaryServerConfigured } from "@/lib/cloudinary-server";
 import { siteUrl, siteUrlIsPlaceholder } from "@/lib/site";
+import { findHiddenPublished } from "@/lib/studio-visibility";
+
+/** "2 projects" / "1 journal entry" — the count reads as a sentence. */
+function journalOrProject(count: number, singular: string, plural = "") {
+  return `${count} ${count === 1 ? singular : plural || `${singular}s`}`;
+}
 
 export default async function AdminDashboard() {
   const supabase = await createServerSupabase();
@@ -51,6 +57,18 @@ export default async function AdminDashboard() {
     ? await supabase.from("messages").select("*").order("created_at", { ascending: false }).limit(3)
     : null;
 
+  // Published but screened out of the public site. Counting it here means the
+  // dashboard never reports work as live that no visitor can reach.
+  const [allProjects, allJournal] = await Promise.all([
+    supabase.from("projects").select("*").eq("status", "published"),
+    supabase.from("journal_posts").select("*").eq("status", "published"),
+  ]);
+  const [hiddenProjects, hiddenJournal] = await Promise.all([
+    findHiddenPublished("project", allProjects.data ?? []),
+    findHiddenPublished("journal", allJournal.data ?? []),
+  ]);
+  const hiddenCount = hiddenProjects.size + hiddenJournal.size;
+
   const inboxCount = openMessages.error ? messagesFallback?.count ?? 0 : openMessages.count ?? 0;
   const inbox = ((recentMessages.error ? recentMessagesFallback?.data : recentMessages.data) ??
     []) as InboxMessage[];
@@ -95,13 +113,24 @@ export default async function AdminDashboard() {
       <section className="rounded-lg border border-line bg-surface p-5" aria-labelledby="personal-content-heading">
         <h2 id="personal-content-heading" className="font-display text-lg font-semibold">Make this notebook yours</h2>
         <p className="mt-2 max-w-3xl text-sm text-soft">Your personal introduction is ready to edit in Pages. Add your own portraits, moments, and project stories there. Unchanged demo projects, example links, and unfinished template text are kept out of the public site; their originals stay here in Studio.</p>
+        {hiddenCount > 0 && (
+          <p className="mt-3 max-w-3xl rounded border border-line bg-raise px-3 py-2 text-sm text-soft">
+            <span className="font-semibold text-ink">
+              {hiddenCount} published {hiddenCount === 1 ? "item is" : "items are"} not on the public site.
+            </span>{" "}
+            {hiddenProjects.size > 0 && journalOrProject(hiddenProjects.size, "project")}
+            {hiddenProjects.size > 0 && hiddenJournal.size > 0 && " and "}
+            {hiddenJournal.size > 0 && journalOrProject(hiddenJournal.size, "journal entry", "journal entries")}
+            {" still "}
+            {hiddenCount === 1 ? "carries" : "carry"} demo copy, a writing prompt, or a placeholder link. Each list below says which.
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap gap-5 text-sm text-pen"><Link href="/admin/pages/home" className="underline-offset-4 hover:underline">Edit the introduction ↗</Link><Link href="/admin/pages/about" className="underline-offset-4 hover:underline">Add photos & moments ↗</Link><Link href="/admin/projects" className="underline-offset-4 hover:underline">Prepare your real projects ↗</Link></div>
       </section>
 
       {/* Things that are wrong right now, stated plainly. */}
       <Warnings
         dbError={dbError}
-        degraded={owner.ok && owner.degraded}
         placeholderUrl={siteUrlIsPlaceholder}
         statusColumnMissing={Boolean(openMessages.error)}
       />
@@ -213,9 +242,9 @@ export default async function AdminDashboard() {
               />
               <HealthRow
                 label="Owner enforcement"
-                ok={owner.ok && !owner.degraded}
+                ok={owner.ok}
                 okText="Database-enforced"
-                failText={owner.ok ? "App only" : "Unknown"}
+                failText="Unknown"
               />
               <HealthRow
                 label="Media uploads"
@@ -309,12 +338,10 @@ function RecentList({
 
 function Warnings({
   dbError,
-  degraded,
   placeholderUrl,
   statusColumnMissing,
 }: {
   dbError: string | null;
-  degraded: boolean;
   placeholderUrl: boolean;
   statusColumnMissing: boolean;
 }) {
@@ -324,14 +351,6 @@ function Warnings({
     items.push({
       title: "The database returned an error",
       body: `${dbError} — counts and lists on this page may be incomplete.`,
-    });
-  }
-  if (degraded) {
-    items.push({
-      title: "Owner enforcement is not active in the database",
-      body:
-        "is_site_owner() is missing, so any signed-in account could still write through the API. " +
-        "Apply supabase/migrations/0003_owner_and_integrity.sql.",
     });
   }
   if (statusColumnMissing) {

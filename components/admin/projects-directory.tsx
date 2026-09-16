@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QuickEditModal } from "./quick-edit-modal";
+import { HiddenNotice } from "./hidden-notice";
 import { STREAMS, type Stream } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { bulkUpdateItems, bulkDeleteItems } from "@/app/admin/actions";
@@ -17,6 +18,8 @@ interface ProjectItem {
   featured: boolean;
   year: number | null;
   sort_order: number;
+  /** Set when the item is published but screened out of the public site. */
+  hiddenReasons?: string[];
 }
 
 interface ProjectsDirectoryProps {
@@ -189,6 +192,7 @@ export function ProjectsDirectory({ initialProjects }: ProjectsDirectoryProps) {
                 </Link>
                 <StatusToggle status={p.status} busy={busy} onToggle={() => toggleStatus(p)} />
               </div>
+              <HiddenNotice reasons={p.hiddenReasons} compact />
               <div className="mt-3 flex items-center gap-2 border-t border-dashed border-line pt-3">
                 <Link
                   href={`/admin/projects/${p.id}`}
@@ -292,6 +296,7 @@ export function ProjectsDirectory({ initialProjects }: ProjectsDirectoryProps) {
                       <div className="mt-0.5 max-w-xs truncate font-mono text-2xs text-faint sm:max-w-md">
                         Slug: {p.slug || "—"}
                       </div>
+                      <HiddenNotice reasons={p.hiddenReasons} />
                       <div className="mt-1.5 flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-soft opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                         <Link href={`/admin/projects/${p.id}`} className="text-pen hover:underline">
                           Edit

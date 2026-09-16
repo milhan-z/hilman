@@ -33,7 +33,18 @@ export const metadata: Metadata = {
   },
 };
 
-/** Applied before paint. Night (dark) is the default; honours a stored choice. */
+/**
+ * Applied before paint. Night (dark) is the default; honours a stored choice.
+ *
+ * This has to stay a bare, synchronous <script> in the head. next/script with
+ * `beforeInteractive` queues the code onto `self.__next_s` for the Next.js
+ * bootstrap to run, which lands after first paint — the theme would flash.
+ * Reading a cookie on the server instead would make every route dynamic.
+ *
+ * React logs "Encountered a script tag while rendering React component" for
+ * this in development. It is a development-only warning: the script is in the
+ * server HTML and does execute. Running before paint is worth the warning.
+ */
 const themeScript = `(function(){try{var t=localStorage.getItem("hilman-theme");if(t!=="light"&&t!=="dark"){t="dark"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})()`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

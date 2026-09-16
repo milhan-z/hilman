@@ -42,9 +42,3 @@ export async function checkOwner(): Promise<OwnerCheck> {
 
   return decideOwnerAccess(user.id, data, error);
 }
-
-/** True when the ownership rule is only being enforced by the app, not the database. */
-export async function ownerEnforcementDegraded(): Promise<boolean> {
-  const check = await checkOwner();
-  return check.ok && check.degraded;
-}

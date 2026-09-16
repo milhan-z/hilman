@@ -3,9 +3,7 @@ import test from "node:test";
 import { decideOwnerAccess } from "../lib/owner-policy";
 
 test("only a confirmed authenticated owner can access the studio", () => {
-  assert.deepEqual(decideOwnerAccess("owner-id", true, null), {
-    ok: true, userId: "owner-id", degraded: false,
-  });
+  assert.deepEqual(decideOwnerAccess("owner-id", true, null), { ok: true, userId: "owner-id" });
   assert.equal(decideOwnerAccess(null, true, null).ok, false);
   for (const result of [false, null, undefined, "true", 1, {}, []]) {
     assert.equal(decideOwnerAccess("signed-in-id", result, null).ok, false);

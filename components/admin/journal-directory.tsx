@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QuickEditModal } from "./quick-edit-modal";
+import { HiddenNotice } from "./hidden-notice";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { bulkUpdateItems, bulkDeleteItems } from "@/app/admin/actions";
@@ -16,6 +17,8 @@ interface JournalItem {
   featured: boolean;
   published_at: string | null;
   updated_at: string;
+  /** Set when the entry is published but screened out of the public site. */
+  hiddenReasons?: string[];
 }
 
 interface JournalDirectoryProps {
@@ -171,6 +174,7 @@ export function JournalDirectory({ initialPosts }: JournalDirectoryProps) {
                 </Link>
                 <StatusToggle status={j.status} busy={busy} onToggle={() => toggleStatus(j)} />
               </div>
+              <HiddenNotice reasons={j.hiddenReasons} compact />
               <div className="mt-3 flex items-center gap-2 border-t border-dashed border-line pt-3">
                 <Link
                   href={`/admin/journal/${j.id}`}
@@ -272,6 +276,7 @@ export function JournalDirectory({ initialPosts }: JournalDirectoryProps) {
                       <div className="mt-0.5 max-w-xs truncate font-mono text-2xs text-faint sm:max-w-md">
                         Slug: {j.slug || "—"}
                       </div>
+                      <HiddenNotice reasons={j.hiddenReasons} />
                       <div className="mt-1.5 flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-soft opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                         <Link href={`/admin/journal/${j.id}`} className="text-pen hover:underline">
                           Edit

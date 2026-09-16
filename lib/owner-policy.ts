@@ -1,5 +1,5 @@
 export type OwnerCheck =
-  | { ok: true; userId: string; degraded: false }
+  | { ok: true; userId: string }
   | {
       ok: false;
       reason: "unconfigured" | "unauthenticated" | "not-owner" | "unavailable";
@@ -30,5 +30,5 @@ export function decideOwnerAccess(userId: string | null, data: unknown, error: R
       message: "This account is signed in but isn't the site owner.",
     };
   }
-  return { ok: true, userId, degraded: false };
+  return { ok: true, userId };
 }
