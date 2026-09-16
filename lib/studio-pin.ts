@@ -63,7 +63,7 @@ export function checkPin(input: {
       gate: {
         ok: false,
         reason: "unconfigured",
-        message: `PIN sign-in isn't set up. Put a ${PIN_LENGTH}-digit STUDIO_PIN in .env.local, or use your email and password.`,
+        message: `PIN sign-in isn't set up here. Set a ${PIN_LENGTH}-digit STUDIO_PIN in this environment — .env.local on your machine, project settings once deployed — or use your email and password.`,
       },
     };
   }

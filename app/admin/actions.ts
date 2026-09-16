@@ -161,7 +161,7 @@ export async function signInWithPin(_prev: ActionState, formData: FormData): Pro
   const password = String(process.env.STUDIO_OWNER_PASSWORD ?? "");
   if (!email || !password) {
     return fail(
-      "The PIN was right, but the studio account isn't configured. Add STUDIO_OWNER_EMAIL and STUDIO_OWNER_PASSWORD to .env.local."
+      "The PIN was right, but the studio account isn't configured here. Set STUDIO_OWNER_EMAIL and STUDIO_OWNER_PASSWORD in this environment."
     );
   }
 
