@@ -200,7 +200,7 @@ export function WorksExplorer({
         )}
       </div>
 
-      <p className="sr-only" role="status" aria-live="polite">{filtered.length} projects found.</p>
+      <p className="sr-only" role="status" aria-live="polite">{filtered.length} {filtered.length === 1 ? "project" : "projects"} found.</p>
       <EntryMeta
         className="mt-6"
         items={[

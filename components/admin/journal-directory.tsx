@@ -189,7 +189,7 @@ export function JournalDirectory({ initialPosts }: JournalDirectoryProps) {
                 >
                   Quick edit
                 </button>
-                {j.status === "published" && (
+                {j.status === "published" && !j.hiddenReasons?.length && (
                   <a
                     href={`/journal/${j.slug}`}
                     target="_blank"
@@ -285,7 +285,7 @@ export function JournalDirectory({ initialPosts }: JournalDirectoryProps) {
                         <button type="button" onClick={() => setEditingItem(j)} className="text-pen hover:underline">
                           Quick Edit
                         </button>
-                        {j.status === "published" && (
+                        {j.status === "published" && !j.hiddenReasons?.length && (
                           <>
                             <span className="text-line-strong">•</span>
                             <a href={`/journal/${j.slug}`} target="_blank" rel="noopener noreferrer" className="text-pen hover:underline">

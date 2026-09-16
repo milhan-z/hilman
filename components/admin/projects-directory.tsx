@@ -207,7 +207,7 @@ export function ProjectsDirectory({ initialProjects }: ProjectsDirectoryProps) {
                 >
                   Quick edit
                 </button>
-                {p.status === "published" && (
+                {p.status === "published" && !p.hiddenReasons?.length && (
                   <a
                     href={`/works/${p.slug}`}
                     target="_blank"
@@ -305,7 +305,7 @@ export function ProjectsDirectory({ initialProjects }: ProjectsDirectoryProps) {
                         <button type="button" onClick={() => setEditingItem(p)} className="text-pen hover:underline">
                           Quick Edit
                         </button>
-                        {p.status === "published" && (
+                        {p.status === "published" && !p.hiddenReasons?.length && (
                           <>
                             <span className="text-line-strong">•</span>
                             <a href={`/works/${p.slug}`} target="_blank" rel="noopener noreferrer" className="text-pen hover:underline">
