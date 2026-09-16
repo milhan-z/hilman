@@ -8,6 +8,7 @@ import { destroyAsset } from "@/lib/cloudinary-server";
 import { slugify } from "@/lib/utils";
 import type { Block } from "@/lib/types";
 import { getJournalQualityIssues, getProjectQualityIssues, type ContentQualityInput } from "@/lib/content-quality";
+import { checkPin, NO_ATTEMPTS, type PinAttempts } from "@/lib/studio-pin";
 
 /**
  * All CMS mutations.
@@ -128,6 +129,49 @@ export async function signIn(_prev: ActionState, formData: FormData): Promise<Ac
 
   // Signing in is not the same as owning the site — say so at the door rather
   // than letting every screen fail one by one.
+  const check = await checkOwner();
+  if (!check.ok) {
+    await supabase.auth.signOut();
+    return fail(check.message);
+  }
+  redirect("/admin");
+}
+
+/**
+ * Wrong-PIN attempts, counted for the whole door rather than per visitor: this
+ * studio has exactly one owner, and a request's IP can be spoofed. A lockout
+ * therefore also locks out the owner — the email form below is the way back in.
+ * The count lives in memory, so it resets when the server restarts.
+ */
+let pinAttempts: PinAttempts = NO_ATTEMPTS;
+
+export async function signInWithPin(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const decision = checkPin({
+    entered: String(formData.get("pin") ?? ""),
+    expected: process.env.STUDIO_PIN,
+    attempts: pinAttempts,
+  });
+  pinAttempts = decision.attempts;
+  if (!decision.gate.ok) return fail(decision.gate.message);
+
+  // The PIN only decides whether to attempt the real sign-in. The credentials
+  // stay on the server and the browser still receives an ordinary Supabase
+  // session, so RLS and is_site_owner() remain the actual enforcement.
+  const email = String(process.env.STUDIO_OWNER_EMAIL ?? "").trim();
+  const password = String(process.env.STUDIO_OWNER_PASSWORD ?? "");
+  if (!email || !password) {
+    return fail(
+      "The PIN was right, but the studio account isn't configured. Add STUDIO_OWNER_EMAIL and STUDIO_OWNER_PASSWORD to .env.local."
+    );
+  }
+
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    console.error("[studio] PIN sign-in could not reach the owner account:", error.message);
+    return fail("The PIN was right, but that studio account could not sign in. Check the credentials in .env.local.");
+  }
+
   const check = await checkOwner();
   if (!check.ok) {
     await supabase.auth.signOut();
