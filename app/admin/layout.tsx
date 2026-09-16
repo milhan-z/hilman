@@ -33,7 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -47,7 +47,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!owner.ok) {
     return (
       <div className="mx-auto max-w-xl px-5 py-24 text-center">
-        <h1 className="font-display text-2xl font-bold">This isn&apos;t your studio</h1>
+        <h1 className="font-display text-2xl font-bold">
+          {owner.reason === "unavailable" ? "Studio access is temporarily unavailable" : "This isn’t your studio"}
+        </h1>
         <p className="mt-4 text-soft">{owner.message}</p>
         <p className="mt-2 text-sm text-soft">Signed in as {user.email}.</p>
         <div className="mt-6 flex items-center justify-center gap-4 text-sm">
