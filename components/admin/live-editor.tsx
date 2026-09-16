@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { Reorder } from "framer-motion";
 import { InsertZone } from "./insert-zone";
@@ -155,7 +156,7 @@ interface LiveEditorProps {
 export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const isProject = kind === "project";
   const isNew = !initial;
-  const [formState, action] = useFormState(isProject ? saveProject : saveJournal, initialState);
+  const [formState, action] = useActionState(isProject ? saveProject : saveJournal, initialState);
 
   // Core content states
   const [blocks, setBlocks] = useState<Block[]>(initial?.blocks ?? []);

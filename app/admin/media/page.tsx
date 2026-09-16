@@ -5,7 +5,7 @@ import type { MediaRow } from "@/lib/types";
 import { QueryError } from "@/components/admin/query-error";
 
 export default async function AdminMediaPage() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data: media, error } = await supabase
     .from("media")
     .select("*")

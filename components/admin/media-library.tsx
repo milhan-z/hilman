@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { Field, TextInput, inputCls } from "./fields";
 import { uploadToCloudinary } from "./upload";
 import {
@@ -153,7 +154,7 @@ type DeleteStage =
 
 function MediaCard({ item }: { item: MediaRow }) {
   const router = useRouter();
-  const [state, action] = useFormState(updateMediaMeta, initialState);
+  const [state, action] = useActionState(updateMediaMeta, initialState);
   const [copied, setCopied] = useState(false);
   const [stage, setStage] = useState<DeleteStage>({ step: "idle" });
   const src = item.kind === "image" ? mediaSrc(item.public_id, { width: 400 }) : null;

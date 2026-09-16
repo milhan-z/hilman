@@ -10,14 +10,15 @@ const FILTERS: { key: string; label: string; statuses: MessageStatus[] }[] = [
   { key: "all", label: "All", statuses: ["new", "read", "actioned", "archived"] },
 ];
 
-export default async function AdminMessagesPage({
-  searchParams,
-}: {
-  searchParams: { view?: string };
-}) {
+export default async function AdminMessagesPage(
+  props: {
+    searchParams: Promise<{ view?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const active = FILTERS.find((f) => f.key === searchParams.view) ?? FILTERS[0];
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data, error } = await supabase
     .from("messages")
     .select("*")

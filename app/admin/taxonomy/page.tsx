@@ -3,7 +3,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { STREAMS } from "@/lib/types";
 
 export default async function AdminTaxonomyPage() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const [{ data: tags }, { data: categories }] = await Promise.all([
     supabase.from("tags").select("*").order("name"),
     supabase.from("categories").select("*").order("sort_order"),

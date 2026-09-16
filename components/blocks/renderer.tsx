@@ -15,7 +15,7 @@ import type { ReactNode } from "react";
    components/admin/block-editors.tsx.
    ───────────────────────────────────────────────────────── */
 
-export type BlockFC = (props: { data: Record<string, any> }) => JSX.Element | null;
+export type BlockFC = (props: { data: Record<string, any> }) => React.JSX.Element | null;
 
 const HeadingBlock: BlockFC = ({ data }) => {
   const level = data.level === 4 ? "h4" : data.level === 3 ? "h3" : "h2";
@@ -232,7 +232,7 @@ export function BlockRenderer({ blocks }: { blocks: Block[] }) {
           const Renderer = renderers[block.type];
           if (!Renderer) return null;
           return (
-            <div key={block.id} className={getBlockLayoutClasses(block.type, block.data ?? {})}>
+            <div key={block.id} id={`block-${block.id}`} className={cn("scroll-mt-24", getBlockLayoutClasses(block.type, block.data ?? {}))}>
               <Renderer data={block.data ?? {}} />
             </div>
           );

@@ -7,6 +7,7 @@ import {
 import { InitPagesButton } from "@/components/admin/init-pages-button";
 import { PAGE_SCHEMAS } from "@/components/admin/page-schemas";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { PROFILE_DEFAULTS, resolveProfileData } from "@/lib/profile";
 
 const PUBLIC_PATH: Record<string, string> = {
   home: "/",
@@ -14,9 +15,10 @@ const PUBLIC_PATH: Record<string, string> = {
   connect: "/connect",
 };
 
-export default async function PageEditorPage({ params }: { params: { slug: string } }) {
+export default async function PageEditorPage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const schema = PAGE_SCHEMAS[params.slug];
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data: page, error } = await supabase
     .from("pages")
     .select("*")
@@ -63,9 +65,12 @@ export default async function PageEditorPage({ params }: { params: { slug: strin
 
       {schema ? (
         <StructuredPageEditor
+          key={page.slug}
           schema={schema}
           title={page.title}
           data={page.data ?? {}}
+          initialData={resolveProfileData(page.slug, page.data ?? {})}
+          preserveEmptyFields={Object.keys(PROFILE_DEFAULTS[page.slug] ?? {})}
           previewHref={PUBLIC_PATH[page.slug]}
         />
       ) : (

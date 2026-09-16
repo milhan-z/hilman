@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function AdminProjectsPage() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data: projects, error } = await supabase
     .from("projects")
     .select("id, title, slug, stream, status, featured, year, sort_order")

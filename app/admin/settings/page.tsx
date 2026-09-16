@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, type Settings } from "@/lib/types";
 import { QueryError } from "@/components/admin/query-error";
 
 export default async function AdminSettingsPage() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data, error } = await supabase.from("settings").select("key, value");
   const map = Object.fromEntries((data ?? []).map((r) => [r.key, r.value]));
   const settings = { ...DEFAULT_SETTINGS, ...map } as Settings;

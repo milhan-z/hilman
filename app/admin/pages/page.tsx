@@ -10,7 +10,7 @@ const PUBLIC_PATH: Record<string, string> = {
 };
 
 export default async function AdminPagesPage() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data: pages, error } = await supabase
     .from("pages")
     .select("slug, title, updated_at")

@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function AdminJournalPage() {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data: posts, error } = await supabase
     .from("journal_posts")
     .select("id, title, slug, status, featured, published_at, updated_at")

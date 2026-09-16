@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * unauthenticated visitors to /admin/login. RLS is the real enforcement —
  * this is just the front door.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -35,15 +35,23 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isLogin = pathname.startsWith("/admin/login");
 
+  // Redirects must carry refreshed cookies too; otherwise the browser keeps
+  // using an expired session after the proxy has successfully refreshed it.
+  const redirectWithCookies = (target: URL) => {
+    const redirect = NextResponse.redirect(target);
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
+  };
+
   if (!user && !isLogin) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/admin/login";
-    return NextResponse.redirect(loginUrl);
+    return redirectWithCookies(loginUrl);
   }
   if (user && isLogin) {
     const adminUrl = request.nextUrl.clone();
     adminUrl.pathname = "/admin";
-    return NextResponse.redirect(adminUrl);
+    return redirectWithCookies(adminUrl);
   }
   return response;
 }

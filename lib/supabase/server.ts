@@ -3,8 +3,8 @@ import { cookies } from "next/headers";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config";
 
 /** Session-aware client for Server Components and Server Actions (admin). */
-export function createServerSupabase() {
-  const cookieStore = cookies();
+export async function createServerSupabase() {
+  const cookieStore = await cookies();
   return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
       getAll() {
@@ -16,7 +16,7 @@ export function createServerSupabase() {
             cookieStore.set(name, value, options)
           );
         } catch {
-          // Called from a Server Component — middleware refreshes sessions instead.
+          // Called from a Server Component — proxy refreshes sessions instead.
         }
       },
     },

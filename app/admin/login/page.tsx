@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { signIn, type ActionState } from "../actions";
 
 const initialState: ActionState = { status: "idle" };
@@ -19,7 +20,7 @@ function SubmitButton() {
 }
 
 export default function LoginPage() {
-  const [state, action] = useFormState(signIn, initialState);
+  const [state, action] = useActionState(signIn, initialState);
 
   return (
     <div className="dotgrid flex min-h-screen items-center justify-center px-5">

@@ -4,8 +4,9 @@ import { LiveEditor } from "@/components/admin/live-editor";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { Block } from "@/lib/types";
 
-export default async function ProjectEditorPage({ params }: { params: { id: string } }) {
-  const supabase = createServerSupabase();
+export default async function ProjectEditorPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createServerSupabase();
   const isNew = params.id === "new";
 
   let initial = null;

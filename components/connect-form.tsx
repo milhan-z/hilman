@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { sendMessage, type ConnectState } from "@/app/(site)/connect/actions";
 
 const labelCls = "mb-1.5 block font-mono text-2xs uppercase tracking-widest text-faint";
@@ -21,7 +22,10 @@ function SubmitButton() {
 }
 
 export function ConnectForm() {
-  const [state, action] = useFormState(sendMessage, initialState);
+  const [state, action] = useActionState(sendMessage, initialState);
+  // React 19 resets uncontrolled action forms after resolution, including an
+  // error result. Keep the visitor's note intact so a failed send is retryable.
+  const [fields, setFields] = useState({ name: "", email: "", body: "" });
 
   if (state.status === "success") {
     return (
@@ -48,7 +52,7 @@ export function ConnectForm() {
           <label htmlFor="name" className={labelCls}>
             Name
           </label>
-          <input id="name" name="name" required maxLength={120} autoComplete="name" className={inputCls} />
+          <input id="name" name="name" value={fields.name} onChange={(event) => setFields((value) => ({ ...value, name: event.target.value }))} required maxLength={120} autoComplete="name" className={inputCls} />
         </div>
         <div>
           <label htmlFor="email" className={labelCls}>
@@ -57,6 +61,8 @@ export function ConnectForm() {
           <input
             id="email"
             name="email"
+            value={fields.email}
+            onChange={(event) => setFields((value) => ({ ...value, email: event.target.value }))}
             type="email"
             required
             maxLength={200}
@@ -72,6 +78,8 @@ export function ConnectForm() {
         <textarea
           id="body"
           name="body"
+          value={fields.body}
+          onChange={(event) => setFields((value) => ({ ...value, body: event.target.value }))}
           required
           rows={6}
           maxLength={5000}
