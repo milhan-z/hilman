@@ -244,7 +244,14 @@ export function ContentDirectory({
         </p>
       )}
 
-      <ul className="space-y-2.5">
+      {/* One grouped list, not a stack of cards.
+          A bordered, shadowed, rounded rectangle around every row is a web
+          page's way of saying "these are separate things". On a phone it wastes
+          8px of gutter per item, doubles the visible lines, and makes six
+          projects look like six adverts. An app draws one surface and separates
+          the rows with a hairline — which is also what makes the whole row feel
+          like a single target. */}
+      <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
         {visible.map((item) => {
           const isSelected = selected.includes(item.id);
           const busy = busyId === item.id;
@@ -253,8 +260,8 @@ export function ContentDirectory({
             <li
               key={item.id}
               className={cn(
-                "rounded-lg border bg-surface shadow-card transition-colors",
-                isSelected ? "border-hl bg-hl-soft/15" : "border-line",
+                "transition-colors",
+                isSelected && "bg-hl-soft/15",
                 busy && "opacity-60"
               )}
             >
@@ -281,7 +288,7 @@ export function ContentDirectory({
                 <Link
                   href={`/admin/${kind === "project" ? "projects" : "journal"}/${item.id}`}
                   prefetch={false}
-                  className="flex min-h-[68px] min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5"
+                  className="flex min-h-[68px] min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 transition-colors active:bg-card-hover"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
@@ -308,7 +315,7 @@ export function ContentDirectory({
               </div>
 
               {item.hiddenReasons?.length ? (
-                <div className="border-t border-dashed border-line px-3.5 pb-3 pt-2">
+                <div className="px-3.5 pb-3">
                   <HiddenNotice reasons={item.hiddenReasons} compact />
                 </div>
               ) : null}
@@ -317,7 +324,7 @@ export function ContentDirectory({
         })}
 
         {visible.length === 0 && (
-          <li className="rounded-lg border border-dashed border-line-strong p-8 text-center text-sm text-faint">
+          <li className="p-8 text-center text-sm text-faint">
             {resolved.length === 0
               ? `Nothing here yet. Tap + New to start one.`
               : "Nothing matches that."}

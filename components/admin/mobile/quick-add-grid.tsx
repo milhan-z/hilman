@@ -14,7 +14,7 @@ import { QuickCreateSheet } from "./quick-create-sheet";
  */
 
 const TILE =
-  "flex min-h-[68px] flex-col justify-center gap-0.5 rounded-lg border border-line bg-surface px-3.5 text-left shadow-card transition-colors hover:border-pen active:bg-card-hover";
+  "flex min-h-[68px] flex-col justify-center gap-0.5 rounded-lg border border-line bg-surface px-3.5 text-left shadow-card transition-[background-color,transform] duration-[120ms] hover:border-pen active:scale-[0.98] active:bg-card-hover";
 
 export function QuickAddGrid() {
   const [noteOpen, setNoteOpen] = useState(false);

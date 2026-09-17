@@ -40,6 +40,7 @@ export type BlockType =
   | "button"
   | "link"
   | "file"
+  | "html"
   | "custom";
 
 export type OwnerType = "project" | "journal" | "page";
@@ -67,6 +68,7 @@ export const BLOCK_HINTS: Record<BlockType, string> = {
   button: "{ label, href, variant: 'pen'|'ghost' }",
   link: "{ url, title, description, thumbnail? }",
   file: "{ public_id | src, filename, size? }",
+  html: "{ html } — pasted markup, sanitised before it is stored or shown",
   custom: "{ component, props } — see components/lab/registry",
 };
 

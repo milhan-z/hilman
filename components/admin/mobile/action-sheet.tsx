@@ -34,7 +34,7 @@ export interface ActionItem {
 }
 
 const ROW =
-  "flex min-h-[52px] w-full items-center justify-between gap-3 rounded-md border px-3.5 text-left text-sm font-medium transition-colors";
+  "flex min-h-[52px] w-full items-center justify-between gap-3 rounded-md border px-3.5 text-left text-sm font-medium transition-[background-color,transform] duration-[120ms] active:scale-[0.99] active:bg-card-hover";
 
 export function ActionSheet({
   open,

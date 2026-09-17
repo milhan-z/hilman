@@ -54,6 +54,7 @@ export function MediaPickerSheet({
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<MediaRow[]>([]);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const cameraInput = useRef<HTMLInputElement>(null);
@@ -71,6 +72,10 @@ export function MediaPickerSheet({
       let query = sb
         .from("media")
         .select("id, public_id, kind, alt, title, folder, created_at")
+        // This sheet adds photographs. A PDF rendered as a grey "File" tile is
+        // not something anyone is trying to put in an image block, and it used
+        // to take up a slot in the grid.
+        .eq("kind", "image")
         .order("created_at", { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
 
@@ -115,27 +120,51 @@ export function MediaPickerSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  /** A file straight off the device: kept here first, uploaded afterwards. */
+  /**
+   * Files straight off the device: kept here first, uploaded afterwards.
+   *
+   * One file failing does not abandon the rest, and it does not pretend the
+   * rest is all there was. Choosing six photos and silently getting five is
+   * the kind of quiet loss that is only noticed weeks later.
+   */
   async function keepFiles(files: FileList | null) {
     const chosen = Array.from(files ?? []);
     if (chosen.length === 0) return;
 
     setBusy(true);
     setError(null);
-    const refs: { ref: string }[] = [];
+    setProgress({ done: 0, total: chosen.length });
 
-    for (const file of chosen) {
+    const refs: { ref: string }[] = [];
+    const failures: string[] = [];
+
+    for (const [index, file] of chosen.entries()) {
+      setProgress({ done: index, total: chosen.length });
       const result = await stashMedia(file);
-      if (!result.ok) {
-        setError(result.reason);
-        break;
-      }
-      refs.push({ ref: result.ref });
+      if (result.ok) refs.push({ ref: result.ref });
+      else failures.push(result.reason);
       if (!multiple) break;
     }
 
     setBusy(false);
-    if (refs.length === 0) return;
+    setProgress(null);
+
+    if (refs.length === 0) {
+      setError(failures[0] ?? "None of those could be kept.");
+      return;
+    }
+
+    if (failures.length > 0) {
+      // Something was kept and something was not. Say both, and stay open so
+      // the missing one can be tried again.
+      setError(
+        `${refs.length} ${refs.length === 1 ? "photo" : "photos"} added. ` +
+          `${failures.length} couldn't be kept — ${failures[0]}`
+      );
+      onPick(refs);
+      void flushOutbox();
+      return;
+    }
 
     onPick(refs);
     // If there is a signal this finishes within the second, and the
@@ -245,6 +274,12 @@ export function MediaPickerSheet({
           }}
         />
 
+        {progress && (
+          <p role="status" className="rounded border border-hl/50 bg-hl-soft/20 px-3 py-2 text-sm text-soft">
+            Keeping photos… {progress.done + 1} of {progress.total}
+          </p>
+        )}
+
         {error && (
           <p role="alert" className="rounded border border-red/40 bg-red-soft/20 px-3 py-2 text-sm text-red">
             {error}
@@ -273,7 +308,8 @@ export function MediaPickerSheet({
           ) : (
             <ul className="grid grid-cols-3 gap-2">
               {rows.map((row) => {
-                const isSelected = selected.some((item) => item.id === row.id);
+                const order = selected.findIndex((item) => item.id === row.id);
+                const isSelected = order !== -1;
                 const src = row.kind === "image" ? mediaSrc(row.public_id, { width: 240 }) : null;
                 // The name people gave it, not the path the CDN stores it at.
                 const label = row.title || row.alt || "Untitled photo";
@@ -287,7 +323,7 @@ export function MediaPickerSheet({
                       type="button"
                       onClick={() => toggle(row)}
                       aria-pressed={multiple ? isSelected : undefined}
-                      aria-label={label}
+                      aria-label={multiple && isSelected ? `${label} — chosen ${order + 1}` : label}
                       className={cn(
                         "relative block aspect-square w-full overflow-hidden rounded-md border transition-colors",
                         isSelected ? "border-hl ring-2 ring-hl" : "border-line hover:border-pen"
@@ -310,13 +346,20 @@ export function MediaPickerSheet({
                         </span>
                       )}
                       {isSelected && (
+                        // The position, not a tick. In a gallery the order the
+                        // photos were chosen is the order they will appear, and
+                        // six identical checkmarks say nothing about that.
                         <span
                           aria-hidden
-                          className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-hl text-hl-ink"
+                          className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-hl text-2xs font-bold text-hl-ink"
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
+                          {multiple ? (
+                            order + 1
+                          ) : (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
                         </span>
                       )}
                     </button>

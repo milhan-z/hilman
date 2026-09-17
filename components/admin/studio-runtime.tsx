@@ -85,7 +85,23 @@ export function StudioRuntime() {
     if (process.env.NODE_ENV !== "production") {
       void navigator.serviceWorker
         .getRegistrations()
-        .then((registrations) => Promise.all(registrations.map((r) => r.unregister())))
+        // Only this studio's worker. Unregistering everything on the origin
+        // would take out any other worker that happens to share localhost —
+        // another project on the same port, a tool running alongside.
+        .then((registrations) =>
+          Promise.all(
+            registrations
+              .filter((registration) => {
+                const script =
+                  registration.active?.scriptURL ??
+                  registration.installing?.scriptURL ??
+                  registration.waiting?.scriptURL ??
+                  "";
+                return script.endsWith("/sw.js");
+              })
+              .map((registration) => registration.unregister())
+          )
+        )
         .then(async (removed) => {
           if (!removed.some(Boolean)) return;
           // Its caches outlive it, and they hold the stale chunks.

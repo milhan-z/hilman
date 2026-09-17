@@ -149,3 +149,64 @@ export function normalisePositions<T extends { position: number }>(items: readon
 export function describePosition(index: number, total: number): string {
   return `Position ${index + 1} of ${total}`;
 }
+
+/* ── scrolling the page while dragging a block ────────────── */
+
+/**
+ * How close to an edge a finger has to be before the page starts moving.
+ *
+ * Wide enough to reach without precision, narrow enough that an ordinary drop
+ * near the bottom of the screen does not send the document flying.
+ */
+export const EDGE_ZONE_PX = 88;
+
+/** Fastest the page moves per animation frame, at the very edge. */
+export const EDGE_MAX_SPEED_PX = 14;
+
+export interface EdgeScrollSample {
+  /** Pointer position in viewport coordinates. */
+  pointerY: number;
+  viewportHeight: number;
+  /** Chrome covering the top — the editor's fixed header. */
+  topInset?: number;
+  /** Chrome covering the bottom — the save bar. */
+  bottomInset?: number;
+  zone?: number;
+  maxSpeed?: number;
+}
+
+/**
+ * Pixels to scroll this frame: negative up, positive down, zero in the middle.
+ *
+ * Framer Motion has no auto-scroll of its own — verified by inspection of the
+ * installed version, which contains no such code — so a block dragged to the
+ * bottom of the screen simply stops there, and a twenty-block document cannot
+ * be reordered end to end in one gesture. This is the arithmetic behind the
+ * smallest fix: while a drag is in progress, move the page under the finger.
+ *
+ * The speed ramps with proximity rather than switching on. A constant speed
+ * makes the document lurch the moment you cross an invisible line; ramping
+ * means edging closer goes faster and you can stop precisely where you meant.
+ */
+export function edgeScrollVelocity({
+  pointerY,
+  viewportHeight,
+  topInset = 0,
+  bottomInset = 0,
+  zone = EDGE_ZONE_PX,
+  maxSpeed = EDGE_MAX_SPEED_PX,
+}: EdgeScrollSample): number {
+  const top = topInset + zone;
+  const bottom = viewportHeight - bottomInset - zone;
+
+  if (pointerY < top) {
+    // 0 at the inner edge of the zone, 1 at the chrome itself and beyond.
+    const depth = Math.min(1, (top - pointerY) / zone);
+    return -Math.round(depth * maxSpeed);
+  }
+  if (pointerY > bottom) {
+    const depth = Math.min(1, (pointerY - bottom) / zone);
+    return Math.round(depth * maxSpeed);
+  }
+  return 0;
+}

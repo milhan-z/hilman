@@ -5,6 +5,7 @@ import { YouTubeFacade } from "../youtube-facade";
 import { CustomBlock } from "../lab/registry";
 import { fileSrc } from "@/lib/cloudinary";
 import { parseEmbed } from "@/lib/embed";
+import { sanitizeStudioHtml } from "@/lib/studio-html";
 import { cn } from "@/lib/utils";
 import type { Block, BlockType } from "@/lib/types";
 import type { ReactNode } from "react";
@@ -191,6 +192,25 @@ export const renderers: Record<BlockType, BlockFC> = {
   button: ButtonBlock,
   link: LinkBlock,
   file: FileBlock,
+  /**
+   * Markup the owner pasted, rendered after being put through the allowlist.
+   *
+   * Sanitised here as well as at the point it was stored. Storage-time
+   * sanitising is what actually protects the site; this second pass covers
+   * rows written before that existed, and means the public page cannot be made
+   * to execute anything even if something malformed reached the database by
+   * another route.
+   */
+  html: ({ data }) => {
+    const clean = sanitizeStudioHtml(String(data.html ?? ""));
+    if (!clean.trim()) return <></>;
+    return (
+      <div
+        className="prose-h my-6 max-w-none"
+        dangerouslySetInnerHTML={{ __html: clean }}
+      />
+    );
+  },
   custom: ({ data }) => <CustomBlock component={data.component} props={data.props} />,
 };
 

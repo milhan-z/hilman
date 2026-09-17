@@ -8,6 +8,7 @@ import { isPendingRef } from "@/lib/studio-media-refs";
 import { discardPendingMedia } from "@/lib/studio-local/media";
 import { useMediaSelector } from "./media-library-context";
 import { mediaSrc } from "@/lib/cloudinary";
+import { HtmlBlockEditor } from "./html-block-editor";
 import type { BlockType } from "@/lib/types";
 
 /* ─────────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ export const BLOCK_TYPES: { type: BlockType; label: string }[] = [
   { type: "button", label: "Button" },
   { type: "link", label: "Link card" },
   { type: "file", label: "File" },
+  { type: "html", label: "Custom HTML" },
   { type: "custom", label: "Custom (experiment)" },
 ];
 
@@ -47,6 +49,7 @@ export const DEFAULT_DATA: Record<BlockType, Record<string, any>> = {
   button: { label: "", href: "", variant: "pen" },
   link: { url: "", title: "", description: "" },
   file: { public_id: "", filename: "" },
+  html: { html: "" },
   custom: { component: "ink-field", props: {} },
 };
 
@@ -66,6 +69,10 @@ export function blockSummary(type: BlockType, data: Record<string, any>): string
     case "button": return data.label || "(no label)";
     case "link": return data.title || data.url || "(no link)";
     case "file": return data.filename || "(no file)";
+    case "html": {
+      const text = String(data.html ?? "").trim();
+      return text ? `${text.slice(0, 60)}${text.length > 60 ? "…" : ""}` : "(empty HTML)";
+    }
     case "custom": return data.component || "(no component)";
   }
 }
@@ -545,6 +552,14 @@ const EDITORS: Record<BlockType, (p: EditorProps) => React.JSX.Element> = {
         </Field>
       </div>
     </div>
+  ),
+  html: ({ data, onChange }) => (
+    <Field
+      label="Custom HTML"
+      hint="Structure and text only. Scripts, styles and frames are removed before this is stored."
+    >
+      <HtmlBlockEditor value={data.html ?? ""} onChange={(html) => onChange({ ...data, html })} tall />
+    </Field>
   ),
   custom: ({ data, onChange }) => (
     <div className="space-y-3">

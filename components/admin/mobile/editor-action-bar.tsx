@@ -67,8 +67,11 @@ export function EditorActionBar({
                 disabled={busy || Boolean(blockedReason)}
                 onClick={() => onAction(action)}
                 className={cn(
-                  "min-h-[52px] rounded-md px-4 text-sm font-semibold transition-opacity",
-                  "active:opacity-80 disabled:opacity-50",
+                  "min-h-[52px] rounded-md px-4 text-sm font-semibold",
+                  // Colour and scale, 120ms: the button has to look pressed in
+                  // the same frame as the finger, not after a transition.
+                  "transition-[opacity,transform] duration-[120ms]",
+                  "active:scale-[0.98] active:opacity-90 disabled:opacity-50",
                   action.emphasis === "accent"
                     ? "bg-hl text-hl-ink shadow-card"
                     : "border border-line-strong bg-surface text-ink"

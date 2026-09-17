@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { checkOwner } from "@/lib/owner";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { normaliseFields } from "@/lib/studio-content";
+import { sanitizeStudioHtml } from "@/lib/studio-html";
 import { getJournalQualityIssues, getProjectQualityIssues } from "@/lib/content-quality";
 import {
   describeMalformedMutation,
@@ -104,7 +105,15 @@ async function applyMutation(
 
   const entity: SyncEntity = mutation.entity;
   const fields = normaliseFields(entity, mutation.payload.fields);
-  const blocks = mutation.payload.blocks;
+  // Sanitised here, on the server, before anything is written down.
+  //
+  // The editor sanitises its preview too, but that is a courtesy to whoever is
+  // typing — it runs in a browser, and a browser is the one part of this that
+  // an attacker controls. This is the boundary where it counts: whatever ends
+  // up in the database has already been through the allowlist, so every reader
+  // of that row — the public page, an export, a future feature — gets markup
+  // that cannot execute.
+  const blocks = sanitiseHtmlBlocks(mutation.payload.blocks);
 
   const blockError = describeMalformedBlocks(blocks);
   if (blockError)
@@ -225,6 +234,21 @@ async function readServerDocument(
     blocks: (blocks.data as Block[]) ?? [],
     tagIds: (tags.data ?? []).map((t: any) => String(t.tag_id)),
   };
+}
+
+/**
+ * Runs every `html` block's markup through the studio's allowlist.
+ *
+ * Returns a new list; the caller's payload is not modified in place, because
+ * the same object is also what the conflict machinery reports back.
+ */
+function sanitiseHtmlBlocks(blocks: Block[]): Block[] {
+  if (!Array.isArray(blocks)) return blocks;
+  return blocks.map((block) => {
+    if (block?.type !== "html") return block;
+    const raw = String((block.data as Record<string, unknown> | undefined)?.html ?? "");
+    return { ...block, data: { ...(block.data ?? {}), html: sanitizeStudioHtml(raw) } };
+  });
 }
 
 function describeMalformedBlocks(blocks: unknown): string | null {

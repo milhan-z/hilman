@@ -101,10 +101,13 @@ export function AddBlockSheet({
   open,
   onClose,
   onInsert,
+  onImport,
 }: {
   open: boolean;
   onClose: () => void;
   onInsert: (type: BlockType) => void;
+  /** Hands over to the template/import sheet. */
+  onImport?: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
 
@@ -161,6 +164,25 @@ export function AddBlockSheet({
             </li>
           ))}
         </ul>
+
+        {onImport && (
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onImport();
+            }}
+            className="flex min-h-12 w-full items-center justify-between rounded-md border border-line px-3.5 text-left text-sm font-medium text-soft transition-colors hover:text-ink active:bg-card-hover"
+          >
+            <span>
+              Template or import
+              <span className="mt-0.5 block text-xs font-normal text-faint">
+                Start from a structure, or paste one in
+              </span>
+            </span>
+            <span aria-hidden>›</span>
+          </button>
+        )}
 
         <button
           type="button"

@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  EDGE_MAX_SPEED_PX,
+  EDGE_ZONE_PX,
   LONG_PRESS_MS,
   SHEET_DISMISS_PX,
   describePosition,
   distanceBetween,
+  edgeScrollVelocity,
   longPressCancelled,
   moveItem,
   normalisePositions,
@@ -134,4 +137,44 @@ test("a list already in order is left alone object-for-object", () => {
 test("positions are announced from one, not from zero", () => {
   assert.equal(describePosition(0, 7), "Position 1 of 7");
   assert.equal(describePosition(6, 7), "Position 7 of 7");
+});
+
+/* ── scrolling the page while dragging ────────────────────── */
+
+const viewportHeight = 844;
+const scroll = (pointerY: number, extra: Record<string, number> = {}) =>
+  edgeScrollVelocity({ pointerY, viewportHeight, ...extra });
+
+test("the middle of the screen never scrolls", () => {
+  assert.equal(scroll(400), 0);
+  assert.equal(scroll(viewportHeight / 2), 0);
+});
+
+test("nearing the bottom scrolls down, nearing the top scrolls up", () => {
+  assert.ok(scroll(viewportHeight - 10) > 0);
+  assert.ok(scroll(10) < 0);
+});
+
+test("speed ramps with proximity rather than switching on", () => {
+  const near = scroll(viewportHeight - EDGE_ZONE_PX + 10);
+  const nearer = scroll(viewportHeight - 20);
+  const edge = scroll(viewportHeight);
+  assert.ok(near > 0 && nearer > near, `${near} then ${nearer}`);
+  assert.ok(edge >= nearer);
+});
+
+test("speed is capped at the edge and beyond it", () => {
+  assert.equal(scroll(viewportHeight + 500), EDGE_MAX_SPEED_PX);
+  assert.equal(scroll(-500), -EDGE_MAX_SPEED_PX);
+});
+
+test("the zones sit inside the app's own chrome", () => {
+  // A finger just below a 100px header is at the top of the document, not in
+  // the scroll-up zone — the zone starts below the header, not below the
+  // screen edge.
+  assert.ok(scroll(150, { topInset: 100 }) < 0);
+  assert.equal(scroll(250, { topInset: 100 }), 0);
+  // And the save bar at the bottom gets the same treatment.
+  assert.equal(scroll(viewportHeight - 96 - EDGE_ZONE_PX - 10, { bottomInset: 96 }), 0);
+  assert.ok(scroll(viewportHeight - 96, { bottomInset: 96 }) > 0);
 });

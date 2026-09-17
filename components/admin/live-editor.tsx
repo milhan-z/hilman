@@ -13,9 +13,12 @@ import { DEFAULT_DATA } from "./block-editors";
 import { templatesFor } from "./block-templates";
 import { ActionSheet, MoreButton, type ActionItem } from "./mobile/action-sheet";
 import { AddBlockSheet } from "./mobile/add-block-sheet";
+import { ImportContentSheet } from "./mobile/import-content-sheet";
+import { useDragEdgeScroll } from "./mobile/use-drag-edge-scroll";
 import { EditorActionBar } from "./mobile/editor-action-bar";
 import { MetadataSheet, MetadataSummary } from "./mobile/metadata-sheet";
 import { StatusLine, useDeviceName } from "./mobile/status-line";
+import { SyncStatusSheet } from "./mobile/sync-status-sheet";
 import { useSyncState } from "./studio-runtime";
 import { Pic } from "../cld-image";
 import { STREAMS, type Stream } from "@/lib/types";
@@ -143,6 +146,22 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const [addBlockAt, setAddBlockAt] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [recovered, setRecovered] = useState<{ snapshot: string; savedAt: string } | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+
+  /**
+   * Whether the automatic recovery copy actually reached this device.
+   *
+   * writeDraft() returns false when the browser stored nothing — Safari's
+   * private mode, site data switched off, a full quota. The explicit "Save
+   * changes" path has always checked that; the background write did not, so
+   * the editor could sit there implying your work was recoverable when it was
+   * nowhere. It is a separate axis from the save/publish state: an edit can be
+   * "Live · Unsaved changes" and still be safely recoverable, or not.
+   */
+  const [recovery, setRecovery] = useState<"idle" | "writing" | "safe" | "failed">("idle");
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   /* ── dragging a block ──
      Motion reorders its own list many times a second while a finger is moving.
@@ -156,8 +175,15 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
      down. Everything downstream — dirty state, the local draft, the save bar —
      is unchanged, and still only sees a finished edit. */
   const [preview, setPreview] = useState<Block[] | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const blocks = preview ?? doc.blocks;
+
+  /* Motion does not scroll the page for you, so a drag that reaches the edge
+     of the screen moves the document instead. Only while something is off the
+     ground, and the insets keep the trigger zones clear of the fixed header
+     and the save bar. */
+  useDragEdgeScroll({ active: dragging, topInset: headerHeight, bottomInset: 96 });
 
   const blocked = blockingReason(doc);
   const waitingOnPhoto = hasPendingRefs(doc);
@@ -180,29 +206,87 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     device
   );
 
+  /* ── reserving the fixed header's space ──
+     The header is out of the flow, so the document has to be told how tall it
+     is. Measured rather than hard-coded: the title wraps to two lines on a
+     narrow phone, the status line grows when it carries a note, and a guess
+     would either hide the first paragraph or leave a gap above it. */
+  useEffect(() => {
+    const element = headerRef.current;
+    if (!element) return;
+
+    const root = element.parentElement;
+    const apply = () => {
+      root?.style.setProperty("--editor-header-h", `${element.offsetHeight}px`);
+      setHeaderHeight(element.offsetHeight);
+    };
+
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      root?.style.removeProperty("--editor-header-h");
+    };
+  }, []);
+
   /* ── keeping the local copy current ──
      Anything the site does not have is written down after a pause in typing.
      This is the safety net under "you can just leave": there is no
      beforeunload prompt any more, because there is nothing to lose. */
+  const persistRecovery = useCallback(async () => {
+    setRecovery("writing");
+    const stored = await writeDraft({
+      key: draftKey,
+      entity: kind,
+      entityId: initial?.id ?? null,
+      localId: draftKey,
+      value: { snapshot, savedAt: new Date().toISOString() },
+      baseUpdatedAt: initial?.updated_at ?? null,
+      editedAt: new Date().toISOString(),
+      label: doc.title.trim() || `Untitled ${kind}`,
+    });
+    // The answer is used, not discarded. This is the whole point of the change.
+    setRecovery(stored ? "safe" : "failed");
+  }, [draftKey, kind, initial?.id, initial?.updated_at, snapshot, doc.title]);
+
   useEffect(() => {
     if (snapshot === synced) {
       void deleteDraft(draftKey);
+      setRecovery("idle");
       return;
     }
-    const timer = setTimeout(() => {
-      void writeDraft({
-        key: draftKey,
-        entity: kind,
-        entityId: initial?.id ?? null,
-        localId: draftKey,
-        value: { snapshot, savedAt: new Date().toISOString() },
-        baseUpdatedAt: initial?.updated_at ?? null,
-        editedAt: new Date().toISOString(),
-        label: doc.title.trim() || `Untitled ${kind}`,
-      });
-    }, PERSIST_DEBOUNCE_MS);
+    const timer = setTimeout(() => void persistRecovery(), PERSIST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [snapshot, synced, draftKey, kind, initial?.id, initial?.updated_at, doc.title]);
+  }, [snapshot, synced, draftKey, persistRecovery]);
+
+  /* ── the moment the app might not come back ──
+     Being switched away from is the likeliest way this editor stops existing,
+     and the debounce may still be counting. Write immediately instead of
+     hoping for another 400ms. */
+  useEffect(() => {
+    if (snapshot === synced) return;
+    const flush = () => {
+      if (document.visibilityState === "hidden") void persistRecovery();
+    };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [snapshot, synced, persistRecovery]);
+
+  /* ── the only case worth interrupting someone over ──
+     Not "you have unsaved changes" — that is normal here and the recovery copy
+     handles it. This fires only when the current state exists nowhere but this
+     tab, which is the one situation where closing it genuinely loses writing. */
+  useEffect(() => {
+    if (recovery !== "failed" || snapshot === synced) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [recovery, snapshot, synced]);
 
   /* ── a draft left here last time is offered, never applied ── */
   useEffect(() => {
@@ -515,6 +599,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
    * not on every pixel of movement.
    */
   const beginReorder = (id: string) => {
+    setDragging(true);
     const index = doc.blocks.findIndex((b) => b.id === id);
     setPreview(doc.blocks);
     setAnnouncement(
@@ -532,6 +617,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
    * pressed, like every other change.
    */
   const commitReorder = () => {
+    setDragging(false);
     setPreview((current) => {
       if (!current) return null;
 
@@ -593,6 +679,33 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     patch({ blocks: [...doc.blocks, ...built].map((b, i) => ({ ...b, position: i })) });
   };
 
+  /**
+   * The document as the format the importer accepts.
+   *
+   * Deliberately the same shape, so a document can go out of one entry and
+   * into another — or to a model, and back — without anyone learning the
+   * database's column names. Identity and publication state are left out for
+   * the same reason the importer refuses them.
+   */
+  const exportStudioJson = useCallback(async () => {
+    const payload = JSON.stringify(
+      {
+        version: 1,
+        kind,
+        title: doc.title,
+        blocks: doc.blocks.map((block) => ({ type: block.type, data: block.data ?? {} })),
+      },
+      null,
+      2
+    );
+    try {
+      await navigator.clipboard.writeText(payload);
+      setAnnouncement("Copied as Studio JSON.");
+    } catch {
+      setError("This browser wouldn't let Studio use the clipboard.");
+    }
+  }, [kind, doc.title, doc.blocks]);
+
   const activeBlock = doc.blocks.find((b) => b.id === activeBlockId) ?? null;
   const meta = parsedMeta(doc) as Record<string, any>;
   // The address the server will have given it: slugify(slug) || slugify(title),
@@ -603,6 +716,18 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
 
   const menuItems: ActionItem[] = [
     { id: "details", label: "Details", detail: "Tags, address, images", onSelect: () => setDetailsOpen(true) },
+    {
+      id: "import",
+      label: "Start from template or import",
+      detail: "Templates, Markdown, HTML, Studio JSON",
+      onSelect: () => setImportOpen(true),
+    },
+    {
+      id: "export",
+      label: "Copy as Studio JSON",
+      detail: "The format this editor imports",
+      onSelect: () => void exportStudioJson(),
+    },
     ...(published && publicHref
       ? [{ id: "view", label: "View live", href: publicHref, external: true } as ActionItem]
       : []),
@@ -643,13 +768,33 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   return (
     // dvh, not vh: Safari's toolbar makes vh taller than the space you can
     // actually see, which would push the action bar off the bottom.
-    <div className="flex min-h-[calc(100dvh-7rem)] flex-col">
+    //
+    // The header's measured height is published here as a variable so the
+    // content below can reserve exactly the space it occupies — see the
+    // header comment for why it is fixed rather than sticky.
+    <div
+      className="flex min-h-[calc(100dvh-7rem)] flex-col"
+      style={{ paddingTop: "var(--editor-header-h, 0px)" }}
+    >
       {/* ── app bar ──
-          Compact and persistent. The old header carried a mode switcher that
-          was half its width and meaningless on a phone; that now appears from
-          `sm` up, where there is room for it. */}
-      <header className="sticky top-0 z-20 -mx-4 mb-4 border-b border-line bg-paper/95 px-4 py-2 backdrop-blur sm:-mx-8 sm:px-8">
-        <div className="flex items-center gap-2">
+          Fixed, not sticky, and this is the one place in the studio where the
+          difference matters. A sticky element is still in the document's flow:
+          during iOS rubber-band overscroll the flow itself is dragged, so the
+          header travels with the content it is supposed to be sitting above.
+          A fixed element is attached to the viewport and stays put while the
+          page bounces underneath it — which is what makes this read as app
+          chrome rather than as the top of a web page.
+          Its height is measured and reserved above, so nothing hides behind it. */}
+      <header
+        ref={headerRef}
+        className={cn(
+          "fixed inset-x-0 top-0 z-20 border-b border-line bg-paper/95 backdrop-blur",
+          "pt-[env(safe-area-inset-top)]",
+          "pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]",
+          "pb-2 lg:left-60"
+        )}
+      >
+        <div className="flex items-center gap-2 pt-2">
           <Link
             href={isProject ? "/admin/projects" : "/admin/journal"}
             aria-label="Back"
@@ -685,9 +830,20 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
           <MoreButton onClick={() => setMenuOpen(true)} className="-mr-1.5" />
         </div>
 
-        <div className="flex items-center justify-between gap-3 pb-0.5">
+        {/* Tapping the status is how you ask "where is this, exactly?" — the
+            sheet answers in three lines. The full sync panel stays for the
+            queue itself, which is a different question. */}
+        <button
+          type="button"
+          onClick={() => setSyncOpen(true)}
+          aria-haspopup="dialog"
+          className="-mx-1 flex min-h-8 w-full items-center gap-2 rounded px-1 text-left transition-colors active:bg-card-hover"
+        >
           <StatusLine tone={status.tone}>{status.statusLine}</StatusLine>
-        </div>
+          <span aria-hidden className="text-2xs text-faint">
+            ›
+          </span>
+        </button>
       </header>
 
       {recovered && (
@@ -864,15 +1020,30 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                 </Reorder.Group>
 
                 {blocks.length === 0 && (
-                  <div className="my-5 rounded-lg border border-dashed border-line-strong p-5 text-center">
-                    <p className="text-sm text-soft">Nothing written yet.</p>
-                    <div className="mt-4 grid gap-2 text-left">
+                  /* The empty state is the one moment templates are obviously
+                     useful, so they lead — but "just start typing" stays the
+                     first option, because most of the time that is the answer. */
+                  <div className="my-5 space-y-3">
+                    <p className="text-sm text-soft">
+                      Nothing written yet. How do you want to start?
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => insertBlock("paragraph", 0)}
+                      className="min-h-14 w-full rounded-md border border-hl bg-hl-soft/25 px-3.5 text-left transition-colors active:bg-card-hover"
+                    >
+                      <span className="block text-sm font-semibold text-ink">Blank</span>
+                      <span className="mt-0.5 block text-xs text-faint">Start typing</span>
+                    </button>
+
+                    <div className="grid gap-2">
                       {templatesFor(kind).map((template) => (
                         <button
                           key={template.id}
                           type="button"
                           onClick={() => applyTemplate(template.id)}
-                          className="min-h-12 rounded-md border border-line bg-raise p-3 text-left transition-colors hover:border-pen"
+                          className="min-h-14 rounded-md border border-line bg-raise p-3 text-left transition-colors hover:border-pen active:bg-card-hover"
                         >
                           <span className="block text-sm font-semibold text-ink">{template.name}</span>
                           <span className="mt-0.5 block text-xs leading-relaxed text-soft">
@@ -881,7 +1052,17 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                         </button>
                       ))}
                     </div>
-                    <p className="mt-3 text-xs text-faint">
+
+                    <button
+                      type="button"
+                      onClick={() => setImportOpen(true)}
+                      className="flex min-h-12 w-full items-center justify-between rounded-md border border-line px-3.5 text-sm font-medium text-soft transition-colors hover:border-pen active:bg-card-hover"
+                    >
+                      Import or paste content
+                      <span aria-hidden>›</span>
+                    </button>
+
+                    <p className="text-xs text-faint">
                       Templates only add prompts to replace — they never write claims for you.
                     </p>
                   </div>
@@ -917,6 +1098,19 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         {announcement}
       </p>
 
+      {/* Recovery is a different promise from saving, so it gets its own line
+          rather than being folded into the status. It appears only when it has
+          genuinely failed — saying "recovery copy kept" after every keystroke
+          would be noise, and noise is what makes a real warning invisible. */}
+      {recovery === "failed" && dirty && (
+        <p
+          role="alert"
+          className="sticky bottom-0 z-30 -mx-4 border-t border-red/40 bg-red-soft/20 px-4 py-2 text-sm text-red sm:-mx-8 sm:px-8"
+        >
+          Couldn&apos;t keep a recovery copy on {device}. Keep Studio open until this is saved.
+        </p>
+      )}
+
       <EditorActionBar
         status={status}
         onAction={runAction}
@@ -938,6 +1132,13 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
             Everything here is on the site. Edit anything to get the save options back.
           </p>
         }
+      />
+
+      <SyncStatusSheet
+        open={syncOpen}
+        onClose={() => setSyncOpen(false)}
+        status={status}
+        published={published}
       />
 
       <ActionSheet
@@ -962,6 +1163,26 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         open={addBlockAt !== null}
         onClose={() => setAddBlockAt(null)}
         onInsert={(type) => insertBlock(type, addBlockAt ?? doc.blocks.length)}
+        onImport={() => setImportOpen(true)}
+      />
+
+      {/* Templates and pasted documents both end here: ordinary blocks in the
+          editor's own state. Nothing below reaches the server — publishing is
+          still the only thing that does. */}
+      <ImportContentSheet
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        kind={kind}
+        existing={doc.blocks}
+        onApply={(blocks, imported) => {
+          patch({
+            blocks,
+            // An untitled new document takes the imported title; one that has
+            // been named keeps its name.
+            ...(imported.title && !doc.title.trim() ? { title: imported.title } : {}),
+          });
+          setAnnouncement(`${imported.blocks.length} blocks added.`);
+        }}
       />
 
       <PropertyDrawer

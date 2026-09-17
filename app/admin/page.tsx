@@ -114,13 +114,13 @@ async function Recent() {
   return (
     <section className="space-y-2.5">
       <SectionHeading>Recent</SectionHeading>
-      <ul className="space-y-2">
+      <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
         {rows.map((row) => (
           <li key={`${row.kind}-${row.id}`}>
             <Link
               href={`/admin/${row.kind === "project" ? "projects" : "journal"}/${row.id}`}
               prefetch={false}
-              className="flex min-h-[56px] items-center gap-3 rounded-lg border border-line bg-surface px-3.5 py-2.5 transition-colors hover:border-pen"
+              className="flex min-h-[56px] items-center gap-3 px-3.5 py-2.5 transition-colors active:bg-card-hover"
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-ink">{row.title}</span>

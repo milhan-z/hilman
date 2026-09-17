@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useSwipeDismiss } from "./mobile/use-swipe-dismiss";
+import { useScrollLock } from "./mobile/use-scroll-lock";
 import { cn } from "@/lib/utils";
 
 /**
@@ -54,6 +55,8 @@ export function MobileSheet({
   const panel = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef<HTMLElement | null>(null);
   const swipe = useSwipeDismiss({ onDismiss: onClose });
+  // Holds the page still without shifting the visual viewport. See the hook.
+  useScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
@@ -88,13 +91,13 @@ export function MobileSheet({
     };
 
     document.addEventListener("keydown", onKeyDown, true);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
-      document.body.style.overflow = previousOverflow;
-      restoreFocus.current?.focus?.();
+      // preventScroll: returning focus to the control that opened the sheet
+      // otherwise scrolls it into view, which on a phone means the page moves
+      // by itself the moment a sheet is dismissed.
+      restoreFocus.current?.focus?.({ preventScroll: true });
     };
   }, [open, onClose]);
 

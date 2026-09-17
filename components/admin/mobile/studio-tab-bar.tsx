@@ -225,7 +225,7 @@ function Tab({
   icon: keyof typeof icons;
   active: boolean;
   pressed: boolean;
-  onPress: (href: string) => void;
+  onPress: (href: string | null) => void;
 }) {
   return (
     <Link
@@ -235,6 +235,12 @@ function Tab({
       prefetch
       aria-current={active ? "page" : undefined}
       onPointerDown={() => onPress(href)}
+      // A press that never becomes a navigation — finger slid off, gesture
+      // taken over by the browser — would otherwise leave the tab looking
+      // pressed until some later route change happened to clear it.
+      onPointerUp={() => onPress(null)}
+      onPointerCancel={() => onPress(null)}
+      onPointerLeave={() => onPress(null)}
       className={tabClass(active, pressed)}
     >
       <Icon name={icon} />
