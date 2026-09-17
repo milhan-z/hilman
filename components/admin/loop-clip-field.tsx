@@ -5,6 +5,7 @@ import { MediaCapture } from "./media-capture";
 import { PendingClip } from "./pending-media";
 import { discardPendingMedia } from "@/lib/studio-local/media";
 import { isPendingRef } from "@/lib/studio-media-refs";
+import { resolveLoopClipSrc } from "@/lib/loop-clip";
 
 /**
  * Choosing the video behind a Loop Clip block.
@@ -28,6 +29,7 @@ export function LoopClipField({
   onChange: (v: string) => void;
 }) {
   const pending = isPendingRef(value);
+  const resolvedSrc = resolveLoopClipSrc(value);
 
   return (
     <Field label="Clip">
@@ -38,7 +40,7 @@ export function LoopClipField({
         {value && !pending && (
           <figure className="overflow-hidden rounded-md border border-line bg-raise">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <video src={value} controls muted playsInline className="block max-h-56 w-full bg-n-900" />
+            <video src={resolvedSrc} controls muted playsInline className="block max-h-56 w-full bg-n-900" />
             <figcaption className="flex justify-end px-2 py-1">
               <button
                 type="button"

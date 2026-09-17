@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrowserFrame, PhoneFrame } from "./blocks/media-frames";
 import { cn } from "@/lib/utils";
 import type { LoopClipLayout } from "@/lib/media-layouts";
+import { resolveLoopClipSrc } from "@/lib/loop-clip";
 
 /**
  * A Loop Clip, mounted only once it is close to being seen.
@@ -72,11 +73,13 @@ export function LoopClipFacade({
    * not in the branches below, so a presentation can change what is drawn
    * around a clip and cannot change how it plays or when it loads.
    */
+  const resolvedSrc = resolveLoopClipSrc(src);
+
   const screen = (aspect: string) => (
     <div ref={boxRef} className={cn("relative overflow-hidden bg-n-900", aspect)}>
       {visible && (
         <video
-          src={src}
+          src={resolvedSrc}
           autoPlay
           muted
           loop

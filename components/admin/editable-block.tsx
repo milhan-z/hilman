@@ -4,7 +4,7 @@ import { useRef, useEffect, useState } from "react";
 import { Reorder, useDragControls } from "framer-motion";
 import { BlockDragGrip } from "./mobile/block-drag-grip";
 import { collectPendingRefs } from "@/lib/studio-media-refs";
-import { PendingPhoto } from "./pending-media";
+import { PendingClip, PendingPhoto } from "./pending-media";
 import { renderers } from "../blocks/renderer";
 import { BLOCK_TYPES } from "./block-editors";
 import type { Block, BlockType } from "@/lib/types";
@@ -500,13 +500,17 @@ export function EditableBlock({
         {active && ["heading", "paragraph", "quote", "button"].includes(block.type) ? (
           <div onClick={(e) => e.stopPropagation()}>{renderInlineEditor()}</div>
         ) : stashedPhotos.length > 0 ? (
-          /* The block's picture is still a Blob on this device, so the normal
-             renderer would draw an empty frame. Show the photo itself, and say
+          /* The block's media is still a Blob on this device, so the normal
+             renderer would draw an empty frame. Show the clip/photo itself, and say
              plainly that the site has not got it yet. */
           <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-            {stashedPhotos.map((ref) => (
-              <PendingPhoto key={ref} photoRef={ref} />
-            ))}
+            {stashedPhotos.map((ref) =>
+              block.type === "loop-clip" ? (
+                <PendingClip key={ref} clipRef={ref} />
+              ) : (
+                <PendingPhoto key={ref} photoRef={ref} />
+              )
+            )}
           </div>
         ) : Renderer ? (
           <Renderer data={block.data ?? {}} />

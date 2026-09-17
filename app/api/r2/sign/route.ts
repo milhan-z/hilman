@@ -79,9 +79,12 @@ export async function POST(request: Request) {
   // leaked URL is not a standing invitation.
   const uploadUrl = await getSignedUrl(r2Client(), command, { expiresIn: 300 });
 
+  const isR2Dev = !R2.publicUrl || /\.r2\.dev/i.test(R2.publicUrl);
+  const publicUrl = isR2Dev ? `/api/r2/media/${key}` : `${R2.publicUrl}/${key}`;
+
   return NextResponse.json({
     uploadUrl,
     key,
-    publicUrl: `${R2.publicUrl}/${key}`,
+    publicUrl,
   });
 }

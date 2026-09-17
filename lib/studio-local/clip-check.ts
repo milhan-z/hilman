@@ -57,13 +57,17 @@ const readableSeconds = (seconds: number) => `${Math.round(seconds)}s`;
  * `loadedmetadata` means yes, and hands back the duration for free;
  * `error` means no, for whatever reason this browser has.
  */
-function probePlayback(blob: Blob): Promise<{ ok: true; duration: number } | { ok: false }> {
+function probePlayback(
+  blob: Blob,
+): Promise<{ ok: true; duration: number } | { ok: false; reason: "error" | "timeout" }> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
     const url = URL.createObjectURL(blob);
     let settled = false;
 
-    const finish = (result: { ok: true; duration: number } | { ok: false }) => {
+    const finish = (
+      result: { ok: true; duration: number } | { ok: false; reason: "error" | "timeout" },
+    ) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -73,16 +77,17 @@ function probePlayback(blob: Blob): Promise<{ ok: true; duration: number } | { o
       resolve(result);
     };
 
-    // A file that is neither decodable nor erroring within a few seconds is
-    // treated as unplayable rather than left open — this runs before a photo
-    // even reaches the outbox, and must not hang the "Camera" button.
-    const timer = setTimeout(() => finish({ ok: false }), 5000);
+    // A file that is neither decodable nor erroring within 15 seconds is
+    // treated as unverifiable — distinct from a genuine decode error.
+    const timer = setTimeout(() => finish({ ok: false, reason: "timeout" }), 15000);
 
     video.preload = "metadata";
     video.muted = true;
+    video.playsInline = true;
     video.onloadedmetadata = () => finish({ ok: true, duration: video.duration || 0 });
-    video.onerror = () => finish({ ok: false });
+    video.onerror = () => finish({ ok: false, reason: "error" });
     video.src = url;
+    video.load();
   });
 }
 
@@ -120,10 +125,11 @@ export async function checkClipFile(file: File): Promise<ClipCheckResult> {
 
   const played = await probePlayback(file);
   if (!played.ok) {
-    return {
-      ok: false,
-      reason: "This phone couldn't play that file back, so it likely won't play for visitors either. Try re-exporting it as MP4.",
-    };
+    const reason =
+      played.reason === "timeout"
+        ? "Studio couldn't verify this clip in time. Try again, or re-export it as MP4."
+        : "This phone couldn't play that file back, so it likely won't play for visitors either. Try re-exporting it as MP4.";
+    return { ok: false, reason };
   }
   if (played.duration > MAX_CLIP_SECONDS) {
     return {

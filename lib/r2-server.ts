@@ -24,7 +24,7 @@ export const R2 = {
 };
 
 export const r2ServerConfigured = Boolean(
-  R2.accountId && R2.accessKeyId && R2.secretAccessKey && R2.bucket && R2.publicUrl
+  R2.accountId && R2.accessKeyId && R2.secretAccessKey && R2.bucket
 );
 
 let client: S3Client | null = null;

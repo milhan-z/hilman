@@ -5,6 +5,7 @@ import { BLOCK_HINTS } from "../lib/types";
 import { blockReference } from "../lib/studio-import-reference";
 import { parseStudioJson } from "../lib/studio-import";
 import { promptTextsOf } from "../lib/starter-prompts";
+import { extractR2Key, resolveLoopClipSrc } from "../lib/loop-clip";
 
 /**
  * Loop Clip: a new, independent block backed by Cloudflare R2.
@@ -151,4 +152,97 @@ test("custom is still the only block the importer refuses, loop-clip is not swep
     assert.equal(outcome.summary.blocks[0].type, "loop-clip");
     assert.ok(outcome.summary.warnings.some((w) => w.includes("custom")));
   }
+});
+
+/* ── extractR2Key: extracts the storage key from any format ── */
+
+test("extractR2Key: r2.dev URL extracts key", () => {
+  assert.equal(
+    extractR2Key("https://pub-3c19daed961f4d518bee661c8e6af73a.r2.dev/clips/abc.mp4"),
+    "clips/abc.mp4",
+  );
+});
+
+test("extractR2Key: local proxy path extracts key", () => {
+  assert.equal(extractR2Key("/api/r2/media/clips/abc.mp4"), "clips/abc.mp4");
+});
+
+test("extractR2Key: r2: prefix extracts key", () => {
+  assert.equal(extractR2Key("r2:clips/abc.mp4"), "clips/abc.mp4");
+});
+
+test("extractR2Key: bare key passes through", () => {
+  assert.equal(extractR2Key("clips/abc.mp4"), "clips/abc.mp4");
+});
+
+test("extractR2Key: custom domain URL extracts key", () => {
+  assert.equal(
+    extractR2Key("https://media.hilman.design/clips/abc.mp4"),
+    "clips/abc.mp4",
+  );
+});
+
+test("extractR2Key: pending: returns null", () => {
+  assert.equal(extractR2Key("pending:some-uuid"), null);
+});
+
+test("extractR2Key: blob: returns null", () => {
+  assert.equal(extractR2Key("blob:http://localhost/abcd"), null);
+});
+
+test("extractR2Key: null returns null", () => {
+  assert.equal(extractR2Key(null), null);
+});
+
+test("extractR2Key: empty string returns null", () => {
+  assert.equal(extractR2Key(""), null);
+});
+
+test("extractR2Key: unrelated URL returns null", () => {
+  assert.equal(extractR2Key("https://example.com/photo.jpg"), null);
+});
+
+/* ── resolveLoopClipSrc: resolves any format to delivery URL ── */
+
+test("resolveLoopClipSrc: r2.dev URL resolves to proxy fallback when no custom domain", () => {
+  // In test env, NEXT_PUBLIC_R2_PUBLIC_URL is either unset or is r2.dev,
+  // so delivery base should fall back to /api/r2/media
+  const result = resolveLoopClipSrc(
+    "https://pub-3c19daed961f4d518bee661c8e6af73a.r2.dev/clips/abc.mp4",
+  );
+  assert.equal(result, "/api/r2/media/clips/abc.mp4");
+});
+
+test("resolveLoopClipSrc: bare key resolves to proxy fallback", () => {
+  const result = resolveLoopClipSrc("clips/abc.mp4");
+  assert.equal(result, "/api/r2/media/clips/abc.mp4");
+});
+
+test("resolveLoopClipSrc: r2: prefix resolves to proxy fallback", () => {
+  const result = resolveLoopClipSrc("r2:clips/abc.mp4");
+  assert.equal(result, "/api/r2/media/clips/abc.mp4");
+});
+
+test("resolveLoopClipSrc: pending: passes through unchanged", () => {
+  assert.equal(resolveLoopClipSrc("pending:some-uuid"), "pending:some-uuid");
+});
+
+test("resolveLoopClipSrc: blob: passes through unchanged", () => {
+  assert.equal(
+    resolveLoopClipSrc("blob:http://localhost/abcd"),
+    "blob:http://localhost/abcd",
+  );
+});
+
+test("resolveLoopClipSrc: null returns empty string", () => {
+  assert.equal(resolveLoopClipSrc(null), "");
+});
+
+test("resolveLoopClipSrc: empty string returns empty string", () => {
+  assert.equal(resolveLoopClipSrc(""), "");
+});
+
+test("resolveLoopClipSrc: already a proxy path stays unchanged", () => {
+  const result = resolveLoopClipSrc("/api/r2/media/clips/abc.mp4");
+  assert.equal(result, "/api/r2/media/clips/abc.mp4");
 });
