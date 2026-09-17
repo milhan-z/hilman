@@ -9,6 +9,7 @@ import { InlineAdd } from "./insert-zone";
 import { EditableBlock } from "./editable-block";
 import { PropertyDrawer } from "./property-drawer";
 import { MetaBar } from "./meta-bar";
+import { MetaPair } from "./meta-pair";
 import { DEFAULT_DATA } from "./block-editors";
 import { templatesFor } from "@/lib/block-templates";
 import { ActionSheet, MoreButton, type ActionItem } from "./mobile/action-sheet";
@@ -1363,30 +1364,3 @@ function InlineTextarea({
   );
 }
 
-function MetaPair({
-  label,
-  value,
-  placeholder,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div>
-      <dt className="font-hand text-sm text-faint">{label}</dt>
-      <dd className="mt-0.5">
-        <input
-          type="text"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
-          // 16px floor: Safari zooms the whole page into any smaller field.
-          className="min-h-11 w-full border-0 border-b border-dashed border-transparent bg-transparent p-0 text-base font-medium text-ink outline-none transition-colors hover:border-line focus:border-pen sm:min-h-0 sm:text-xs"
-        />
-      </dd>
-    </div>
-  );
-}

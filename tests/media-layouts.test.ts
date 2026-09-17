@@ -22,6 +22,7 @@ import {
 import { BLOCK_HINTS, type BlockType } from "../lib/types";
 import { parseStudioJson, type ImportOutcome } from "../lib/studio-import";
 import { convertHtmlToBlocks } from "../lib/studio-import-html";
+import { fanGeometry } from "../components/blocks/gallery/stack";
 import { parseMarkdownDocument } from "../lib/studio-import-markdown";
 
 /**
@@ -366,4 +367,81 @@ test("presentation components know nothing about where the media came from", () 
   for (const word of ["cloudinary", "supabase", "pending:", "publish"]) {
     assert.ok(!frames.toLowerCase().includes(word), `media-frames.tsx does not mention ${word}`);
   }
+});
+
+/* ── the pile, dealt across ───────────────────────────────── */
+
+/**
+ * On a phone the stack cascades down the page; on a desktop the same cards
+ * are fanned left to right, because that is where the room is. fanGeometry()
+ * is the arithmetic that decides how wide each card is and how far the next
+ * one sits over it, and its whole job is to land the fan inside the column
+ * rather than off the side of it.
+ */
+
+test("the fan always fits the column it is drawn in", () => {
+  for (let count = 2; count <= 20; count += 1) {
+    const { card, shift, fits } = fanGeometry(count);
+    if (!fits) continue;
+    const total = card + (count - 1) * (card - shift);
+    assert.ok(total <= 97, `${count} cards span ${total.toFixed(1)}% of the row`);
+    assert.ok(card > 0 && shift >= 0, `${count} cards have sane geometry`);
+  }
+});
+
+test("no card is ever more than 42% covered by the next one", () => {
+  // A fan cannot be hovered on a touch screen, so anything hidden is hidden
+  // for good. Past this point the pile stays vertical instead.
+  for (let count = 2; count <= 20; count += 1) {
+    const { card, shift, fits } = fanGeometry(count);
+    if (!fits) continue;
+    assert.ok(shift <= card * 0.4201, `${count} cards overlap ${(shift / card) * 100}%`);
+  }
+});
+
+test("a fan is always at least a little overlapped, or it is not a pile", () => {
+  for (let count = 2; count <= 20; count += 1) {
+    const { card, shift, fits } = fanGeometry(count);
+    if (!fits) continue;
+    assert.ok(shift >= card * 0.1799, `${count} cards barely overlap`);
+  }
+});
+
+test("one photograph is never fanned, and a crowd falls back to the cascade", () => {
+  assert.equal(fanGeometry(1).fits, false, "a single card is not a fan");
+  assert.equal(fanGeometry(2).fits, true);
+  assert.equal(fanGeometry(8).fits, true);
+  // Somewhere past this the cards would have to hide each other to fit, so
+  // the vertical pile — which has no such limit — takes over again.
+  assert.equal(fanGeometry(20).fits, false, "twenty across would be unreadable");
+});
+
+test("the fan geometry is pure, so the server and the browser agree", () => {
+  for (const count of [2, 5, 9]) {
+    assert.deepEqual(fanGeometry(count), fanGeometry(count));
+  }
+});
+
+/* ── typing two of something ──────────────────────────────── */
+
+test("a metadata field keeps what was typed while it has focus", () => {
+  // `tools` is an array shown as a string, so a fully controlled input
+  // re-derives the text on every keystroke and deletes the comma a moment
+  // after it is pressed — which made a second tool impossible to enter.
+  const field = code("components/admin/meta-pair.tsx");
+  assert.match(field, /useState/, "it holds a draft of its own");
+  assert.match(field, /draft \?\? value/, "and shows that draft in preference to the value");
+  assert.match(field, /onBlur/, "handing control back when the field is left");
+});
+
+test("the round trip that caused it would still eat the comma", () => {
+  // Kept as a test rather than a memory: this is the exact transformation the
+  // editor applies to `tools`, and it is lossy by design. The fix is that the
+  // input no longer displays its result mid-word — not that it stopped.
+  const roundTrip = (v: string) =>
+    v.split(",").map((t) => t.trim()).filter(Boolean).join(", ");
+  assert.equal(roundTrip("Figma,"), "Figma");
+  assert.equal(roundTrip("Figma, "), "Figma");
+  assert.equal(roundTrip("Figma, Riso"), "Figma, Riso");
+  assert.equal(roundTrip("Figma, Riso, Blender"), "Figma, Riso, Blender");
 });
