@@ -32,6 +32,8 @@ import {
   type EditorDoc,
 } from "./editor-doc";
 import { describeEditor, type EditorAction } from "@/lib/studio-editor-state";
+import { describePosition, normalisePositions } from "@/lib/studio-gestures";
+import { useMediaSelector } from "./media-library-context";
 import { cn, slugify, uid } from "@/lib/utils";
 import type { Block, BlockType, JournalPost, Project, TagRow } from "@/lib/types";
 
@@ -67,6 +69,15 @@ const PUBLISH_PATIENCE_MS = 12_000;
 const PERSIST_DEBOUNCE_MS = 400;
 
 /**
+ * Which block types can be filled in where they stand.
+ *
+ * These have an inline editor in <EditableBlock>, so inserting one and then
+ * opening a settings panel on top of it would cover the very field that was
+ * just given focus. Everything else has nowhere to type without the panel.
+ */
+const EDITS_INLINE: BlockType[] = ["paragraph", "heading", "quote", "button", "divider"];
+
+/**
  * Moves an unsaved draft from "project:new" to "project:<id>".
  *
  * Creating something changes the key its local draft is filed under, and the
@@ -88,6 +99,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const router = useRouter();
   const device = useDeviceName();
   const sync = useSyncState();
+  const { openSelector, openMultiSelector } = useMediaSelector();
 
   /* ── the document ── */
   const [doc, setDoc] = useState<EditorDoc>(() => docFromInitial(initial));
@@ -131,6 +143,21 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const [addBlockAt, setAddBlockAt] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [recovered, setRecovered] = useState<{ snapshot: string; savedAt: string } | null>(null);
+
+  /* ── dragging a block ──
+     Motion reorders its own list many times a second while a finger is moving.
+     Feeding each of those straight into the document meant re-serialising the
+     whole thing, re-running the dirty comparison and re-arming the draft write
+     on every frame of a gesture — for an order that is not final and might be
+     dragged back where it came from.
+
+     So the drag has its own copy. `preview` is what Motion rearranges and what
+     is on screen; the document hears about it once, when the block is put
+     down. Everything downstream — dirty state, the local draft, the save bar —
+     is unchanged, and still only sees a finished edit. */
+  const [preview, setPreview] = useState<Block[] | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const blocks = preview ?? doc.blocks;
 
   const blocked = blockingReason(doc);
   const waitingOnPhoto = hasPendingRefs(doc);
@@ -299,6 +326,8 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         entityId,
         localId,
         baseUpdatedAt,
+        intent:
+          nextStatus === "draft" ? "SYNC_DRAFT" : published ? "UPDATE_LIVE" : "PUBLISH",
         payload: {
           fields: fieldsFor(kind, doc, nextStatus),
           blocks: doc.blocks,
@@ -336,7 +365,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       if (result.status === "conflict") setConflict(true);
       else setError(result.message);
     },
-    [doc, snapshot, kind, entityId, localId, baseUpdatedAt, isNew, isProject, draftKey, router]
+    [doc, snapshot, kind, entityId, localId, baseUpdatedAt, published, isNew, isProject, draftKey, router]
   );
 
   /**
@@ -397,18 +426,53 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
 
   /* ── blocks ── */
 
+  /** Puts a block into the list and returns it, without deciding what happens next. */
+  const addBlock = useCallback(
+    (type: BlockType, index: number, data?: Record<string, unknown>) => {
+      const block: Block = {
+        id: `new-${uid()}`,
+        type,
+        position: index,
+        data: data ? { ...structuredClone(DEFAULT_DATA[type]), ...data } : structuredClone(DEFAULT_DATA[type]),
+      };
+      setDoc((prev) => {
+        const next = [...prev.blocks];
+        next.splice(Math.min(index, next.length), 0, block);
+        return { ...prev, blocks: normalisePositions(next) };
+      });
+      setActiveBlockId(block.id);
+      return block;
+    },
+    []
+  );
+
   const insertBlock = (type: BlockType, index: number) => {
-    const block: Block = {
-      id: `new-${uid()}`,
-      type,
-      position: index,
-      data: structuredClone(DEFAULT_DATA[type]),
-    };
-    const next = [...doc.blocks];
-    next.splice(index, 0, block);
-    patch({ blocks: next.map((b, i) => ({ ...b, position: i })) });
-    setActiveBlockId(block.id);
-    if (!["paragraph", "divider"].includes(type)) setDrawerOpen(true);
+    // A photo is the thing you are adding; an empty image block is not. Asking
+    // for the picture first means "＋ Add → Photo → Camera" ends with the photo
+    // on screen, rather than with a placeholder and a settings panel.
+    if (type === "image") {
+      openSelector(
+        (ref, alt) => {
+          addBlock("image", index, { public_id: ref, alt: alt ?? "" });
+        },
+        { title: "Add a photo" }
+      );
+      return;
+    }
+
+    if (type === "gallery") {
+      openMultiSelector((picks) => {
+        addBlock("gallery", index, {
+          items: picks.map((pick) => ({ public_id: pick.ref, alt: pick.alt ?? "", caption: "" })),
+        });
+      }, "Add photos");
+      return;
+    }
+
+    addBlock(type, index);
+
+    // Anything with an inline editor is already focused and ready to type in.
+    if (!EDITS_INLINE.includes(type)) setDrawerOpen(true);
   };
 
   const updateBlock = (id: string, data: Record<string, any>) =>
@@ -443,13 +507,63 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     }
   };
 
+  /**
+   * A block has been picked up.
+   *
+   * The preview list is seeded from the document so Motion has something of
+   * its own to rearrange, and the announcement says what is happening — once,
+   * not on every pixel of movement.
+   */
+  const beginReorder = (id: string) => {
+    const index = doc.blocks.findIndex((b) => b.id === id);
+    setPreview(doc.blocks);
+    setAnnouncement(
+      `Moving ${doc.blocks[index]?.type ?? "block"} block. ${describePosition(index, doc.blocks.length)}.`
+    );
+  };
+
+  /**
+   * ...and put down. This is the only moment the document hears about a drag.
+   *
+   * It goes through the same `patch()` as typing does, so the local draft, the
+   * dirty state and the save bar all behave exactly as they do for any other
+   * edit. Reordering never talks to the server: a live article whose blocks
+   * have been rearranged is `Live · Unsaved changes` until Update live is
+   * pressed, like every other change.
+   */
+  const commitReorder = () => {
+    setPreview((current) => {
+      if (!current) return null;
+
+      const changed = current.some((block, index) => doc.blocks[index]?.id !== block.id);
+      if (!changed) {
+        setAnnouncement("Block returned to its place.");
+        return null;
+      }
+
+      const ordered = normalisePositions(current);
+      patch({ blocks: ordered });
+
+      const moved = ordered.findIndex((block, index) => doc.blocks[index]?.id !== block.id);
+      setAnnouncement(
+        moved === -1
+          ? "Blocks reordered."
+          : `Block moved. ${describePosition(moved, ordered.length)}.`
+      );
+      return null;
+    });
+  };
+
   const moveBlock = (id: string, direction: -1 | 1) => {
     const i = doc.blocks.findIndex((b) => b.id === id);
     const j = i + direction;
     if (j < 0 || j >= doc.blocks.length) return;
     const next = [...doc.blocks];
     [next[i], next[j]] = [next[j], next[i]];
-    patch({ blocks: next.map((b, index) => ({ ...b, position: index })) });
+    patch({ blocks: normalisePositions(next) });
+    // The same sentence the drag produces: the two routes to the same result
+    // should not sound like two different features.
+    setAnnouncement(`Block moved. ${describePosition(j, next.length)}.`);
   };
 
   const duplicateBlock = (id: string) => {
@@ -715,13 +829,11 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
 
                 <Reorder.Group
                   axis="y"
-                  values={doc.blocks}
-                  onReorder={(blocks: Block[]) =>
-                    patch({ blocks: blocks.map((b, i) => ({ ...b, position: i })) })
-                  }
+                  values={blocks}
+                  onReorder={setPreview}
                   className="space-y-1"
                 >
-                  {doc.blocks.map((block, index) => (
+                  {blocks.map((block, index) => (
                     <div key={block.id}>
                       {/* The hover-only insert control is a pointer affordance;
                           the phone gets the full-width button below instead. */}
@@ -731,6 +843,10 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                       <EditableBlock
                         block={block}
                         active={activeBlockId === block.id}
+                        index={index}
+                        total={blocks.length}
+                        canMoveUp={index > 0}
+                        canMoveDown={index < blocks.length - 1}
                         onActivate={() => setActiveBlockId(block.id)}
                         onChange={(data) => updateBlock(block.id, data)}
                         onOpenDrawer={() => setDrawerOpen(true)}
@@ -739,12 +855,15 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                         onDuplicate={() => duplicateBlock(block.id)}
                         onInsertBelow={(type) => insertBlock(type, index + 1)}
                         onConvert={(type) => convertBlock(block.id, type)}
+                        onDragStart={() => beginReorder(block.id)}
+                        onDragEnd={commitReorder}
+                        onAddBelow={() => setAddBlockAt(index + 1)}
                       />
                     </div>
                   ))}
                 </Reorder.Group>
 
-                {doc.blocks.length === 0 && (
+                {blocks.length === 0 && (
                   <div className="my-5 rounded-lg border border-dashed border-line-strong p-5 text-center">
                     <p className="text-sm text-soft">Nothing written yet.</p>
                     <div className="mt-4 grid gap-2 text-left">
@@ -791,6 +910,13 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         </div>
       </div>
 
+      {/* What just happened to a block, for anyone not watching it happen.
+          Written only when the logical position changes — a pixel-by-pixel
+          commentary during a drag would be unusable. */}
+      <p aria-live="polite" role="status" className="sr-only">
+        {announcement}
+      </p>
+
       <EditorActionBar
         status={status}
         onAction={runAction}
@@ -801,7 +927,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
               href={publicHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="shrink-0 font-mono text-2xs uppercase tracking-wide text-pen"
+              className="-my-2 flex min-h-11 shrink-0 items-center font-mono text-2xs uppercase tracking-wide text-pen"
             >
               View live ↗
             </a>
@@ -906,7 +1032,7 @@ function MetaPair({
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           // 16px floor: Safari zooms the whole page into any smaller field.
-          className="w-full border-0 border-b border-dashed border-transparent bg-transparent p-0 text-base font-medium text-ink outline-none transition-colors hover:border-line focus:border-pen sm:text-xs"
+          className="min-h-11 w-full border-0 border-b border-dashed border-transparent bg-transparent p-0 text-base font-medium text-ink outline-none transition-colors hover:border-line focus:border-pen sm:min-h-0 sm:text-xs"
         />
       </dd>
     </div>

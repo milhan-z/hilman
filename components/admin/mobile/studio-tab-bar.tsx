@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ActionSheet, type ActionItem } from "./action-sheet";
 import { QuickCreateSheet } from "./quick-create-sheet";
+import { useKeyboardOpen } from "./keyboard-inset";
+import { EDITOR_ROUTE } from "./routes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,8 +32,6 @@ import { cn } from "@/lib/utils";
  *
  * Rendered from the admin layout, so it is never unmounted by a navigation.
  */
-
-const EDITOR_ROUTE = /^\/admin\/(projects|journal)\/[^/]+$|^\/admin\/pages\/[^/]+$/;
 
 const icons = {
   home: (
@@ -100,6 +100,7 @@ const tabClass = (active: boolean, pressed: boolean) =>
 
 export function StudioTabBar() {
   const pathname = usePathname();
+  const keyboardOpen = useKeyboardOpen();
   const [pressed, setPressed] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -112,6 +113,11 @@ export function StudioTabBar() {
 
   if (EDITOR_ROUTE.test(pathname)) return null;
 
+  // Typing on a list screen — the search box on Projects, say. Five navigation
+  // targets perched on the keyboard toolbar are unreachable anyway, and on iOS
+  // they spend the keyboard's animation at the wrong height. The spacer stays,
+  // so nothing below reflows while the bar is away.
+
   const current = pressed ?? pathname;
   const isActive = (href: string) =>
     href === "/admin" ? current === "/admin" : current.startsWith(href);
@@ -123,6 +129,7 @@ export function StudioTabBar() {
 
       <nav
         aria-label="Studio"
+        hidden={keyboardOpen}
         className={cn(
           "fixed inset-x-0 bottom-0 z-[80] border-t border-line-strong bg-paper/95 backdrop-blur lg:hidden",
           "px-2 pt-1 pb-[max(0.35rem,env(safe-area-inset-bottom))]",

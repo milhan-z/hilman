@@ -186,6 +186,7 @@ function QuickNote({
       entityId: null,
       localId: localId.current,
       baseUpdatedAt: null,
+      intent: "SYNC_DRAFT",
       payload: {
         fields: { title: effectiveTitle, status: "draft", excerpt },
         blocks,

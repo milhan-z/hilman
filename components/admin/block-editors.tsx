@@ -7,6 +7,7 @@ import { PendingPhoto } from "./pending-media";
 import { isPendingRef } from "@/lib/studio-media-refs";
 import { discardPendingMedia } from "@/lib/studio-local/media";
 import { useMediaSelector } from "./media-library-context";
+import { mediaSrc } from "@/lib/cloudinary";
 import type { BlockType } from "@/lib/types";
 
 /* ─────────────────────────────────────────────────────────
@@ -114,11 +115,15 @@ export function MediaField({
   const pending = isPendingRef(value);
 
   return (
-    <Field
-      label={label}
-      hint="Take one now, choose one you already have, or paste a Cloudinary public_id."
-    >
+    <Field label={label}>
       <div className="space-y-2">
+        {/* What you actually chose, as a picture. A field whose only feedback
+            is a string of folder/asset-id tells you nothing about whether it
+            is the right photo. */}
+        {value && !pending && (
+          <MediaPreview value={value} onClear={() => onChange("")} />
+        )}
+
         {/* The camera first: on a phone the photo usually does not exist yet. */}
         <MediaCapture
           accept={accept}
@@ -139,28 +144,57 @@ export function MediaField({
           />
         )}
 
-        <div className="flex gap-2">
-          <TextInput
-            value={pending ? "" : value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={pending ? "Waiting for the photo above" : "folder/asset-id or https://…"}
-            disabled={pending}
-          />
+        {mediaSelector && (
+          <button
+            type="button"
+            onClick={handleChooseFromLibrary}
+            className="min-h-12 w-full rounded-md border border-line bg-raise px-3.5 text-sm font-medium text-soft transition-colors hover:border-pen hover:text-pen"
+          >
+            {value && !pending ? "Choose a different photo" : "Choose from your photos"}
+          </button>
+        )}
 
-          {mediaSelector && (
-            <button
-              type="button"
-              onClick={handleChooseFromLibrary}
-              className="inline-flex min-h-12 shrink-0 items-center justify-center rounded border border-line bg-raise px-3.5 text-sm text-soft transition-colors hover:border-pen hover:text-pen"
-              title="Choose from media library"
-            >
-              Library
-            </button>
-          )}
-        </div>
+        {/* The storage id, for the one case that needs it: pasting a reference
+            from somewhere else. Hidden on a phone — "folder/asset-id" is how
+            Cloudinary files a picture, not something anyone should have to
+            type to add one, and every route above produces it for you. */}
+        <details className="hidden sm:block">
+          <summary className="cursor-pointer text-xs text-faint">Paste a reference instead</summary>
+          <div className="mt-2">
+            <TextInput
+              value={pending ? "" : value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder={pending ? "Waiting for the photo above" : "folder/asset-id or https://…"}
+              disabled={pending}
+            />
+          </div>
+        </details>
       </div>
       {error && <span className="mt-1 block text-xs text-red">{error}</span>}
     </Field>
+  );
+}
+
+/** A chosen photo, shown rather than named. */
+function MediaPreview({ value, onClear }: { value: string; onClear: () => void }) {
+  const src = mediaSrc(value, { width: 320 });
+  if (!src) return null;
+  return (
+    <figure className="overflow-hidden rounded-md border border-line bg-raise">
+      {/* A CDN thumbnail at a fixed width — next/image would put a second
+          resizing layer in front of a URL that is already the right size. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="block max-h-48 w-full object-cover" />
+      <figcaption className="flex justify-end px-2 py-1">
+        <button
+          type="button"
+          onClick={onClear}
+          className="min-h-11 px-2 text-sm text-red transition-opacity hover:opacity-80"
+        >
+          Remove
+        </button>
+      </figcaption>
+    </figure>
   );
 }
 
@@ -197,6 +231,157 @@ function JsonField({
       />
       {invalid && <span className="mt-1 block text-xs text-red">Invalid JSON — changes not applied yet.</span>}
     </Field>
+  );
+}
+
+interface GalleryItem {
+  public_id?: string;
+  src?: string;
+  alt?: string;
+  caption?: string;
+}
+
+/**
+ * A gallery, edited by looking at it.
+ *
+ * This was a textarea containing raw JSON — an array of objects with
+ * `public_id`, `alt` and `caption` keys, which you were expected to type, with
+ * ids copied by hand from the media library. On a phone that is not a slow
+ * workflow, it is an impossible one: it needs a keyboard, a second window and
+ * knowledge of how Cloudinary names things.
+ *
+ * The pictures are pictures now. Add opens the same multi-select picker the
+ * rest of the studio uses, each one can be moved or removed, and the caption
+ * and description sit under the thumbnail they belong to. The stored shape is
+ * unchanged, so galleries built the old way still open and still render.
+ */
+function GalleryEditor({ data, onChange }: EditorProps) {
+  const items: GalleryItem[] = Array.isArray(data.items) ? data.items : [];
+  let mediaSelector: ReturnType<typeof useMediaSelector> | null = null;
+  try {
+    mediaSelector = useMediaSelector();
+  } catch {
+    // Rendered outside the provider — the Add button simply is not offered.
+  }
+
+  const write = (next: GalleryItem[]) => onChange({ ...data, items: next });
+
+  const update = (index: number, patch: Partial<GalleryItem>) =>
+    write(items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+
+  const move = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= items.length) return;
+    const next = [...items];
+    [next[index], next[target]] = [next[target], next[index]];
+    write(next);
+  };
+
+  return (
+    <div className="space-y-3">
+      <Field label="Layout">
+        <Select
+          value={data.layout ?? "grid"}
+          onChange={(e) => onChange({ ...data, layout: e.target.value })}
+        >
+          <option value="grid">Grid (3-up)</option>
+          <option value="columns">Columns (2-up)</option>
+        </Select>
+      </Field>
+
+      {items.length > 0 && (
+        <ul className="space-y-2">
+          {items.map((item, index) => {
+            const ref = item.public_id ?? item.src ?? "";
+            const src = mediaSrc(ref, { width: 160 });
+            return (
+              <li
+                key={`${ref}-${index}`}
+                className="flex gap-3 rounded-md border border-line bg-raise p-2"
+              >
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded border border-line bg-surface">
+                  {isPendingRef(ref) ? (
+                    <PendingPhoto photoRef={ref} className="h-full" />
+                  ) : src ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={src} alt="" className="h-full w-full object-cover" />
+                  ) : null}
+                </div>
+
+                <div className="min-w-0 flex-1 space-y-2">
+                  <TextInput
+                    value={item.caption ?? ""}
+                    onChange={(e) => update(index, { caption: e.target.value })}
+                    placeholder="Caption"
+                  />
+                  <TextInput
+                    value={item.alt ?? ""}
+                    onChange={(e) => update(index, { alt: e.target.value })}
+                    placeholder="Describe it for screen readers"
+                  />
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => move(index, -1)}
+                      disabled={index === 0}
+                      aria-label={`Move photo ${index + 1} earlier`}
+                      className="flex min-h-11 min-w-11 items-center justify-center rounded text-faint transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+                        <polyline points="18 15 12 9 6 15" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => move(index, 1)}
+                      disabled={index === items.length - 1}
+                      aria-label={`Move photo ${index + 1} later`}
+                      className="flex min-h-11 min-w-11 items-center justify-center rounded text-faint transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => write(items.filter((_, i) => i !== index))}
+                      className="ml-auto min-h-11 px-2 text-sm text-red transition-opacity hover:opacity-80"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {mediaSelector && (
+        <button
+          type="button"
+          onClick={() =>
+            mediaSelector?.openMultiSelector((picks) => {
+              write([
+                ...items,
+                ...picks.map((pick) => ({
+                  public_id: pick.ref,
+                  alt: pick.alt ?? "",
+                  caption: "",
+                })),
+              ]);
+            }, "Add photos")
+          }
+          className="min-h-12 w-full rounded-md border border-dashed border-line-strong text-sm font-semibold text-soft transition-colors hover:border-pen hover:text-pen"
+        >
+          + Add photos
+        </button>
+      )}
+
+      {items.length === 0 && (
+        <p className="text-xs text-faint">No photos yet.</p>
+      )}
+    </div>
   );
 }
 
@@ -245,22 +430,7 @@ const EDITORS: Record<BlockType, (p: EditorProps) => React.JSX.Element> = {
       </div>
     </div>
   ),
-  gallery: ({ data, onChange }) => (
-    <div className="space-y-3">
-      <Field label="Layout">
-        <Select value={data.layout ?? "grid"} onChange={(e) => onChange({ ...data, layout: e.target.value })}>
-          <option value="grid">Grid (3-up)</option>
-          <option value="columns">Columns (2-up)</option>
-        </Select>
-      </Field>
-      <JsonField
-        label="Items"
-        hint='[{ "public_id": "…", "alt": "…", "caption": "…" }] — use Media Library to upload & copy ids.'
-        value={data.items ?? []}
-        onChange={(items) => onChange({ ...data, items })}
-      />
-    </div>
-  ),
+  gallery: ({ data, onChange }) => <GalleryEditor data={data} onChange={onChange} />,
   youtube: ({ data, onChange }) => (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="YouTube ID or link" hint="Paste the id, the watch/share URL, or the full <iframe> — I'll find the id.">

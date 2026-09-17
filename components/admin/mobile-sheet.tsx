@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useSwipeDismiss } from "./mobile/use-swipe-dismiss";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,6 +16,16 @@ import { cn } from "@/lib/utils";
  * Sizes are in dvh, not vh: Safari's toolbar changes the viewport height as
  * you scroll, and a sheet measured in vh has its buttons under the toolbar
  * exactly when you reach for them.
+ *
+ * The handle at the top is a real drag target: pull it down and the sheet
+ * follows your finger; let go past roughly a thumb's travel — or flick it —
+ * and it goes away. Only the handle does this. The body of a sheet scrolls,
+ * and a gesture that means two different things a pixel apart is not a gesture
+ * anyone can aim.
+ *
+ * Every sheet in the studio is this component, so the gesture is written once
+ * and Add block, Details, More, Quick note, block settings and the media
+ * picker all inherit it.
  */
 
 export interface MobileSheetProps {
@@ -27,6 +38,8 @@ export interface MobileSheetProps {
   /** Pinned to the bottom of the sheet, above the home indicator. */
   actions?: React.ReactNode;
   labelledBy?: string;
+  /** Wider than the default for grids — the media picker uses it. */
+  size?: "default" | "wide";
 }
 
 export function MobileSheet({
@@ -36,9 +49,11 @@ export function MobileSheet({
   subtitle,
   children,
   actions,
+  size = "default",
 }: MobileSheetProps) {
   const panel = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef<HTMLElement | null>(null);
+  const swipe = useSwipeDismiss({ onDismiss: onClose });
 
   useEffect(() => {
     if (!open) return;
@@ -88,10 +103,14 @@ export function MobileSheet({
   return (
     <div
       className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm"
-      onMouseDown={(event) => {
+      // Pointer, not mouse: a tap on the backdrop of a touch device never
+      // produced a mousedown here, so dismissing by tapping outside the sheet
+      // silently did not work on the one device this studio is used on.
+      onPointerDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
       role="presentation"
+      style={{ opacity: 1 - swipe.progress * 0.6 }}
     >
       <div
         ref={panel}
@@ -99,37 +118,63 @@ export function MobileSheet({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
+        data-mobile-sheet
         className={cn(
           "absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col outline-none",
           "rounded-t-xl border-t border-line-strong bg-surface shadow-sticky",
-          "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md",
-          "sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border"
+          "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-full",
+          "sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border",
+          size === "wide" ? "sm:max-w-2xl" : "sm:max-w-md"
         )}
+        style={{
+          // translate3d, not `top`: the compositor moves this without asking
+          // the layout engine anything, which is what keeps a finger-tracking
+          // drag smooth. The transition is off mid-drag so the sheet sits
+          // exactly under the finger, and back on at release so it springs.
+          transform: swipe.offset ? `translate3d(0, ${swipe.offset}px, 0)` : undefined,
+          transition: swipe.dragging
+            ? "none"
+            : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
       >
-        <div className="shrink-0 px-4 pt-2.5 sm:px-6 sm:pt-5">
-          {/* A grab handle that is also a real button — dragging is a gesture,
-              and a gesture is never the only way to do something here. */}
+        <div className="shrink-0 px-4 pt-1 sm:px-6 sm:pt-5">
+          {/* Grab handle and close button in one. Dragging is a gesture, and a
+              gesture is never the only way to do something here — this is a
+              real button, so a tap and the Enter key both close the sheet. */}
           <button
             type="button"
-            onClick={onClose}
+            data-sheet-handle
+            onClick={() => {
+              // The pointerup that ends a drag is followed by a click. A
+              // dismissing drag has already closed the sheet; a snap-back must
+              // not close it as a side effect of having been touched at all.
+              if (swipe.movedRef.current) {
+                swipe.movedRef.current = false;
+                return;
+              }
+              onClose();
+            }}
+            {...swipe.handleProps}
             aria-label={`Close ${title.toLowerCase()}`}
-            className="mx-auto mb-2 flex min-h-11 w-20 items-center justify-center sm:hidden"
+            className="mx-auto mb-1 flex min-h-12 w-24 cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing sm:hidden"
           >
             <span aria-hidden className="h-1 w-12 rounded-full bg-line-strong" />
           </button>
 
           <div className="flex items-start justify-between gap-3 border-b border-line pb-3">
-            <div className="min-w-0">
+            <div className="min-w-0 pt-1.5">
               <h2 className="font-display text-base font-bold text-ink">{title}</h2>
               {subtitle && (
                 <p className="truncate font-hand text-base text-faint">{subtitle}</p>
               )}
             </div>
+            {/* Shown at every width now. The handle is reachable and closes on
+                tap, but a cross is the control people look for. */}
             <button
               type="button"
               onClick={onClose}
               aria-label={`Close ${title.toLowerCase()}`}
-              className="-mr-2 hidden min-h-11 min-w-11 items-center justify-center rounded text-faint transition-colors hover:text-ink sm:flex"
+              className="-mr-2 flex min-h-12 min-w-12 shrink-0 items-center justify-center rounded text-faint transition-colors hover:text-ink"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
                 <line x1="18" y1="6" x2="6" y2="18" />

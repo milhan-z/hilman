@@ -202,6 +202,57 @@
     outline-offset: 2px;
     border-radius: 2px;
   }
+  /* ── touch behaviour on the studio's one real device ──────────────
+     Three different things get called "the zoom problem" and they have
+     three different fixes. Doing it with one viewport flag would take
+     pinch zoom away from everyone, which the W3C counts as an
+     accessibility failure and which this studio has no reason to do.
+
+       focus zoom   Safari magnifies the page when you tap a field whose
+                    text is under 16px. Fixed by the floor below, and by
+                    fields.tsx using text-base everywhere it can.
+
+       double-tap   Two quick taps on a control zoom the page instead of
+                    pressing it twice. Fixed by touch-action: manipulation,
+                    which suppresses exactly that and nothing else.
+
+       pinch        Deliberate, two-fingered, and left alone.
+
+     Scoped to coarse pointers so a desktop browser is untouched, and
+     written with :where() so the specificity is zero and any component
+     can still say otherwise. */
+  @media (pointer: coarse) {
+    :where(a, button, [role="button"], [role="tab"], summary, label) {
+      touch-action: manipulation;
+    }
+  }
+
+  /* The two places a gesture owns the surface outright. Everywhere else
+     keeps normal panning, which is what lets the page scroll when a
+     finger starts moving on top of a block. */
+  [data-drag-handle],
+  [data-sheet-handle] {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* The grey flash Safari paints over a tapped control. The studio has its
+     own pressed states and the two together read as a rendering glitch. */
+  @media (pointer: coarse) {
+    :where(a, button, [role="button"]) {
+      -webkit-tap-highlight-color: transparent;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-mobile-sheet],
+    [data-block-lift] {
+      transition-duration: 0.01ms !important;
+    }
+  }
+
   .tnum {
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
@@ -430,5 +481,35 @@
     z-index: 9999;
     opacity: 0.5;
     mix-blend-mode: overlay;
+  }
+}
+
+/* ── the 16px floor ─────────────────────────────────────────────────
+   Safari magnifies the page when you focus an editable control whose
+   text is under 16px, and it does not zoom back out afterwards. Every
+   studio field that can use the shared components in fields.tsx already
+   sets text-base, and the handful of raw ones have been fixed; this is
+   the net under the next one — a third-party widget, a form written in a
+   hurry, a component added next year.
+
+   `!important`, and worth explaining. The obvious version of this rule
+   is a zero-specificity `:where()` inside `@layer base`, so any component
+   can still say otherwise. That does not work here: this project's CSS
+   pipeline flattens `@layer` out of the output entirely, leaving plain
+   specificity, where a `text-xs` utility beats `:where()` every time —
+   and a `text-xs` utility on a phone input is the exact thing this
+   exists to overrule. So the assertion is made directly: no editable
+   control on a touch device is under 16px, whatever else is asked for.
+
+   It is deliberately narrow. Coarse pointers only, so dense desktop
+   layouts are untouched; real editable controls only, so buttons, labels
+   and checkboxes keep their own sizes; and max(), so a field that was
+   deliberately made larger stays larger. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: max(16px, 1em) !important;
   }
 }

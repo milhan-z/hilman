@@ -173,7 +173,7 @@ export function MoreButton({
       onClick={onClick}
       aria-label={label}
       className={cn(
-        "flex min-h-11 min-w-11 items-center justify-center rounded-md text-soft transition-colors hover:text-ink",
+        "flex min-h-12 min-w-12 items-center justify-center rounded-md text-soft transition-colors hover:text-ink",
         className
       )}
     >

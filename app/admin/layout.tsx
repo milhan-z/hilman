@@ -4,6 +4,7 @@ import { AdminNav } from "@/components/admin/nav";
 import { CommandPalette } from "@/components/admin/command-palette";
 import { StudioTabBar } from "@/components/admin/mobile/studio-tab-bar";
 import { KeyboardInset } from "@/components/admin/mobile/keyboard-inset";
+import { StudioMobileHeader } from "@/components/admin/mobile/studio-mobile-header";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { supabaseConfigured } from "@/lib/supabase/config";
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -97,10 +98,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <KeyboardInset />
       {/* min-h-[100dvh], not 100vh: Safari's toolbar makes vh taller than the
           space you can actually see, which pushes the bottom bar off-screen. */}
+      {/* The phone's top bar. A client component because it has to know
+          whether this route is an editor — those carry their own header — and
+          because it sticks, which the sidebar below never needs to do. */}
+      <StudioMobileHeader />
+
       <div className="flex min-h-[100dvh] flex-col lg:flex-row">
-        {/* Mobile: compact top bar. Desktop: full sidebar. */}
-        <aside className="border-b border-line bg-surface pt-[env(safe-area-inset-top)] lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r lg:pt-0">
-          <div className="flex items-center justify-between gap-2 px-4 py-2.5 lg:block lg:p-5">
+        {/* Desktop sidebar. Below `lg` everything in here is hidden: the phone
+            gets <StudioMobileHeader /> above and the tab bar below. */}
+        <aside className="hidden border-line bg-surface lg:block lg:w-60 lg:shrink-0 lg:border-r">
+          <div className="lg:p-5">
             <Link href="/admin" className="shrink-0 font-display text-lg font-bold">
               Hilman<span className="text-pen">.</span>{" "}
               <span className="font-hand text-lg text-faint">studio</span>
@@ -111,11 +118,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <ThemeToggle />
             </div>
           </div>
-          {/* desktop-only nav — mobile uses the bottom tab bar */}
-          <div className="hidden lg:block">
+          <div>
             <AdminNav />
           </div>
-          <div className="hidden border-t border-line p-5 lg:block">
+          <div className="border-t border-line p-5">
             <p className="truncate text-xs text-faint">{user.email}</p>
             <div className="mt-3 flex items-center gap-4 text-sm">
               <Link href="/" className="text-pen hover:underline">

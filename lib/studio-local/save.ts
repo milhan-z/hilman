@@ -1,6 +1,7 @@
 "use client";
 
 import type { SyncEntity, SyncPayload } from "../studio-sync-contract";
+import { assertMayReachServer, type SaveIntent } from "../studio-save-intent";
 import { enqueue, listQueue } from "./outbox";
 import { flushOutbox, sendDirect, subscribeSyncEvents } from "./sync";
 
@@ -25,6 +26,15 @@ export interface SaveRequest {
   /** The row's updated_at as this editor last saw it. */
   baseUpdatedAt: string | null;
   payload: SyncPayload;
+  /**
+   * What this save is allowed to do — see lib/studio-save-intent.ts.
+   *
+   * Everything reaching this module is by definition bound for the server, so
+   * the only value that would be a contradiction is LOCAL_ONLY, and passing it
+   * throws rather than being quietly tolerated. Keeping a working copy on this
+   * device is writeDraft()'s job and never travels through here.
+   */
+  intent: SaveIntent;
 }
 
 export type SaveResult =
@@ -36,6 +46,7 @@ export type SaveResult =
   | { status: "rejected"; message: string };
 
 export async function saveThroughQueue(request: SaveRequest): Promise<SaveResult> {
+  assertMayReachServer(request.intent);
   const mutationId = newMutationId();
 
   const { mutation: queued, stored } = await enqueue({
@@ -107,6 +118,11 @@ export type HandoffResult =
  * editor is already listening for.
  */
 export async function handOffSave(request: SaveRequest): Promise<HandoffResult> {
+  // Before anything is written down, let alone sent. The storage-failure path
+  // below falls through to a direct POST, so this guard is what stops a
+  // local-only save becoming a live one on a device with no IndexedDB.
+  assertMayReachServer(request.intent);
+
   const { mutation: queued, stored } = await enqueue({
     mutationId: newMutationId(),
     entity: request.entity,

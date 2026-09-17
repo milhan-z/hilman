@@ -217,21 +217,21 @@ function MediaCard({ item }: { item: MediaRow }) {
             defaultValue={item.alt ?? ""}
             placeholder="alt text"
             aria-label={`Alt text for ${item.public_id}`}
-            className="w-full rounded border border-line bg-raise px-2 py-1.5 text-xs outline-none focus:border-pen"
+            className="min-h-12 w-full rounded border border-line bg-raise px-2.5 py-1.5 text-base outline-none focus:border-pen sm:min-h-0 sm:text-xs"
           />
           <input
             name="title"
             defaultValue={item.title ?? ""}
             placeholder="title"
             aria-label={`Title for ${item.public_id}`}
-            className="w-full rounded border border-line bg-raise px-2 py-1.5 text-xs outline-none focus:border-pen"
+            className="min-h-12 w-full rounded border border-line bg-raise px-2.5 py-1.5 text-base outline-none focus:border-pen sm:min-h-0 sm:text-xs"
           />
           <input
             name="folder"
             defaultValue={item.folder ?? ""}
             placeholder="folder"
             aria-label={`Folder for ${item.public_id}`}
-            className="w-full rounded border border-line bg-raise px-2 py-1.5 text-xs outline-none focus:border-pen"
+            className="min-h-12 w-full rounded border border-line bg-raise px-2.5 py-1.5 text-base outline-none focus:border-pen sm:min-h-0 sm:text-xs"
           />
           <div className="flex items-center justify-between">
             <MetaSave />

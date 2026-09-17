@@ -70,6 +70,39 @@ export function StudioRuntime() {
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
+
+    /**
+     * In development the offline shell is a liability, not a feature.
+     *
+     * It caches build assets, and `next dev` rebuilds them under new hashes
+     * on every edit — so a worker installed during one session keeps serving
+     * the chunks it remembers, and a change to a component quietly does not
+     * appear. Worse, the stale chunk and the fresh server render disagree and
+     * the page fails to hydrate, which looks like a bug in the code you just
+     * wrote. Any worker left over from a production visit is removed, so
+     * `localhost` is always the build that is actually on disk.
+     */
+    if (process.env.NODE_ENV !== "production") {
+      void navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((r) => r.unregister())))
+        .then(async (removed) => {
+          if (!removed.some(Boolean)) return;
+          // Its caches outlive it, and they hold the stale chunks.
+          if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(
+              keys.filter((key) => key.startsWith("hilman-studio")).map((key) => caches.delete(key))
+            );
+          }
+          console.info("[studio] removed the offline shell for development.");
+        })
+        .catch(() => {
+          /* nothing to clean up */
+        });
+      return;
+    }
+
     // Registered from the studio rather than the root layout: a reader of the
     // public notebook has no use for an offline CMS shell.
     navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch((error) => {

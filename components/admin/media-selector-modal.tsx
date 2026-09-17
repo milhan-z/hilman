@@ -72,7 +72,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-faint hover:bg-line hover:text-ink transition-colors"
+            className="flex min-h-12 min-w-12 items-center justify-center rounded text-faint transition-colors hover:bg-line hover:text-ink"
             aria-label="Close"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -90,7 +90,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
               placeholder="Search by file ID, title, or alt text..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded border border-line bg-raise px-3 py-1.5 text-xs text-ink outline-none focus:border-pen"
+              className="min-h-12 w-full rounded border border-line bg-raise px-3 py-1.5 text-base text-ink outline-none focus:border-pen sm:min-h-0 sm:text-xs"
             />
           </div>
 
@@ -100,7 +100,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
                 aria-label="Filter by folder"
                 value={folderFilter}
                 onChange={(e) => setFolderFilter(e.target.value)}
-                className="w-full rounded border border-line bg-raise px-3 py-1.5 text-xs text-ink outline-none focus:border-pen"
+                className="min-h-12 w-full rounded border border-line bg-raise px-3 py-1.5 text-base text-ink outline-none focus:border-pen sm:min-h-0 sm:text-xs"
               >
                 <option value="all">All Folders</option>
                 {folders.map((f) => (
@@ -177,7 +177,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex min-h-[38px] items-center rounded border border-line bg-surface px-4 text-xs font-semibold text-soft hover:bg-line hover:text-ink transition-colors"
+              className="inline-flex min-h-12 items-center rounded border border-line bg-surface px-4 text-sm font-semibold text-soft transition-colors hover:bg-line hover:text-ink"
             >
               Cancel
             </button>
@@ -185,7 +185,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
               type="button"
               disabled={!selectedItem}
               onClick={() => onSelect(selectedItem!.public_id, selectedItem!.alt || undefined)}
-              className="inline-flex min-h-[38px] items-center rounded bg-hl px-5 text-xs font-semibold text-hl-ink shadow-card transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="inline-flex min-h-12 items-center rounded bg-hl px-5 text-sm font-semibold text-hl-ink shadow-card transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               Insert Asset
             </button>

@@ -18,9 +18,9 @@ export default async function AdminTaxonomyPage() {
             name="name"
             required
             placeholder="New tag name"
-            className="w-64 rounded border border-line bg-raise px-3.5 py-2.5 text-sm outline-none focus:border-pen"
+            className="min-h-12 w-64 max-w-full rounded border border-line bg-raise px-3.5 py-2.5 text-base outline-none focus:border-pen"
           />
-          <button className="rounded bg-hl px-4 text-sm font-medium text-hl-ink hover:opacity-90">Add</button>
+          <button className="min-h-12 rounded bg-hl px-4 text-sm font-medium text-hl-ink hover:opacity-90">Add</button>
         </form>
         <ul className="mt-4 flex flex-wrap gap-2">
           {(tags ?? []).map((t) => (
@@ -48,9 +48,9 @@ export default async function AdminTaxonomyPage() {
             name="name"
             required
             placeholder="Category name"
-            className="w-56 rounded border border-line bg-raise px-3.5 py-2.5 text-sm outline-none focus:border-pen"
+            className="min-h-12 w-56 max-w-full rounded border border-line bg-raise px-3.5 py-2.5 text-base outline-none focus:border-pen"
           />
-          <select name="stream" className="rounded border border-line bg-raise px-3 py-2.5 text-sm outline-none focus:border-pen">
+          <select name="stream" className="min-h-12 rounded border border-line bg-raise px-3 py-2.5 text-base outline-none focus:border-pen">
             <option value="">No stream</option>
             {Object.entries(STREAMS).map(([key, s]) => (
               <option key={key} value={key}>{s.name}</option>
@@ -59,9 +59,9 @@ export default async function AdminTaxonomyPage() {
           <input
             name="description"
             placeholder="Description (optional)"
-            className="w-64 rounded border border-line bg-raise px-3.5 py-2.5 text-sm outline-none focus:border-pen"
+            className="min-h-12 w-64 max-w-full rounded border border-line bg-raise px-3.5 py-2.5 text-base outline-none focus:border-pen"
           />
-          <button className="rounded bg-hl px-4 text-sm font-medium text-hl-ink hover:opacity-90">Add</button>
+          <button className="min-h-12 rounded bg-hl px-4 text-sm font-medium text-hl-ink hover:opacity-90">Add</button>
         </form>
         <ul className="mt-4 divide-y divide-line rounded-lg border border-line bg-surface">
           {(categories ?? []).map((c) => (

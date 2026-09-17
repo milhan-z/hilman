@@ -172,7 +172,7 @@ export function CommandPalette() {
             }}
             onKeyDown={onInputKey}
             placeholder="Jump to anything… (projects, journal, pages, actions)"
-            className="min-h-[52px] w-full bg-transparent text-sm text-ink outline-none placeholder:text-faint"
+            className="min-h-[52px] w-full bg-transparent text-base text-ink outline-none placeholder:text-faint"
             aria-label="Search the studio"
           />
           <kbd className="hidden shrink-0 rounded border border-line px-1.5 py-0.5 font-mono text-2xs text-faint sm:block">

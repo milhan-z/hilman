@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { Reorder, useDragControls } from "framer-motion";
+import { BlockDragGrip } from "./mobile/block-drag-grip";
 import { collectPendingRefs } from "@/lib/studio-media-refs";
 import { PendingPhoto } from "./pending-media";
 import { renderers } from "../blocks/renderer";
@@ -19,6 +20,16 @@ interface EditableBlockProps {
   onDuplicate?: () => void;
   onInsertBelow?: (type: BlockType) => void;
   onConvert?: (type: BlockType) => void;
+  /** Position in the list, for the screen-reader announcement on pick-up. */
+  index?: number;
+  total?: number;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  /** Opens the Add sheet positioned after this block. */
+  onAddBelow?: () => void;
+  /** Disabled at the ends of the list rather than silently doing nothing. */
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 // Auto-resizing textarea for paragraphs/quotes
@@ -179,8 +190,16 @@ export function EditableBlock({
   onDuplicate,
   onInsertBelow,
   onConvert,
+  index,
+  total,
+  onDragStart,
+  onDragEnd,
+  onAddBelow,
+  canMoveUp = true,
+  canMoveDown = true,
 }: EditableBlockProps) {
   const dragControls = useDragControls();
+  const [lifted, setLifted] = useState(false);
 
   // Photos in this block that have not reached Cloudinary yet.
   const stashedPhotos = collectPendingRefs(block.data);
@@ -316,6 +335,31 @@ export function EditableBlock({
         );
       }
 
+      case "image": {
+        // The picture is already on screen via the renderer above; what is
+        // missing once it lands is the two lines that describe it. Offered
+        // here rather than only behind the settings button, because "add a
+        // caption" should not require finding a gear icon.
+        return (
+          <div className="mt-3 space-y-2 border-t border-dashed border-line pt-3">
+            <input
+              type="text"
+              value={data.caption ?? ""}
+              onChange={(e) => onChange({ ...data, caption: e.target.value })}
+              placeholder="Add caption"
+              className="w-full border-0 border-b border-dashed border-line bg-transparent p-0 pb-1 text-base text-ink outline-none transition-colors focus:border-pen"
+            />
+            <input
+              type="text"
+              value={data.alt ?? ""}
+              onChange={(e) => onChange({ ...data, alt: e.target.value })}
+              placeholder="Add description (for screen readers)"
+              className="w-full border-0 border-b border-dashed border-line bg-transparent p-0 pb-1 text-base text-soft outline-none transition-colors focus:border-pen"
+            />
+          </div>
+        );
+      }
+
       case "button": {
         return (
           <div className="inline-flex items-center gap-2 rounded bg-hl px-4 py-2 text-hl-ink">
@@ -390,6 +434,24 @@ export function EditableBlock({
       value={block}
       dragListener={false}
       dragControls={dragControls}
+      data-block-lift
+      onDragStart={() => {
+        setLifted(true);
+        onDragStart?.();
+      }}
+      onDragEnd={() => {
+        setLifted(false);
+        onDragEnd?.();
+      }}
+      // While a block is off the ground it has to sit above its neighbours, or
+      // the one it is passing over is drawn on top of it.
+      style={{ position: "relative", zIndex: lifted ? 30 : undefined }}
+      animate={
+        lifted
+          ? { scale: 1.02, boxShadow: "var(--shadow-lift)" }
+          : { scale: 1, boxShadow: "0px 0px 0px rgba(0,0,0,0)" }
+      }
+      transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
       className="relative group/block my-1"
     >
       <div
@@ -399,9 +461,11 @@ export function EditableBlock({
           onActivate();
         }}
         className={`relative rounded-lg p-3 -m-3 border transition-all duration-fast cursor-pointer ${
-          active
-            ? "border-pen bg-raise shadow-card"
-            : "border-transparent hover:border-line-strong hover:bg-raise/30"
+          lifted
+            ? "border-pen bg-raise"
+            : active
+              ? "border-pen bg-raise shadow-card"
+              : "border-transparent hover:border-line-strong hover:bg-raise/30"
         }`}
       >
         {/*
@@ -417,6 +481,7 @@ export function EditableBlock({
         <BlockControls
           variant="floating"
           active={active}
+          onAddBelow={onAddBelow}
           dragControls={dragControls}
           hasDrawerConfig={hasDrawerConfig}
           onActivate={onActivate}
@@ -424,6 +489,8 @@ export function EditableBlock({
           onMove={onMove}
           onDuplicate={onDuplicate}
           onRemove={onRemove}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
         />
 
         {/* Content Render/Editor switcher */}
@@ -444,9 +511,14 @@ export function EditableBlock({
           <div className="text-xs text-faint italic">Unknown block type: {block.type}</div>
         )}
 
+        {active && block.type === "image" && (
+          <div onClick={(e) => e.stopPropagation()}>{renderInlineEditor()}</div>
+        )}
+
         <BlockControls
           variant="inline"
           active={active}
+          onAddBelow={onAddBelow}
           dragControls={dragControls}
           hasDrawerConfig={hasDrawerConfig}
           onActivate={onActivate}
@@ -454,6 +526,8 @@ export function EditableBlock({
           onMove={onMove}
           onDuplicate={onDuplicate}
           onRemove={onRemove}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
         />
       </div>
     </Reorder.Item>
@@ -471,6 +545,9 @@ interface BlockControlsProps {
   onMove: (dir: -1 | 1) => void;
   onDuplicate?: () => void;
   onRemove: () => void;
+  onAddBelow?: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }
 
 /**
@@ -491,6 +568,9 @@ function BlockControls({
   onMove,
   onDuplicate,
   onRemove,
+  onAddBelow,
+  canMoveUp,
+  canMoveDown,
 }: BlockControlsProps) {
   const button =
     "flex min-h-11 min-w-11 items-center justify-center rounded text-faint transition-colors sm:min-h-0 sm:min-w-0 sm:p-1";
@@ -502,27 +582,18 @@ function BlockControls({
 
   const buttons = (
     <>
-      <button
-        type="button"
-        onPointerDown={(e) => dragControls.start(e)}
-        aria-label="Drag to reorder this block"
-        className={`${button} hidden cursor-grab touch-none hover:text-ink active:cursor-grabbing sm:flex`}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-          <circle cx="8" cy="5" r="2" />
-          <circle cx="16" cy="5" r="2" />
-          <circle cx="8" cy="12" r="2" />
-          <circle cx="16" cy="12" r="2" />
-          <circle cx="8" cy="19" r="2" />
-          <circle cx="16" cy="19" r="2" />
-        </svg>
-      </button>
+      {/* One grip for both, rather than a desktop-only one. A mouse press on
+          it starts the drag immediately; a finger has to hold. It used to be
+          `hidden sm:flex`, which meant the phone — the device this studio is
+          for — had no way to drag a block at all. */}
+      <BlockDragGrip dragControls={dragControls} className="sm:h-9 sm:w-9" />
 
       <button
         type="button"
         onClick={stop(() => onMove(-1))}
+        disabled={!canMoveUp}
         aria-label="Move this block up"
-        className={`${button} hover:text-ink`}
+        className={`${button} hover:text-ink disabled:pointer-events-none disabled:opacity-30`}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
           <polyline points="18 15 12 9 6 15" />
@@ -532,8 +603,9 @@ function BlockControls({
       <button
         type="button"
         onClick={stop(() => onMove(1))}
+        disabled={!canMoveDown}
         aria-label="Move this block down"
-        className={`${button} hover:text-ink`}
+        className={`${button} hover:text-ink disabled:pointer-events-none disabled:opacity-30`}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
           <polyline points="6 9 12 15 18 9" />
@@ -569,6 +641,20 @@ function BlockControls({
         </button>
       )}
 
+      {onAddBelow && (
+        <button
+          type="button"
+          onClick={stop(onAddBelow)}
+          aria-label="Add a block after this one"
+          className={`${button} hover:text-pen`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      )}
+
       <button
         type="button"
         onClick={stop(onRemove)}
@@ -583,11 +669,16 @@ function BlockControls({
     </>
   );
 
-  // Phone: a row under the block, only for the block you tapped.
+  // Phone: a row under the block. Always present, not only once the block has
+  // been tapped — the grip is how you move a block, and having to select one
+  // first would mean a tap before every drag.
   if (variant === "inline") {
-    if (!active) return null;
     return (
-      <div className="mt-3 flex items-center justify-end gap-1 border-t border-line pt-2 sm:hidden">
+      <div
+        className={`mt-3 flex items-center justify-end gap-1 border-t pt-2 transition-colors sm:hidden ${
+          active ? "border-line" : "border-line/40"
+        }`}
+      >
         {buttons}
       </div>
     );
