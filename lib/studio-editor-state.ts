@@ -69,7 +69,7 @@ export type EditorActionId =
   | "review"
   | "review-prompts"
   | "remove-prompts"
-  | "retry-photo";
+  | "retry-upload";
 
 export interface EditorAction {
   id: EditorActionId;
@@ -107,10 +107,10 @@ export interface EditorSnapshot {
    */
   blockedPrompts?: number;
   conflict: boolean;
-  /** Queued behind a photograph that has not been uploaded yet. */
-  waitingOnPhoto?: boolean;
-  /** Photographs still going up, and ones that have given up. */
-  photos?: { pending: number; failed: number };
+  /** Queued behind a file that has not been uploaded yet. */
+  waitingOnMedia?: boolean;
+  /** Files still going up, ones that have given up, and what they are. */
+  uploads?: { pending: number; failed: number; noun?: UploadNoun };
 }
 
 export interface EditorStatus {
@@ -149,7 +149,29 @@ const RETRY: EditorAction = { id: "retry", label: "Try again", emphasis: "accent
 const REVIEW: EditorAction = { id: "review", label: "Review changes", emphasis: "accent" };
 const SHOW_PROMPTS: EditorAction = { id: "review-prompts", label: "Show them", emphasis: "accent" };
 const REMOVE_PROMPTS: EditorAction = { id: "remove-prompts", label: "Remove them", emphasis: "plain" };
-const RETRY_PHOTO: EditorAction = { id: "retry-photo", label: "Retry photo", emphasis: "accent" };
+/**
+ * What is being uploaded, so the sentence can name it.
+ *
+ * This used to be the word "photo", hard-coded, because photographs were the
+ * only thing that could be waiting. Loop clips go through the same queue now,
+ * and a stuck video that says "Retry photo" sends the author looking for a
+ * photograph that is not the problem.
+ *
+ * `"file"` is the honest answer when a photo and a clip are both waiting: it
+ * covers both without claiming the queue is one or the other.
+ */
+export type UploadNoun = "photo" | "clip" | "file";
+
+const DEFAULT_NOUN: UploadNoun = "photo";
+
+/** "photo" / "2 clips" — the count included only when there is more than one. */
+const many = (count: number, noun: UploadNoun) => `${noun}${count === 1 ? "" : "s"}`;
+
+const retryUpload = (noun: UploadNoun): EditorAction => ({
+  id: "retry-upload",
+  label: `Retry ${noun}`,
+  emphasis: "accent",
+});
 
 const savedOn = (device: string) => `Saved on ${device}`;
 
@@ -185,16 +207,18 @@ export function describeEditor(
   /* ── a photograph gave up ──
      Before the generic error, because "couldn't sync" would describe the
      writing, and the writing is fine: it is one upload that is stuck. */
-  if (snapshot.failure === "MEDIA_FAILED" || (snapshot.photos?.failed ?? 0) > 0) {
-    const failed = snapshot.photos?.failed ?? 1;
+  if (snapshot.failure === "MEDIA_FAILED" || (snapshot.uploads?.failed ?? 0) > 0) {
+    const failed = snapshot.uploads?.failed ?? 1;
+    const noun = snapshot.uploads?.noun ?? DEFAULT_NOUN;
+    const label = `${noun === "photo" ? "Photo" : noun === "clip" ? "Clip" : "Upload"} problem`;
     return {
       state: "MEDIA_ERROR",
       publishLabel,
-      localLabel: "Photo problem",
-      statusLine: line("Photo problem"),
+      localLabel: label,
+      statusLine: line(label),
       tone: "bad",
-      note: `${failed === 1 ? "A photo" : `${failed} photos`} couldn't upload. Everything you wrote is safe on ${device}.`,
-      primary: RETRY_PHOTO,
+      note: `${failed === 1 ? `A ${noun}` : `${failed} ${many(failed, noun)}`} couldn't upload. Everything you wrote is safe on ${device}.`,
+      primary: retryUpload(noun),
       secondary: null,
     };
   }
@@ -268,20 +292,21 @@ export function describeEditor(
      app now" — and the only one of the three that is reassuring. */
   if (snapshot.queued) {
     const offline = !snapshot.reachable;
-    const pendingPhotos = snapshot.photos?.pending ?? 0;
+    const pendingUploads = snapshot.uploads?.pending ?? 0;
+    const noun = snapshot.uploads?.noun ?? DEFAULT_NOUN;
 
     // Waiting on a photograph is a different wait from waiting on a signal,
     // and saying so is the difference between "something is wrong" and
     // "something is happening". Only when there is a connection to upload on:
     // offline, the connection is the thing being waited for.
-    const uploading = !offline && (snapshot.waitingOnPhoto || pendingPhotos > 0);
+    const uploading = !offline && (snapshot.waitingOnMedia || pendingUploads > 0);
 
     const localLabel = offline
       ? "Waiting for connection"
       : uploading
-        ? pendingPhotos > 1
-          ? `${pendingPhotos} photos uploading`
-          : "Photo uploading"
+        ? pendingUploads > 1
+          ? `${pendingUploads} ${many(pendingUploads, noun)} uploading`
+          : `${noun === "photo" ? "Photo" : noun === "clip" ? "Clip" : "Upload"} uploading`
         : snapshot.syncing
           ? "Syncing…"
           : savedOn(device);
@@ -290,7 +315,7 @@ export function describeEditor(
       ? `${PUBLISH_QUEUED_TITLE} — ${PUBLISH_QUEUED_BODY}`
       : uploading
         ? `Your writing is safe on ${device}. It goes to the site once the ${
-            pendingPhotos > 1 ? "photos are" : "photo is"
+            pendingUploads > 1 ? `${many(pendingUploads, noun)} are` : `${noun} is`
           } up.`
         : offline
           ? `${savedOn(device)}. It sends itself when you're back.`

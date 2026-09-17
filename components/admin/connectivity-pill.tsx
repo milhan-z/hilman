@@ -2,6 +2,7 @@
 
 import { useSyncState } from "./studio-runtime";
 import { cn } from "@/lib/utils";
+import type { UploadNoun } from "@/lib/studio-editor-state";
 
 /**
  * One word about whether your work has actually left this phone.
@@ -15,7 +16,15 @@ import { cn } from "@/lib/utils";
 
 export type StudioConnectivity = "synced" | "queued" | "syncing" | "offline" | "attention";
 
-const photos = (count: number) => `${count} ${count === 1 ? "photo" : "photos"}`;
+/**
+ * "2 photos", "1 clip", "3 files".
+ *
+ * The word is whatever is actually in the queue, not always "photo" — loop
+ * clips upload through the same path, and this pill used to call them
+ * photographs. See uploadNoun() in lib/studio-local/sync.ts.
+ */
+const uploads = (count: number, noun: UploadNoun) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
 const changes = (count: number) => `${count} ${count === 1 ? "change" : "changes"}`;
 
 /** What is waiting, in one word and one sentence. */
@@ -26,7 +35,9 @@ export function connectivityFrom(state: {
   blocked: number;
   conflicts: number;
   media: number;
+  uploads?: { noun: UploadNoun };
 }): { kind: StudioConnectivity; label: string; detail: string } {
+  const noun = state.uploads?.noun ?? "photo";
   if (state.conflicts > 0 || state.blocked > 0) {
     const count = state.conflicts + state.blocked;
     return {
@@ -39,13 +50,16 @@ export function connectivityFrom(state: {
     return {
       kind: "syncing",
       label: "Syncing",
-      detail: state.media > 0 ? "Uploading photos, then your changes." : "Sending your changes to the site.",
+      detail:
+        state.media > 0
+          ? `Uploading ${noun}s, then your changes.`
+          : "Sending your changes to the site.",
     };
   }
 
   const waiting = [
     state.queued > 0 ? changes(state.queued) : null,
-    state.media > 0 ? photos(state.media) : null,
+    state.media > 0 ? uploads(state.media, noun) : null,
   ].filter(Boolean) as string[];
 
   if (!state.reachable) {

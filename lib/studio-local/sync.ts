@@ -19,10 +19,11 @@ import {
   type QueuedMutation,
 } from "./outbox";
 import { touchSnapshot } from "./snapshots";
-import { flushPendingMedia, listPendingMedia } from "./media";
+import { flushPendingMedia, listPendingMedia, type PendingMedia } from "./media";
 import { listDrafts, writeDraft } from "./drafts";
 import { hasPendingRefs, replacePendingRefs } from "../studio-media-refs";
 import type { RejectionReason } from "../studio-sync-contract";
+import type { UploadNoun } from "../studio-editor-state";
 
 /**
  * Getting the queue to the server.
@@ -65,8 +66,15 @@ export interface SyncState {
   lastFailure: RejectionReason | null;
   /** Unanswered starter prompts, when that is why it was refused. */
   blockedPrompts: number;
-  /** Photographs still on this device: still going up, and given up on. */
-  photos: { pending: number; failed: number };
+  /**
+   * Files still on this device: still going up, given up on, and what they are.
+   *
+   * `noun` exists because the queue stopped being photographs only. It is
+   * "photo" when everything waiting is a photo, "clip" when everything waiting
+   * is a loop clip, and "file" when it is both — which is what the status line
+   * says out loud. See UploadNoun in lib/studio-editor-state.ts.
+   */
+  uploads: { pending: number; failed: number; noun: UploadNoun };
 }
 
 const initialState: SyncState = {
@@ -80,7 +88,7 @@ const initialState: SyncState = {
   lastError: null,
   lastFailure: null,
   blockedPrompts: 0,
-  photos: { pending: 0, failed: 0 },
+  uploads: { pending: 0, failed: 0, noun: "photo" },
 };
 
 let state: SyncState = initialState;
@@ -142,6 +150,21 @@ const emit = (event: SyncEvent) => {
 
 /* ── counting what is waiting ─────────────────────────────── */
 
+/**
+ * The word for whatever is in the queue.
+ *
+ * Only what is actually waiting counts. An empty queue answers "photo" because
+ * the noun is unused in that case and photographs are the ordinary thing; a
+ * mixed queue answers "file" rather than picking a side.
+ */
+export function uploadNoun(media: PendingMedia[]): UploadNoun {
+  if (media.length === 0) return "photo";
+  const clips = media.filter((m) => m.kind === "loop-clip").length;
+  if (clips === 0) return "photo";
+  if (clips === media.length) return "clip";
+  return "file";
+}
+
 export async function refreshSyncState(): Promise<SyncState> {
   const [queue, conflicts, media] = await Promise.all([
     listQueue(),
@@ -155,9 +178,10 @@ export async function refreshSyncState(): Promise<SyncState> {
     media: media.filter((m) => !m.blocked).length,
     // Split, because "still going up" and "gave up" need different sentences
     // and different buttons — see FailureKind in lib/studio-editor-state.ts.
-    photos: {
+    uploads: {
       pending: media.filter((m) => !m.blocked).length,
       failed: media.filter((m) => m.blocked).length,
+      noun: uploadNoun(media),
     },
   });
   return state;

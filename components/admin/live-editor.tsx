@@ -202,7 +202,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   useDragEdgeScroll({ active: dragging, container: canvasRef });
 
   const blocked = blockingReason(doc);
-  const waitingOnPhoto = hasPendingRefs(doc);
+  const waitingOnMedia = hasPendingRefs(doc);
 
   /* ── the starter prompts still waiting for an answer ──
      Run here rather than discovered from a rejection. The gate is pure and the
@@ -233,8 +233,8 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         : undefined,
       blockedPrompts: starterPrompts.length,
       conflict,
-      waitingOnPhoto,
-      photos: sync.photos,
+      waitingOnMedia,
+      uploads: sync.uploads,
     },
     device
   );
@@ -534,7 +534,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         case "remove-prompts":
           setPromptsOpen(true);
           return;
-        case "retry-photo":
+        case "retry-upload":
           window.dispatchEvent(new Event("hilman:sync"));
           return;
         case "retry": {

@@ -30,7 +30,7 @@ const serverSnapshot: SyncState = {
   lastError: null,
   lastFailure: null,
   blockedPrompts: 0,
-  photos: { pending: 0, failed: 0 },
+  uploads: { pending: 0, failed: 0, noun: "photo" },
 };
 
 /** Live queue and connectivity state, shared by every studio screen. */

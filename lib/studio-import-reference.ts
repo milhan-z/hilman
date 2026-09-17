@@ -118,6 +118,8 @@ export function blockReference(): BlockReferenceRow[] {
       "Give `public_id` a full https:// address or a Cloudinary id. A relative path will not load.",
     html: "Sanitised on the way in, on the way out, and again when it is stored.",
     embed: "A share URL. Arbitrary <iframe> markup is not accepted here.",
+    "loop-clip":
+      "`src` has to be a finished https:// MP4 address already on the site — importing cannot upload a new video for you.",
     markdown: "The escape hatch: anything with no block of its own belongs here.",
   };
 
@@ -234,6 +236,7 @@ ${layout}
 
 Rules:
 - "span" is the page width. On an image block "width" and "height" are the photo's own pixel size — they are different keys and do not interact.
+- "layout" on image, gallery, youtube and loop-clip is presentation only, and optional. Omit it unless the content plainly asks for one — a screenshot of a website is a "browser", a set of chat captures is a "stack". Leaving it out is the normal case.
 - Use "markdown" with an "md" string for lists and tables. There is no list or table block.
 - Image addresses must be full https:// URLs. Leave a photo out rather than inventing one.
 - No "id", "slug", "status", "published_at" or timestamps. I decide what gets published.

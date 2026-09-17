@@ -165,7 +165,7 @@ const base = {
 
 test("a document waiting on photographs does not claim to have failed", () => {
   const status = describeEditor(
-    { ...base, waitingOnPhoto: true, photos: { pending: 2, failed: 0 } },
+    { ...base, waitingOnMedia: true, uploads: { pending: 2, failed: 0, noun: "photo" } },
     "this iPhone"
   );
   assert.equal(status.state, "MEDIA_WAIT");
@@ -177,7 +177,7 @@ test("a document waiting on photographs does not claim to have failed", () => {
 
 test("one photograph is described in the singular", () => {
   const status = describeEditor(
-    { ...base, waitingOnPhoto: true, photos: { pending: 1, failed: 0 } },
+    { ...base, waitingOnMedia: true, uploads: { pending: 1, failed: 0, noun: "photo" } },
     "this iPhone"
   );
   assert.equal(status.statusLine, "Live · Photo uploading");
@@ -185,18 +185,60 @@ test("one photograph is described in the singular", () => {
 
 test("a photograph that gave up says so, and offers to retry that", () => {
   const status = describeEditor(
-    { ...base, queued: false, photos: { pending: 0, failed: 1 } },
+    { ...base, queued: false, uploads: { pending: 0, failed: 1, noun: "photo" } },
     "this iPhone"
   );
   assert.equal(status.state, "MEDIA_ERROR");
   assert.equal(status.statusLine, "Live · Photo problem");
-  assert.equal(status.primary?.id, "retry-photo");
+  assert.equal(status.primary?.id, "retry-upload");
+  assert.equal(status.primary?.label, "Retry photo");
   assert.match(status.note ?? "", /Everything you wrote is safe/);
+});
+
+/* ── and the same sentences about a clip name a clip ───────
+
+   The queue took loop clips before it learned to say so, which meant a video
+   stuck on the way to R2 reported "Photo uploading" and offered "Retry photo".
+   The noun comes from what is actually waiting now. */
+
+test("a loop clip going up is called a clip, not a photo", () => {
+  const status = describeEditor(
+    { ...base, waitingOnMedia: true, uploads: { pending: 1, failed: 0, noun: "clip" } },
+    "this iPhone"
+  );
+  assert.equal(status.statusLine, "Live · Clip uploading");
+  assert.match(status.note ?? "", /once the clip is up/);
+});
+
+test("several clips are counted as clips", () => {
+  const status = describeEditor(
+    { ...base, waitingOnMedia: true, uploads: { pending: 3, failed: 0, noun: "clip" } },
+    "this iPhone"
+  );
+  assert.equal(status.statusLine, "Live · 3 clips uploading");
+});
+
+test("a clip that gave up offers to retry the clip", () => {
+  const status = describeEditor(
+    { ...base, queued: false, uploads: { pending: 0, failed: 1, noun: "clip" } },
+    "this iPhone"
+  );
+  assert.equal(status.statusLine, "Live · Clip problem");
+  assert.equal(status.primary?.label, "Retry clip");
+  assert.match(status.note ?? "", /A clip couldn't upload/);
+});
+
+test("a photo and a clip waiting together are called files", () => {
+  const status = describeEditor(
+    { ...base, waitingOnMedia: true, uploads: { pending: 2, failed: 0, noun: "file" } },
+    "this iPhone"
+  );
+  assert.equal(status.statusLine, "Live · 2 files uploading");
 });
 
 test("offline outranks uploading, because the connection is what is missing", () => {
   const status = describeEditor(
-    { ...base, reachable: false, waitingOnPhoto: true, photos: { pending: 2, failed: 0 } },
+    { ...base, reachable: false, waitingOnMedia: true, uploads: { pending: 2, failed: 0, noun: "photo" } },
     "this iPhone"
   );
   assert.equal(status.state, "OFFLINE");

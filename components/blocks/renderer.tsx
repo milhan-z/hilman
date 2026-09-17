@@ -2,11 +2,25 @@ import { Pic } from "../cld-image";
 import { Prose, ProseInline } from "../prose";
 import { Button, NoteDivider } from "../ui";
 import { YouTubeFacade } from "../youtube-facade";
+import { LoopClipFacade } from "../loop-clip-facade";
 import { CustomBlock } from "../lab/registry";
 import { fileSrc } from "@/lib/cloudinary";
 import { parseEmbed } from "@/lib/embed";
 import { sanitizeStudioHtml } from "@/lib/studio-html";
 import { blockLayoutClasses, pixelDimension } from "@/lib/block-layout";
+import {
+  LEGACY_GALLERY_LAYOUT,
+  resolveGalleryLayout,
+  resolveImageLayout,
+  resolveLoopClipLayout,
+  resolveYouTubeLayout,
+} from "@/lib/media-layouts";
+import { ImagePresentation } from "./image-layouts";
+import { GalleryGrid } from "./gallery/grid";
+import { GalleryCarousel } from "./gallery/carousel";
+import { GalleryStack } from "./gallery/stack";
+import { GalleryAccordion } from "./gallery/accordion";
+import { galleryItems } from "./gallery/shared";
 import { cn } from "@/lib/utils";
 import type { Block, BlockType } from "@/lib/types";
 import type { ReactNode } from "react";
@@ -34,63 +48,92 @@ const ParagraphBlock: BlockFC = ({ data }) => <ProseInline text={data.text ?? ""
 
 const MarkdownBlock: BlockFC = ({ data }) => <Prose md={data.md ?? ""} />;
 
+/**
+ * `data.layout` picks the framing; the default is what every published image
+ * already looks like. An unknown value resolves to that default rather than
+ * falling through to nothing — see resolveImageLayout().
+ */
 const ImageBlock: BlockFC = ({ data }) => (
-  <figure className="!max-w-none">
-    <div className="overflow-hidden rounded-md border border-line shadow-card">
-      <Pic
-        src={data.public_id ?? data.src}
-        alt={data.alt ?? ""}
-        // Pixels only. `width` used to be handed straight to <Pic />, which
-        // meant a block whose width said "wide" produced a Cloudinary URL
-        // reading w_wide — see lib/block-layout.ts.
-        width={pixelDimension(data.width, 1600)}
-        height={pixelDimension(data.height, 1000)}
-        sizes="(max-width: 900px) 100vw, 860px"
-        className="w-full"
-      />
-    </div>
-    {data.caption && (
-      <figcaption className="mt-2 font-hand text-lg text-faint">{data.caption}</figcaption>
-    )}
-  </figure>
+  <ImagePresentation layout={resolveImageLayout(data)} data={data} />
 );
 
+/**
+ * Four presentations of the same list of photographs.
+ *
+ * Each one is its own component rather than a branch inside this function:
+ * the carousel owns a scroll position, the accordion owns a selection, and
+ * neither of those belongs in a switch statement next to a static grid.
+ *
+ * `"columns"` is the legacy two-up value, still in the database and still
+ * meaning what it meant. Anything unrecognised becomes a grid.
+ */
 const GalleryBlock: BlockFC = ({ data }) => {
-  const items: any[] = data.items ?? [];
-  const columns = data.layout === "columns";
+  const items = galleryItems(data);
+  if (items.length === 0) return null;
+
+  switch (resolveGalleryLayout(data)) {
+    case "carousel":
+      return <GalleryCarousel items={items} />;
+    case "stack":
+      return <GalleryStack items={items} />;
+    case "accordion":
+      return <GalleryAccordion items={items} />;
+    case LEGACY_GALLERY_LAYOUT:
+      return <GalleryGrid items={items} columns />;
+    case "grid":
+    default:
+      return <GalleryGrid items={items} />;
+  }
+};
+
+/**
+ * The embed is untouched — same facade, same id handling, same click-to-load.
+ * Cinema only changes what surrounds it: a dark, wider field so the video is
+ * the lit thing on the page.
+ */
+const YouTubeBlock: BlockFC = ({ data }) => {
+  if (resolveYouTubeLayout(data) === "cinema") {
+    return (
+      <div className="!max-w-none rounded-lg bg-n-900 px-3 py-4 sm:px-8 sm:py-8">
+        <div className="mx-auto max-w-4xl">
+          <YouTubeFacade youtubeId={data.youtube_id} caption={data.caption} />
+        </div>
+      </div>
+    );
+  }
   return (
-    <div
-      className={cn(
-        "!max-w-none grid gap-4",
-        columns ? "sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-3"
-      )}
-    >
-      {items.map((item, i) => (
-        <figure key={i}>
-          <div className="overflow-hidden rounded border border-line">
-            <Pic
-              src={item.public_id ?? item.src}
-              alt={item.alt ?? ""}
-              width={900}
-              height={columns ? 506 : 1200}
-              sizes="(max-width: 640px) 50vw, 33vw"
-              className="aspect-[4/3] w-full object-cover"
-            />
-          </div>
-          {item.caption && (
-            <figcaption className="mt-1.5 font-hand text-base text-faint">{item.caption}</figcaption>
-          )}
-        </figure>
-      ))}
+    <div className="!max-w-none">
+      <YouTubeFacade youtubeId={data.youtube_id} caption={data.caption} />
     </div>
   );
 };
 
-const YouTubeBlock: BlockFC = ({ data }) => (
-  <div className="!max-w-none">
-    <YouTubeFacade youtubeId={data.youtube_id} caption={data.caption} />
-  </div>
-);
+/**
+ * A short, silent, looping clip — the studio's answer to "I want a GIF here".
+ *
+ * `data.src` is either a finished https URL or, briefly, a `pending:`
+ * placeholder while the file is still uploading. The second case should never
+ * reach the public renderer — publish is held back while any block still
+ * names one (see hasPendingRefs() in lib/studio-media-refs.ts) — but the
+ * check costs one line and means a bug upstream renders nothing instead of a
+ * broken <video src="pending:..."> tag.
+ *
+ * autoplay/muted/loop/playsInline are not settings; they are what this block
+ * *is*. A clip that only plays on tap or that has sound is a Video block, not
+ * a Loop Clip — see BLOCK_HINTS in lib/types.ts.
+ */
+const LoopClipBlock: BlockFC = ({ data }) => {
+  const src = String(data.src ?? "");
+  if (!src || src.startsWith("pending:")) return null;
+  return (
+    <LoopClipFacade
+      src={src}
+      caption={data.caption}
+      fit={data.fit === "contain" ? "contain" : "cover"}
+      layout={resolveLoopClipLayout(data)}
+    />
+  );
+};
 
 const EmbedBlock: BlockFC = ({ data }) => {
   // Accepts a bare URL or a full <iframe> snippet (Figma/CodePen/maps/…).
@@ -189,6 +232,7 @@ export const renderers: Record<BlockType, BlockFC> = {
   image: ImageBlock,
   gallery: GalleryBlock,
   youtube: YouTubeBlock,
+  "loop-clip": LoopClipBlock,
   embed: EmbedBlock,
   quote: QuoteBlock,
   divider: DividerBlock,

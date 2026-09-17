@@ -33,6 +33,7 @@ export type BlockType =
   | "image"
   | "gallery"
   | "youtube"
+  | "loop-clip"
   | "embed"
   | "quote"
   | "divider"
@@ -60,14 +61,19 @@ export interface Block {
  * block and are not listed per type — `span` and `spacing`, documented in
  * lib/block-layout.ts and surfaced to the importer through LAYOUT_KEYS in
  * lib/studio-import-reference.ts.
+ *
+ * `layout` on the four media types is optional in the strongest sense: leaving
+ * it out is a decision, not an omission, and gives the presentation these
+ * blocks have always had. See lib/media-layouts.ts.
  */
 export const BLOCK_HINTS: Record<BlockType, string> = {
   heading: "{ level: 2|3|4, text }",
   paragraph: "{ text } — inline markdown allowed",
   markdown: "{ md }",
-  image: "{ public_id | src, alt, caption, width?, height? } — width/height in pixels",
-  gallery: "{ items: [{ public_id | src, alt, caption }], layout: 'grid'|'columns' } — `layout` is this block's own key, not the page span",
-  youtube: "{ youtube_id (id · URL · or <iframe>), caption }",
+  image: "{ public_id | src, alt, caption, width?, height?, layout?: 'default'|'full'|'browser'|'phone'|'polaroid' } — width/height in pixels",
+  gallery: "{ items: [{ public_id | src, alt, caption }], layout?: 'grid'|'carousel'|'stack'|'accordion' } — `layout` is this block's own key, not the page span",
+  youtube: "{ youtube_id (id · URL · or <iframe>), caption, layout?: 'default'|'cinema' }",
+  "loop-clip": "{ src (an https MP4 URL, or pending: while it uploads), caption, fit: 'cover'|'contain', layout?: 'default'|'browser'|'phone'|'floating' } — always renders muted, autoplay, loop",
   embed: "{ url (share URL or full <iframe>), provider?, height? }",
   quote: "{ text, source }",
   divider: "{ style: 'line'|'dots'|'scribble' }",

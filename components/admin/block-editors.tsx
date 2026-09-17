@@ -9,7 +9,10 @@ import { discardPendingMedia } from "@/lib/studio-local/media";
 import { useMediaSelector } from "./media-library-context";
 import { mediaSrc } from "@/lib/cloudinary";
 import { HtmlBlockEditor } from "./html-block-editor";
+import { LoopClipField } from "./loop-clip-field";
 import { normalizeBlockLayout, resolveSpacing, resolveSpan } from "@/lib/block-layout";
+import { LayoutPicker } from "./layout-picker";
+import { hasLayoutChoices } from "@/lib/media-layouts";
 import type { BlockType } from "@/lib/types";
 
 /* ─────────────────────────────────────────────────────────
@@ -25,6 +28,7 @@ export const BLOCK_TYPES: { type: BlockType; label: string }[] = [
   { type: "image", label: "Image" },
   { type: "gallery", label: "Gallery" },
   { type: "youtube", label: "YouTube" },
+  { type: "loop-clip", label: "Loop Clip" },
   { type: "embed", label: "Embed" },
   { type: "quote", label: "Quote" },
   { type: "divider", label: "Divider" },
@@ -43,6 +47,7 @@ export const DEFAULT_DATA: Record<BlockType, Record<string, any>> = {
   image: { public_id: "", alt: "", caption: "" },
   gallery: { layout: "grid", items: [] },
   youtube: { youtube_id: "", caption: "" },
+  "loop-clip": { src: "", caption: "", fit: "cover" },
   embed: { url: "", provider: "" },
   quote: { text: "", source: "" },
   divider: { style: "line" },
@@ -63,6 +68,7 @@ export function blockSummary(type: BlockType, data: Record<string, any>): string
     case "image": return data.public_id || data.src || "(no image)";
     case "gallery": return `${(data.items ?? []).length} item(s)`;
     case "youtube": return data.youtube_id || "(no video id)";
+    case "loop-clip": return isPendingRef(data.src) ? "Uploading…" : data.caption || data.src || "(no clip)";
     case "embed": return data.url || "(no url)";
     case "quote": return (data.text || "").slice(0, 80) || "(empty quote)";
     case "divider": return data.style ?? "line";
@@ -286,17 +292,11 @@ function GalleryEditor({ data, onChange }: EditorProps) {
   };
 
   return (
+    /* The Grid/Columns dropdown that used to sit here is now the Presentation
+       picker below the editor, which writes the same `data.layout` and offers
+       the four V1 arrangements. `"columns"` remains a valid stored value and
+       keeps rendering two-up; it is simply not something to newly choose. */
     <div className="space-y-3">
-      <Field label="Layout">
-        <Select
-          value={data.layout ?? "grid"}
-          onChange={(e) => onChange({ ...data, layout: e.target.value })}
-        >
-          <option value="grid">Grid (3-up)</option>
-          <option value="columns">Columns (2-up)</option>
-        </Select>
-      </Field>
-
       {items.length > 0 && (
         <ul className="space-y-2">
           {items.map((item, index) => {
@@ -449,6 +449,26 @@ const EDITORS: Record<BlockType, (p: EditorProps) => React.JSX.Element> = {
       </Field>
     </div>
   ),
+  "loop-clip": ({ data, onChange }) => (
+    <div className="space-y-3">
+      <LoopClipField value={data.src ?? ""} onChange={(src) => onChange({ ...data, src })} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Fit" hint="How the clip fills its frame.">
+          <Select value={data.fit ?? "cover"} onChange={(e) => onChange({ ...data, fit: e.target.value })}>
+            <option value="cover">Cover — fills the frame, may crop</option>
+            <option value="contain">Contain — shows the whole clip</option>
+          </Select>
+        </Field>
+        <Field label="Caption">
+          <TextInput value={data.caption ?? ""} onChange={(e) => onChange({ ...data, caption: e.target.value })} />
+        </Field>
+      </div>
+      <p className="text-xs text-faint">
+        Always plays muted, looping and silent — that's what makes it a Loop Clip rather than a Video.
+        For anything with sound or longer than a minute, use the YouTube block instead.
+      </p>
+    </div>
+  ),
   embed: ({ data, onChange }) => (
     <div className="space-y-3">
       <Field
@@ -587,7 +607,16 @@ export function BlockEditorFields({
   return (
     <div className="space-y-4">
       <Editor data={data} onChange={onChange} />
-      
+
+      {/* Above the margin/width controls, because it belongs to the block
+          rather than to the page: it changes what the thing *is* on screen,
+          not how much room is left around it. */}
+      {hasLayoutChoices(type) && (
+        <div className="border-t border-line pt-4">
+          <LayoutPicker type={type} data={data} onChange={onChange} />
+        </div>
+      )}
+
       <div className="border-t border-line pt-4 mt-4 space-y-3">
         <p className="text-2xs font-semibold uppercase tracking-wider text-faint">
           Block Layout Options

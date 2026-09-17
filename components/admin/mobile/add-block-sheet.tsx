@@ -14,7 +14,7 @@ import type { BlockType } from "@/lib/types";
  * database's view of the world. Someone adding to a case study on their phone
  * wants a photo or a sentence, and wants it without reading a list.
  *
- * So the five things that actually get used are large targets at the top, and
+ * So the handful of things that actually get used are large targets at the top, and
  * everything else — embeds, code, files, experiments — is behind one more tap.
  * The list underneath is still generated from BLOCK_TYPES, so a new block type
  * appears there automatically and nothing has to be kept in step by hand.
@@ -24,7 +24,7 @@ import type { BlockType } from "@/lib/types";
  * do; the block is created around what you chose.
  */
 
-/** The five that earn a tile, in the order they get reached for. */
+/** The ones that earn a tile, in the order they get reached for. */
 const COMMON: { type: BlockType; label: string; hint: string; icon: React.ReactNode }[] = [
   {
     type: "image",
@@ -84,6 +84,19 @@ const COMMON: { type: BlockType; label: string; hint: string; icon: React.ReactN
       </>
     ),
   },
+  {
+    type: "loop-clip",
+    label: "Loop Clip",
+    hint: "A short, silent, looping video",
+    icon: (
+      <>
+        <polyline points="17 1 21 5 17 9" />
+        <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+        <polyline points="7 23 3 19 7 15" />
+        <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+      </>
+    ),
+  },
 ];
 
 /** Plainer words for the long list, where the registry's own names show. */
@@ -125,12 +138,8 @@ export function AddBlockSheet({
     <MobileSheet open={open} onClose={onClose} title="Add something">
       <div className="space-y-4">
         <ul className="grid grid-cols-2 gap-2.5">
-          {COMMON.map((entry, index) => (
-            <li
-              key={entry.type}
-              // Video is the fifth of five, so it takes the empty column.
-              className={index === COMMON.length - 1 ? "col-span-2" : undefined}
-            >
+          {COMMON.map((entry) => (
+            <li key={entry.type}>
               <button
                 type="button"
                 onClick={() => choose(entry.type)}

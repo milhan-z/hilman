@@ -2,29 +2,50 @@
 
 import { recordMedia } from "@/app/admin/actions";
 import { PENDING_PREFIX } from "../studio-media-refs";
+import { checkClipFile } from "./clip-check";
 import { dbDelete, dbGetAll, dbPut } from "./db";
 import { newMutationId } from "./save";
 
 /**
- * Photographs that exist only on this phone, so far.
+ * Media that exists only on this phone, so far.
  *
  * Uploading is the one part of the studio that genuinely cannot be deferred
- * into a database row: Cloudinary needs the bytes. So the bytes are kept here,
- * as a Blob in IndexedDB, and the block that wants the photo holds a
- * `pending:<uuid>` placeholder until the upload finishes.
+ * into a database row: the remote store needs the bytes. So the bytes are
+ * kept here, as a Blob in IndexedDB, and the block that wants the photo or
+ * clip holds a `pending:<uuid>` placeholder until the upload finishes.
  *
  * Two things follow from that, and both are load-bearing:
  *
- *  - The photo is stored *before* anything is attempted over the network, so
- *    the picture survives the app being closed on a train.
+ *  - The file is stored *before* anything is attempted over the network, so a
+ *    picture or clip taken with no signal survives the app being closed.
  *  - A save whose payload still names a placeholder is held back by the outbox
- *    (see sync.ts), so the site is never asked to show a picture nobody else
+ *    (see sync.ts), so the site is never asked to show something nobody else
  *    can reach.
+ *
+ * ── two kinds, one placeholder scheme ──
+ *
+ * Everything above is provider-agnostic by construction: `pending:<uuid>`
+ * carries no hint of where it is going, and `replacePendingRefs()` in
+ * studio-media-refs.ts is a blind string swap that has never needed to know.
+ * The only place that *was* hardwired to one destination was this file —
+ * `uploadAsset()` reached straight for `/api/cloudinary/sign`. `kind` is what
+ * that hardwiring became: recorded once, at the moment a file is stashed, so
+ * everything downstream (the outbox flush, the retry, the pending preview)
+ * can ask "how do I finish this one" instead of assuming.
+ *
+ * Photos still go to Cloudinary — nothing about that path changed. Loop Clips
+ * go to Cloudflare R2, added here rather than as a parallel uploader, because
+ * a second local-first system next to this one is how a photo taken offline
+ * and a clip taken offline would end up surviving differently.
  */
+
+export type PendingMediaKind = "image" | "loop-clip";
 
 export interface PendingMedia {
   /** `pending:<uuid>` — the key, and the string blocks actually hold. */
   ref: string;
+  /** Decided once, at stash time — see the file comment. Defaults to "image" so old records read back unchanged. */
+  kind: PendingMediaKind;
   blob: Blob;
   name: string;
   type: string;
@@ -33,7 +54,7 @@ export interface PendingMedia {
   capturedAt: string;
   attempts: number;
   lastError?: string;
-  /** Cloudinary refused it for a reason retrying will not change. */
+  /** The remote store refused it for a reason retrying will not change. */
   blocked?: boolean;
 }
 
@@ -78,9 +99,22 @@ const readable = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
  * Refuses rather than half-succeeds: a photo that was accepted and then
  * silently dropped when the browser ran out of room is worse than one that was
  * never taken, because you stop checking.
+ *
+ * A Loop Clip goes through `checkClipFile()` first, which is where a MOV/HEVC
+ * export is caught — see lib/studio-local/clip-check.ts for what that check
+ * can and cannot promise. Rejected here means it never becomes a Blob in
+ * IndexedDB at all, which is the same "refuse, don't half-succeed" rule
+ * applied one step earlier than the size/quota checks below.
  */
-export async function stashMedia(file: File, folder = "hilman"): Promise<StashResult> {
-  if (file.size > MAX_FILE_BYTES) {
+export async function stashMedia(
+  file: File,
+  folder = "hilman",
+  kind: PendingMediaKind = "image"
+): Promise<StashResult> {
+  if (kind === "loop-clip") {
+    const clip = await checkClipFile(file);
+    if (!clip.ok) return { ok: false, reason: clip.reason! };
+  } else if (file.size > MAX_FILE_BYTES) {
     return {
       ok: false,
       reason: `That file is ${readable(file.size)}. Keeping something that large on the phone risks pushing your drafts out of storage — upload it from a computer instead.`,
@@ -91,15 +125,16 @@ export async function stashMedia(file: File, folder = "hilman"): Promise<StashRe
   if (report && report.quota > 0 && report.usage + file.size > report.quota * QUOTA_CEILING) {
     return {
       ok: false,
-      reason: `This phone is nearly out of space for the studio (${readable(report.usage)} of ${readable(report.quota)} used). Send the photos that are already waiting before adding another.`,
+      reason: `This phone is nearly out of space for the studio (${readable(report.usage)} of ${readable(report.quota)} used). Send what's already waiting before adding another.`,
     };
   }
 
   const ref = `${PENDING_PREFIX}${newMutationId()}`;
   const stored = await dbPut<PendingMedia>("media", {
     ref,
+    kind,
     blob: file,
-    name: file.name || "photo",
+    name: file.name || (kind === "loop-clip" ? "clip.mp4" : "photo"),
     type: file.type || "application/octet-stream",
     size: file.size,
     folder: folder.trim() || "hilman",
@@ -110,7 +145,7 @@ export async function stashMedia(file: File, folder = "hilman"): Promise<StashRe
   if (!stored) {
     return {
       ok: false,
-      reason: "This browser would not store the photo, so it was not added. Try again with a connection, or from a computer.",
+      reason: "This browser would not store the file, so it was not added. Try again with a connection, or from a computer.",
     };
   }
 
@@ -215,8 +250,48 @@ export async function uploadAsset(file: Blob, name: string, folder = "hilman"): 
   return uploaded;
 }
 
+/**
+ * Signed upload, R2's shape:
+ * 1. ask our server to presign one PUT for this exact size and content-type
+ * 2. PUT the bytes straight to that URL
+ *
+ * There is no step 3. R2 only stores files — no transform pipeline, and no
+ * media-library bookkeeping for v1, because nothing yet asks to browse or
+ * reuse a previously uploaded clip. What comes back is the finished public
+ * URL, not an id a display-time helper still has to resolve: unlike a
+ * Cloudinary `public_id`, this is already the value `<video src>` will use.
+ */
+async function uploadClip(file: Blob, name: string, folder = "clips"): Promise<{ url: string }> {
+  const signRes = await fetch("/api/r2/sign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder, filename: name, contentType: "video/mp4", size: file.size }),
+  });
+  if (!signRes.ok) {
+    const err = await signRes.json().catch(() => ({}));
+    throw new Error(err.error ?? "Could not sign upload");
+  }
+  const { uploadUrl, publicUrl } = await signRes.json();
+
+  const res = await fetch(uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: { "Content-Type": "video/mp4" },
+  });
+  if (!res.ok) {
+    throw new Error(`Upload to R2 failed (${res.status}).`);
+  }
+
+  return { url: publicUrl };
+}
+
 export interface MediaFlushReport {
-  /** placeholder → the real Cloudinary public_id. */
+  /**
+   * placeholder → the finished reference: a Cloudinary `public_id` for a
+   * photo, or a complete https URL for a Loop Clip. `replacePendingRefs()`
+   * treats both as an opaque string, so nothing downstream needs to know
+   * which shape it received.
+   */
   resolved: Record<string, string>;
   /** True when at least one upload failed for a reason worth retrying. */
   offline: boolean;
@@ -236,8 +311,13 @@ export async function flushPendingMedia(): Promise<MediaFlushReport> {
 
   for (const item of pending) {
     try {
-      const asset = await uploadAsset(item.blob, item.name, item.folder);
-      resolved[item.ref.toLowerCase()] = asset.public_id;
+      if (item.kind === "loop-clip") {
+        const clip = await uploadClip(item.blob, item.name, item.folder);
+        resolved[item.ref.toLowerCase()] = clip.url;
+      } else {
+        const asset = await uploadAsset(item.blob, item.name, item.folder);
+        resolved[item.ref.toLowerCase()] = asset.public_id;
+      }
       await discardPendingMedia(item.ref);
     } catch (error: any) {
       const message = String(error?.message ?? error);

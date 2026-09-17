@@ -6,6 +6,7 @@ import Link from "next/link";
 import { MobileSheet } from "./mobile-sheet";
 import { connectivityFrom } from "./connectivity-pill";
 import { flushOutbox, refreshSyncState, useSyncState } from "./studio-runtime";
+import { uploadNoun } from "@/lib/studio-local/sync";
 import { listQueue, dequeue, unblockEntry, type QueuedMutation } from "@/lib/studio-local/outbox";
 import { listConflicts, resolveConflict, type StoredConflict } from "@/lib/studio-local/conflicts";
 import { enqueue } from "@/lib/studio-local/outbox";
@@ -17,7 +18,7 @@ import {
   storageReport,
   type PendingMedia,
 } from "@/lib/studio-local/media";
-import { PendingPhoto } from "./pending-media";
+import { PendingClip, PendingPhoto } from "./pending-media";
 import { cn } from "@/lib/utils";
 
 /**
@@ -54,6 +55,7 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   const [photos, setPhotos] = useState<PendingMedia[]>([]);
   const [space, setSpace] = useState<{ usage: number; quota: number } | null>(null);
   const summary = connectivityFrom(state);
+  const mediaNoun = uploadNoun(photos);
   /** Work actually addressed to the site: saves queued, plus photos going up. */
   const waiting = state.queued + state.media;
 
@@ -221,17 +223,27 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
         {photos.length > 0 && (
           <section aria-labelledby="sync-photos">
+            {/* The heading names whatever is actually here — a queue holding
+                only loop clips should not be headed "Photos". */}
             <h3 id="sync-photos" className="mb-2 text-sm font-semibold text-ink">
-              Photos on this phone
+              {mediaNoun === "photo" ? "Photos" : mediaNoun === "clip" ? "Clips" : "Files"} on this
+              phone
             </h3>
             <p className="mb-2.5 text-sm text-soft">
-              A save that uses one of these waits for it, so the site is never asked to show a
-              picture that has not been uploaded.
+              A save that uses one of these waits for it, so the site is never asked to show
+              something that has not been uploaded.
             </p>
             <ul className="space-y-3">
               {photos.map((photo) => (
                 <li key={photo.ref}>
-                  <PendingPhoto photoRef={photo.ref} onDiscard={() => void dropPhoto(photo.ref)} />
+                  {/* A clip in this list used to be drawn by <PendingPhoto />,
+                      which renders an <img>: the author saw a broken thumbnail
+                      for a file that was uploading perfectly well. */}
+                  {photo.kind === "loop-clip" ? (
+                    <PendingClip clipRef={photo.ref} onDiscard={() => void dropPhoto(photo.ref)} />
+                  ) : (
+                    <PendingPhoto photoRef={photo.ref} onDiscard={() => void dropPhoto(photo.ref)} />
+                  )}
                   {photo.blocked && (
                     <button
                       type="button"

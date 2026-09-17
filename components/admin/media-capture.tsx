@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { stashMedia } from "@/lib/studio-local/media";
+import { stashMedia, type PendingMediaKind } from "@/lib/studio-local/media";
 import { flushOutbox } from "./studio-runtime";
 
 /**
@@ -22,12 +22,15 @@ export function MediaCapture({
   onCaptured,
   folder = "hilman",
   accept = "image/*",
+  kind = "image",
   disabled,
 }: {
   /** Receives the `pending:` placeholder to store in the block. */
   onCaptured: (ref: string) => void;
   folder?: string;
   accept?: string;
+  /** Which uploader this file is headed for — see lib/studio-local/media.ts. */
+  kind?: PendingMediaKind;
   disabled?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
@@ -40,7 +43,7 @@ export function MediaCapture({
     setBusy(true);
     setError(null);
 
-    const result = await stashMedia(file, folder);
+    const result = await stashMedia(file, folder, kind);
     setBusy(false);
 
     if (!result.ok) {
