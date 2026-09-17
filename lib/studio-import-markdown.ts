@@ -116,7 +116,9 @@ export function parseMarkdownDocument(raw: string): ImportOutcome {
     }
   }
 
-  if (entries.length === 0) {
+  // A lone `# Heading` is a title and no blocks, which is a real answer — the
+  // preview will say so, and the editor's title is where it lands.
+  if (entries.length === 0 && title === null) {
     return { ok: false, error: "No content was found in that Markdown." };
   }
 

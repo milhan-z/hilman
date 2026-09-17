@@ -131,7 +131,7 @@ export function StudioTabBar() {
         aria-label="Studio"
         hidden={keyboardOpen}
         className={cn(
-          "fixed inset-x-0 bottom-0 z-[80] border-t border-line-strong bg-paper/95 backdrop-blur lg:hidden",
+          "fixed inset-x-0 bottom-0 z-[80] border-t border-line-strong bg-paper backdrop-blur lg:hidden",
           "px-2 pt-1 pb-[max(0.35rem,env(safe-area-inset-bottom))]",
           "pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]"
         )}

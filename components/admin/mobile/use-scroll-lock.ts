@@ -32,6 +32,15 @@ import { useEffect } from "react";
  * Counted rather than boolean, because one sheet can open another — a block's
  * Add sheet handing over to the media picker — and the second one unlocking
  * the page would drop the first one's remembered position on the floor.
+ *
+ * It does nothing at all when the document is not the scroller. Inside the
+ * mobile editor the shell is `fixed inset-0` and the canvas scrolls itself, so
+ * there is no page position to preserve and pinning the body would be motion
+ * for its own sake — it would also fight the shell for the same pixels. Rather
+ * than growing a second lock for editor sheets, the existing one asks whether
+ * there is anything to lock and declines when there is not. Every non-editor
+ * Studio screen is still a plain scrolling document and still gets the full
+ * treatment.
  */
 
 interface LockedState {
@@ -47,9 +56,15 @@ interface LockedState {
 let depth = 0;
 let saved: LockedState | null = null;
 
+/** Whether the page itself can scroll, and therefore has a position to keep. */
+function documentScrolls(): boolean {
+  return document.documentElement.scrollHeight > window.innerHeight + 1;
+}
+
 function lock() {
   depth += 1;
   if (depth > 1) return;
+  if (!documentScrolls()) return;
 
   const body = document.body;
   const scrollY = window.scrollY;

@@ -216,7 +216,11 @@
                     pressing it twice. Fixed by touch-action: manipulation,
                     which suppresses exactly that and nothing else.
 
-       pinch        Deliberate, two-fingered, and left alone.
+       pinch        Deliberate, two-fingered, and left alone *here*. The
+                    private studio locks scale in its own viewport export
+                    (app/admin/layout.tsx) because pinch rescales the visual
+                    viewport out from under a fixed app shell. The public
+                    notebook keeps zoom; nothing in this file removes it.
 
      Scoped to coarse pointers so a desktop browser is untouched, and
      written with :where() so the specificity is zero and any component
@@ -481,6 +485,27 @@
     z-index: 9999;
     opacity: 0.5;
     mix-blend-mode: overlay;
+  }
+}
+
+/* ── the editor shell owns the screen ───────────────────────────────
+   Set by <MobileEditorShell /> while a mobile editor is open. The shell is
+   `fixed inset-0`, so the document already has nothing to scroll; this makes
+   that explicit, because a stray pixel of overflow is enough for Safari to
+   decide the page is scrollable and start a rubber-band behind the shell —
+   which is the exact effect the shell exists to remove.
+
+   Scoped to a class, not applied to html globally: every other Studio screen
+   is a normal scrolling document and must stay one. Unset from `lg` up, where
+   the editor hands the document back. */
+@media (max-width: 1023px) {
+  html.studio-editor-shell,
+  html.studio-editor-shell body {
+    height: 100%;
+    overflow: hidden;
+    /* Belt and braces: even if something does overflow, it must not chain out
+       to the document and bounce the shell. */
+    overscroll-behavior-y: none;
   }
 }
 

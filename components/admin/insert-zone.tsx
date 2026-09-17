@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { BLOCK_TYPES } from "./block-editors";
+import { cn } from "@/lib/utils";
 import type { BlockType } from "@/lib/types";
 
 interface InsertZoneProps {
@@ -70,7 +71,7 @@ export function InsertZone({ onInsert }: InsertZoneProps) {
                   onInsert(t.type);
                   setIsOpen(false);
                 }}
-                className="flex items-center gap-2 rounded border border-transparent bg-raise/50 px-2 py-1.5 text-left text-xs text-soft hover:border-pen hover:text-pen transition-colors"
+                className="flex items-center gap-2 rounded border border-transparent bg-raise px-2 py-1.5 text-left text-xs text-soft hover:border-pen hover:text-pen transition-colors"
               >
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-pen-soft text-pen font-mono text-2xs font-bold uppercase">
                   {t.type.slice(0, 2)}
@@ -82,5 +83,55 @@ export function InsertZone({ onInsert }: InsertZoneProps) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Adding a block, on a phone.
+ *
+ * <InsertZone /> above is a pointer affordance: it appears on hover and opens
+ * its own grid of types. Neither half of that works with a finger, so the
+ * phone had a full-width dashed "Add block" button at the end of the document
+ * instead — which meant every new block was appended and then moved.
+ *
+ * This is the same gesture the rest of the studio uses: a quiet hairline with
+ * a `+` on it, at a real 44px target, handing over to the Add sheet. It reads
+ * as a seam in the writing rather than as a control, which is the point — the
+ * canvas is meant to look like the document, and an always-visible button per
+ * block is how it stopped looking like one.
+ */
+export function InlineAdd({
+  onAdd,
+  label = "Add a block here",
+  className,
+}: {
+  onAdd: () => void;
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      aria-label={label}
+      className={cn(
+        "group/add relative flex min-h-11 w-full items-center justify-center",
+        className
+      )}
+    >
+      <span
+        aria-hidden
+        className="absolute inset-x-0 h-px bg-line transition-colors group-active/add:bg-pen"
+      />
+      <span
+        aria-hidden
+        className="relative flex h-7 w-7 items-center justify-center rounded-full border border-line bg-paper text-faint transition-colors group-active/add:border-pen group-active/add:text-pen"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </span>
+    </button>
   );
 }

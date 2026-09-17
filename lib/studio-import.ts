@@ -1,4 +1,5 @@
 import { sanitizeStudioHtml } from "./studio-html";
+import { convertHtmlToBlocks } from "./studio-import-html";
 import { BLOCK_HINTS, type Block, type BlockType } from "./types";
 
 /**
@@ -175,15 +176,32 @@ export function parseStudioJson(raw: string, kind: "project" | "journal"): Impor
 /* ── raw HTML ─────────────────────────────────────────────── */
 
 /**
- * Pasted markup becomes one Custom HTML block, not an attempt at conversion.
+ * What to do with pasted markup, and why it is a question the author answers.
  *
- * Turning arbitrary HTML into native blocks sounds better than it is: the
- * mapping is lossy in both directions, and the failures are silent — a layout
- * that quietly loses a column, a class that stops applying. Keeping it whole
- * and sanitised means what you see in the preview is what the page will show,
- * and it stays editable as the thing you actually pasted.
+ * `whole` keeps it as one Custom HTML block: exactly what you pasted, classes
+ * and layout intact, editable as markup. Right for a design — a section with
+ * its own grid loses that grid the moment it is broken into paragraphs.
+ *
+ * `blocks` converts what maps and keeps the rest as Custom HTML. Right for an
+ * article, which wants the site's typography, one-paragraph-at-a-time editing
+ * and reordering — none of which an opaque block can offer.
+ *
+ * Neither is the better answer in general, which is why neither is silent.
  */
-export function parseHtmlDocument(raw: string): ImportOutcome {
+export type HtmlImportMode = "whole" | "blocks";
+
+/**
+ * Pasted markup, kept whole.
+ *
+ * Sanitised, never executed, and not taken apart: what the preview shows is
+ * what the page will show.
+ */
+export function parseHtmlDocument(
+  raw: string,
+  mode: HtmlImportMode = "whole"
+): ImportOutcome {
+  if (mode === "blocks") return convertHtmlDocument(raw);
+
   const html = sanitizeStudioHtml(raw);
   if (!html.trim()) {
     return {
@@ -203,6 +221,38 @@ export function parseHtmlDocument(raw: string): ImportOutcome {
     ok: true,
     summary: {
       title: null,
+      blocks: toBlocks(entries),
+      counts: countByType(entries),
+      warnings,
+      refused: [],
+    },
+  };
+}
+
+/**
+ * Pasted markup, converted.
+ *
+ * The walk itself is in lib/studio-import-html.ts; this is the part that turns
+ * its result into the same summary every other importer produces, so the
+ * preview does not need to know which door the content came through.
+ */
+export function convertHtmlDocument(raw: string): ImportOutcome {
+  const { title, entries, warnings } = convertHtmlToBlocks(raw);
+
+  // A page that was nothing but its own <h1> did convert: it produced a title.
+  // Refusing that would be refusing the only thing it had to give.
+  if (entries.length === 0 && !title) {
+    return {
+      ok: false,
+      error:
+        "Nothing convertible was found. Try “Keep as one HTML block” if this is a layout rather than an article.",
+    };
+  }
+
+  return {
+    ok: true,
+    summary: {
+      title,
       blocks: toBlocks(entries),
       counts: countByType(entries),
       warnings,
@@ -239,6 +289,72 @@ export function describeCounts(counts: { type: BlockType; count: number }[]): st
     const [one, many] = PLURAL[type] ?? [type, `${type} blocks`];
     return `${count} ${count === 1 ? one : many}`;
   });
+}
+
+/**
+ * One line describing what a block actually contains.
+ *
+ * The preview used to show only a tally — "6 blocks · 2 headings · 4 text" —
+ * which answers how much arrived and not what it is. Two documents with
+ * identical tallies can be completely different documents, and the one thing
+ * worth checking before pressing Add is whether the *structure* came through:
+ * did the headings land as headings, is that table still a table, did the
+ * photos survive. So the preview shows the outline, and this is one row of it.
+ *
+ * Truncated hard. It is an outline, not a rendering.
+ */
+export function describeBlock(block: Block): string {
+  const data = block.data ?? {};
+  const text = (value: unknown) => String(value ?? "").replace(/\s+/g, " ").trim();
+
+  switch (block.type) {
+    case "heading":
+      return text(data.text);
+    case "paragraph":
+      return text(data.text);
+    case "markdown":
+      return text(data.md);
+    case "quote":
+      return text(data.source) ? `${text(data.text)} — ${text(data.source)}` : text(data.text);
+    case "code":
+      return `${text(data.language) || "text"} · ${text(data.code)}`;
+    case "image":
+      return text(data.caption) || text(data.alt) || text(data.public_id ?? data.src);
+    case "gallery":
+      return `${Array.isArray(data.items) ? data.items.length : 0} photos`;
+    case "divider":
+      return text(data.style) || "line";
+    case "button":
+      return `${text(data.label)} → ${text(data.href)}`;
+    case "link":
+      return text(data.title) || text(data.url);
+    case "file":
+      return text(data.filename) || text(data.public_id ?? data.src);
+    case "youtube":
+      return text(data.youtube_id);
+    case "embed":
+      return text(data.url);
+    case "html":
+      // The markup itself is the wrong thing to show — it is the part you
+      // cannot read. What matters is how much of it there is, and that it is
+      // being kept rather than converted.
+      return `${text(data.html).length} characters of markup`;
+    default:
+      return "";
+  }
+}
+
+/** The outline, capped: a preview of two hundred blocks is not a preview. */
+export function outline(
+  blocks: Block[],
+  limit = 12
+): { shown: { type: BlockType; detail: string }[]; hidden: number } {
+  return {
+    shown: blocks
+      .slice(0, limit)
+      .map((block) => ({ type: block.type, detail: describeBlock(block) })),
+    hidden: Math.max(0, blocks.length - limit),
+  };
 }
 
 /** How imported blocks join what is already there. */

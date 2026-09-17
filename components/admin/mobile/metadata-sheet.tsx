@@ -52,15 +52,23 @@ export function MetadataSummary({
     doc.tagIds.length > 0 ? `${doc.tagIds.length} tag${doc.tagIds.length === 1 ? "" : "s"}` : null,
   ].filter(Boolean) as string[];
 
+  /* A byline, not a settings row.
+     This was a bordered card above the writing, which put a control at the top
+     of a screen whose whole job is to look like a page. It says the same things
+     in the same order; it just stops announcing itself. Still a full-width
+     44px target, because it is still the way into the Details sheet. */
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="flex min-h-12 w-full items-center justify-between gap-3 rounded-md border border-line bg-raise px-3.5 text-left transition-colors hover:border-pen"
+      className="group/meta flex min-h-11 w-full items-center justify-between gap-3 text-left"
     >
-      <span className="min-w-0 truncate text-sm text-soft">{bits.join(" · ")}</span>
-      <span aria-hidden className="shrink-0 text-faint">
-        Details ›
+      <span className="min-w-0 truncate text-xs text-faint">{bits.join(" · ")}</span>
+      <span
+        aria-hidden
+        className="shrink-0 text-xs text-soft underline decoration-line underline-offset-4 transition-colors group-active/meta:text-pen"
+      >
+        Details
       </span>
     </button>
   );

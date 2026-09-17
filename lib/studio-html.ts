@@ -52,6 +52,11 @@ const ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
   img: ["src", "srcset", "sizes", "alt", "width", "height", "loading", "decoding"],
   source: ["src", "srcset", "sizes", "type", "media"],
   time: ["datetime"],
+  // A list that starts at 7 is content, not decoration. Without these an
+  // ordered list silently restarts at 1 — including one converted out of
+  // pasted HTML, where the numbering is often the whole point.
+  ol: ["start", "reversed", "type"],
+  li: ["value"],
   th: ["scope", "colspan", "rowspan"],
   td: ["colspan", "rowspan"],
   col: ["span"],

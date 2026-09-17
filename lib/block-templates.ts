@@ -11,6 +11,20 @@ import type { Block, BlockType } from "@/lib/types";
  * They are ordinary blocks with placeholder prompts in them. Nothing here is a
  * claim about the work: every line is a question for the author to replace, and
  * there are no invented metrics.
+ *
+ * It lives in lib/ rather than beside the editor because it is pure data with
+ * no React in it, and because lib/content-quality.ts reads it: the publication
+ * gate that refuses to put unedited starter prompts on the public site derives
+ * its list of prompts from these `build()` functions. It used to keep its own
+ * hand-copied set, which meant adding a template here quietly created content
+ * the gate could not recognise.
+ *
+ * "Blank" is in here too, rather than being a button wired straight to
+ * insertBlock() beside the list. Two surfaces offer templates — the empty
+ * document and the import sheet — and the one that had its own hardcoded Blank
+ * was the one where the list could silently disagree with the registry. It is
+ * marked `primary` so both surfaces can lead with it, because most of the time
+ * "just start typing" is the right answer and a starter is the exception.
  */
 
 export interface BlockTemplate {
@@ -18,6 +32,8 @@ export interface BlockTemplate {
   name: string;
   description: string;
   kind: "project" | "journal";
+  /** Led with, and drawn as the recommended choice. At most one per kind. */
+  emphasis?: "primary";
   build: () => Omit<Block, "id" | "position">[];
 }
 
@@ -33,6 +49,14 @@ const OUTCOME =
   "What came out of it? If there are no numbers, describe the concrete result and what you'd do differently. Don't invent impact figures.";
 
 export const BLOCK_TEMPLATES: BlockTemplate[] = [
+  {
+    id: "project-blank",
+    name: "Blank",
+    description: "One paragraph, and you start typing.",
+    kind: "project",
+    emphasis: "primary",
+    build: () => [p("")],
+  },
   {
     id: "visual-design",
     name: "Visual design case study",
@@ -110,6 +134,14 @@ export const BLOCK_TEMPLATES: BlockTemplate[] = [
     ],
   },
   {
+    id: "journal-blank",
+    name: "Blank",
+    description: "One paragraph, and you start typing.",
+    kind: "journal",
+    emphasis: "primary",
+    build: () => [p("")],
+  },
+  {
     id: "journal-note",
     name: "Working note",
     description: "A short entry: what happened, what you noticed, what you'd try next.",
@@ -122,8 +154,31 @@ export const BLOCK_TEMPLATES: BlockTemplate[] = [
       p("The next experiment, so future you has a starting point."),
     ],
   },
+  {
+    id: "journal-reflection",
+    name: "Reflection",
+    description: "A longer piece: the thing you keep returning to, argued out properly.",
+    kind: "journal",
+    build: () => [
+      p("The thought, stated plainly enough that you could disagree with it."),
+      h(2, "Where it came from"),
+      p("The work, the conversation or the reading that put it there."),
+      h(2, "What changes if it's true"),
+      p("The consequence — for how you work, not in general."),
+      {
+        type: "quote",
+        data: { text: "Something you read that said it better.", source: "Who said it" },
+      },
+      rule(),
+      h(2, "What I'm still unsure about"),
+      p("The part you have not resolved. Leaving it open is the honest ending."),
+    ],
+  },
 ];
 
+/** This kind's templates, the recommended one first. */
 export function templatesFor(kind: "project" | "journal") {
-  return BLOCK_TEMPLATES.filter((t) => t.kind === kind);
+  return BLOCK_TEMPLATES.filter((t) => t.kind === kind).sort(
+    (a, b) => Number(b.emphasis === "primary") - Number(a.emphasis === "primary")
+  );
 }

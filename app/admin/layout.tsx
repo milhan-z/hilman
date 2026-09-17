@@ -32,12 +32,39 @@ export const metadata: Metadata = {
   icons: { apple: "/icons/apple-touch-icon.png" },
 };
 
+/**
+ * The studio's own viewport, which is not the public site's.
+ *
+ * A `viewport` export on a layout applies to that segment and everything under
+ * it, so this covers /admin and nothing else. The notebook at app/(site)/ keeps
+ * the root export in app/layout.tsx, where pinch zoom stays available — a
+ * reader with poor eyesight must always be able to enlarge the writing.
+ *
+ * Inside /admin the trade is different and deliberate. This is a private,
+ * single-owner tool that runs as an installed app on one phone, and pinch zoom
+ * there does not help anyone read: it rescales the visual viewport out from
+ * under a fixed app shell, which is how a two-finger scroll turns into a
+ * crooked header and a save bar in the wrong place. Locking the scale is what
+ * makes the shell hold still. It is a documented accessibility trade-off,
+ * scoped to the one surface where the owner asked for it and where he is the
+ * only user; the public site is untouched.
+ *
+ * `interactiveWidget: resizes-content` asks the browser to take the keyboard's
+ * space out of the layout viewport rather than laying the keyboard over it.
+ * Safari does not honour it yet, which is why <KeyboardInset /> measures the
+ * same thing from visualViewport; the two agree where both apply.
+ */
 export const viewport: Viewport = {
   themeColor: "#0a0a0a",
-  // The keyboard should take space away from the page rather than sit on top
-  // of it, so a sticky save bar stays above it. Where this is unsupported —
-  // Safari, at the time of writing — <KeyboardInset /> measures the same thing
-  // from visualViewport and the two agree.
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  // Next merges these per key, root → leaf (see mergeViewport in
+  // next/dist/lib/metadata/resolve-metadata.js), so this would be inherited
+  // from app/layout.tsx anyway. Restated because a viewport you have to read
+  // two files to understand is one people get wrong.
+  viewportFit: "cover",
   interactiveWidget: "resizes-content",
 };
 

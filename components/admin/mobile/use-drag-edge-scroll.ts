@@ -16,9 +16,11 @@ import { EDGE_ZONE_PX, edgeScrollVelocity } from "@/lib/studio-gestures";
  * re-rendered the editor sixty times a second would undo the reason the
  * reorder preview was split from the document in the first place.
  *
- * It scrolls the window, because the document is this app's scroll owner and
- * introducing a nested scroller to make dragging easier would make everything
- * else — sticky chrome, the keyboard, momentum — harder.
+ * It scrolls whichever element actually owns the scrolling. On a phone the
+ * editor is now an app shell with its own canvas (see <MobileEditorShell />),
+ * so there is a container to move; on desktop the document is still the
+ * scroller and `window` is the thing to move. Passing the element in keeps
+ * that decision with the editor rather than duplicating it here.
  */
 
 export interface DragEdgeScrollOptions {
@@ -27,12 +29,18 @@ export interface DragEdgeScrollOptions {
   /** Height of the fixed chrome at each edge, so the zones sit inside it. */
   topInset?: number;
   bottomInset?: number;
+  /**
+   * The element that scrolls. Null or undefined means the window, which is
+   * still the case on desktop and on any screen that is a plain document.
+   */
+  container?: React.RefObject<HTMLElement | null>;
 }
 
 export function useDragEdgeScroll({
   active,
   topInset = 0,
   bottomInset = 0,
+  container,
 }: DragEdgeScrollOptions) {
   const pointerY = useRef<number | null>(null);
   const insets = useRef({ topInset, bottomInset });
@@ -52,21 +60,36 @@ export function useDragEdgeScroll({
       const y = pointerY.current;
       if (y === null) return;
 
+      const element = container?.current ?? null;
+      // The canvas is measured by its own box, not the viewport: its top edge
+      // sits below the header and its bottom above the action bar, so the
+      // trigger zones land where the content actually ends.
+      const box = element?.getBoundingClientRect();
+      const viewportHeight = box ? box.height : window.innerHeight;
+      const localY = box ? y - box.top : y;
+
       const velocity = edgeScrollVelocity({
-        pointerY: y,
-        viewportHeight: window.innerHeight,
+        pointerY: localY,
+        viewportHeight,
         topInset: insets.current.topInset,
         bottomInset: insets.current.bottomInset,
         zone: EDGE_ZONE_PX,
       });
       if (velocity === 0) return;
 
-      // Nothing to do at the ends of the document; scrolling past them on iOS
-      // starts a rubber-band the drag would then fight.
+      // Nothing to do at the ends; scrolling past them on iOS starts a
+      // rubber-band the drag would then be fighting.
+      if (element) {
+        const maxScroll = element.scrollHeight - element.clientHeight;
+        const next = element.scrollTop + velocity;
+        if (next < 0 || next > maxScroll) return;
+        element.scrollTop = next;
+        return;
+      }
+
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
       const next = window.scrollY + velocity;
       if (next < 0 || next > maxScroll) return;
-
       window.scrollBy(0, velocity);
     };
 
@@ -79,5 +102,5 @@ export function useDragEdgeScroll({
       cancelAnimationFrame(frame);
       pointerY.current = null;
     };
-  }, [active]);
+  }, [active, container]);
 }

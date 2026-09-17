@@ -33,7 +33,7 @@ export function StudioMobileHeader() {
         // z-70: under the bottom tabs (80) and well under the sheets (100),
         // which is the order you would want if they ever overlapped.
         "sticky top-0 z-[70] border-b border-line lg:hidden",
-        "bg-surface/95 supports-[backdrop-filter]:backdrop-blur",
+        "bg-surface supports-[backdrop-filter]:backdrop-blur",
         "pt-[env(safe-area-inset-top)]",
         "pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]",
       ].join(" ")}

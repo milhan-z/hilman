@@ -4,17 +4,18 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Reorder } from "framer-motion";
-import { InsertZone } from "./insert-zone";
+import { InsertZone, InlineAdd } from "./insert-zone";
 import { EditableBlock } from "./editable-block";
 import { PropertyDrawer } from "./property-drawer";
 import { MetaBar } from "./meta-bar";
 import { BlockBuilder } from "./block-builder";
 import { DEFAULT_DATA } from "./block-editors";
-import { templatesFor } from "./block-templates";
+import { templatesFor } from "@/lib/block-templates";
 import { ActionSheet, MoreButton, type ActionItem } from "./mobile/action-sheet";
 import { AddBlockSheet } from "./mobile/add-block-sheet";
 import { ImportContentSheet } from "./mobile/import-content-sheet";
 import { useDragEdgeScroll } from "./mobile/use-drag-edge-scroll";
+import { MobileEditorShell } from "./mobile/mobile-editor-shell";
 import { EditorActionBar } from "./mobile/editor-action-bar";
 import { MetadataSheet, MetadataSummary } from "./mobile/metadata-sheet";
 import { StatusLine, useDeviceName } from "./mobile/status-line";
@@ -160,8 +161,6 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
    * "Live · Unsaved changes" and still be safely recoverable, or not.
    */
   const [recovery, setRecovery] = useState<"idle" | "writing" | "safe" | "failed">("idle");
-  const headerRef = useRef<HTMLElement>(null);
-  const [headerHeight, setHeaderHeight] = useState(0);
 
   /* ── dragging a block ──
      Motion reorders its own list many times a second while a finger is moving.
@@ -179,11 +178,13 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const [announcement, setAnnouncement] = useState("");
   const blocks = preview ?? doc.blocks;
 
-  /* Motion does not scroll the page for you, so a drag that reaches the edge
-     of the screen moves the document instead. Only while something is off the
-     ground, and the insets keep the trigger zones clear of the fixed header
-     and the save bar. */
-  useDragEdgeScroll({ active: dragging, topInset: headerHeight, bottomInset: 96 });
+  /* Motion does not scroll for you, so a drag that reaches the edge of the
+     canvas scrolls the canvas. No insets: the header and the action bar are
+     rows of the shell, outside the scroller entirely, so the canvas's own box
+     already ends where the chrome begins. They were only ever compensating for
+     chrome that overlapped the document. */
+  const canvasRef = useRef<HTMLDivElement>(null);
+  useDragEdgeScroll({ active: dragging, container: canvasRef });
 
   const blocked = blockingReason(doc);
   const waitingOnPhoto = hasPendingRefs(doc);
@@ -205,30 +206,6 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     },
     device
   );
-
-  /* ── reserving the fixed header's space ──
-     The header is out of the flow, so the document has to be told how tall it
-     is. Measured rather than hard-coded: the title wraps to two lines on a
-     narrow phone, the status line grows when it carries a note, and a guess
-     would either hide the first paragraph or leave a gap above it. */
-  useEffect(() => {
-    const element = headerRef.current;
-    if (!element) return;
-
-    const root = element.parentElement;
-    const apply = () => {
-      root?.style.setProperty("--editor-header-h", `${element.offsetHeight}px`);
-      setHeaderHeight(element.offsetHeight);
-    };
-
-    apply();
-    const observer = new ResizeObserver(apply);
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-      root?.style.removeProperty("--editor-header-h");
-    };
-  }, []);
 
   /* ── keeping the local copy current ──
      Anything the site does not have is written down after a pause in typing.
@@ -677,6 +654,10 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       data: structuredClone(b.data ?? {}),
     })) as Block[];
     patch({ blocks: [...doc.blocks, ...built].map((b, i) => ({ ...b, position: i })) });
+    // The cursor belongs at the top of what was just added — for Blank that is
+    // the whole point of pressing it, and for a starter it is where you read
+    // the first prompt and replace it.
+    if (built.length > 0) setActiveBlockId(built[0].id);
   };
 
   /**
@@ -766,374 +747,406 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   ];
 
   return (
-    // dvh, not vh: Safari's toolbar makes vh taller than the space you can
-    // actually see, which would push the action bar off the bottom.
-    //
-    // The header's measured height is published here as a variable so the
-    // content below can reserve exactly the space it occupies — see the
-    // header comment for why it is fixed rather than sticky.
-    <div
-      className="flex min-h-[calc(100dvh-7rem)] flex-col"
-      style={{ paddingTop: "var(--editor-header-h, 0px)" }}
-    >
-      {/* ── app bar ──
-          Fixed, not sticky, and this is the one place in the studio where the
-          difference matters. A sticky element is still in the document's flow:
-          during iOS rubber-band overscroll the flow itself is dragged, so the
-          header travels with the content it is supposed to be sitting above.
-          A fixed element is attached to the viewport and stays put while the
-          page bounces underneath it — which is what makes this read as app
-          chrome rather than as the top of a web page.
-          Its height is measured and reserved above, so nothing hides behind it. */}
-      <header
-        ref={headerRef}
-        className={cn(
-          "fixed inset-x-0 top-0 z-20 border-b border-line bg-paper/95 backdrop-blur",
-          "pt-[env(safe-area-inset-top)]",
-          "pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]",
-          "pb-2 lg:left-60"
-        )}
-      >
-        <div className="flex items-center gap-2 pt-2">
-          <Link
-            href={isProject ? "/admin/projects" : "/admin/journal"}
-            aria-label="Back"
-            className="-ml-1.5 flex min-h-11 min-w-11 items-center justify-center rounded-md text-soft transition-colors hover:text-pen"
+    <>
+      <MobileEditorShell
+        scrollRef={canvasRef}
+        header={
+          /* ── app bar ──
+             A row of the shell on a phone, so it is not in the scrolling
+             content and has nothing to be dragged by. It was `fixed` before,
+             which was an improvement on `sticky` but still fought the document
+             for position; now the document is not the scroller at all and the
+             header simply sits above the part that is.
+
+             Desktop keeps `sticky`, where there is no rubber-band to survive
+             and the sidebar makes a viewport-width bar wrong. */
+          <header
+            className={cn(
+              "border-b border-line bg-paper backdrop-blur",
+              "pt-[env(safe-area-inset-top)]",
+              "pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]",
+              "pb-2",
+              "lg:sticky lg:top-0 lg:z-20 lg:px-0"
+            )}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </Link>
-
-          <h1 className="min-w-0 flex-1 truncate font-display text-base font-bold">
-            {doc.title.trim() || `New ${kind}`}
-          </h1>
-
-          {/* desktop-only: the visual/classic choice */}
-          <div className="hidden items-center gap-1 rounded-full border border-line bg-raise p-1 text-xs sm:flex">
-            {([true, false] as const).map((visual) => (
-              <button
-                key={String(visual)}
-                type="button"
-                onClick={() => setIsVisual(visual)}
-                aria-pressed={isVisual === visual}
-                className={cn(
-                  "rounded-full px-3 py-1 font-semibold transition-colors",
-                  isVisual === visual ? "bg-hl text-hl-ink" : "text-soft hover:text-ink"
-                )}
+            <div className="flex items-center gap-2 pt-2">
+              <Link
+                href={isProject ? "/admin/projects" : "/admin/journal"}
+                aria-label="Back"
+                className="-ml-1.5 flex min-h-11 min-w-11 items-center justify-center rounded-md text-soft transition-colors hover:text-pen"
               >
-                {visual ? "Canvas" : "Form"}
-              </button>
-            ))}
-          </div>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </Link>
 
-          <MoreButton onClick={() => setMenuOpen(true)} className="-mr-1.5" />
-        </div>
+              <h1 className="min-w-0 flex-1 truncate font-display text-base font-bold">
+                {doc.title.trim() || `New ${kind}`}
+              </h1>
 
-        {/* Tapping the status is how you ask "where is this, exactly?" — the
-            sheet answers in three lines. The full sync panel stays for the
-            queue itself, which is a different question. */}
-        <button
-          type="button"
-          onClick={() => setSyncOpen(true)}
-          aria-haspopup="dialog"
-          className="-mx-1 flex min-h-8 w-full items-center gap-2 rounded px-1 text-left transition-colors active:bg-card-hover"
-        >
-          <StatusLine tone={status.tone}>{status.statusLine}</StatusLine>
-          <span aria-hidden className="text-2xs text-faint">
-            ›
-          </span>
-        </button>
-      </header>
-
-      {recovered && (
-        <div className="mb-4 rounded-md border border-hl bg-hl-soft/25 p-3.5">
-          <p className="text-sm font-semibold text-ink">
-            There's a newer version of this {kind} saved on {device}.
-          </p>
-          <p className="mt-1 text-sm text-soft">
-            It never reached the site. Restoring only refills the editor — you still choose what
-            to do with it.
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                void deleteDraft(draftKey);
-                setRecovered(null);
-              }}
-              className="min-h-12 rounded-md border border-line bg-surface text-sm font-semibold text-soft"
-            >
-              Discard it
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  const restored = JSON.parse(recovered.snapshot) as EditorDoc;
-                  setDoc(restored);
-                } catch {
-                  /* nothing usable in the stored draft */
-                }
-                setRecovered(null);
-              }}
-              className="min-h-12 rounded-md bg-hl text-sm font-semibold text-hl-ink"
-            >
-              Restore it
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="flex-1">
-        {/* Desktop keeps the full settings panel; the phone gets one line. */}
-        <div className="hidden sm:block">
-          <MetaBar kind={kind} doc={doc} patch={patch} allTags={allTags} published={published} />
-        </div>
-        <div className="mb-4 sm:hidden">
-          <MetadataSummary kind={kind} doc={doc} published={published} onOpen={() => setDetailsOpen(true)} />
-        </div>
-
-        <div className="mb-8">
-          {isVisual ? (
-            <div className="rounded-lg border border-line bg-surface p-3 sm:p-8">
-              <div className="mx-auto max-w-prose space-y-2">
-                {isProject ? (
-                  <div className="mb-8">
-                    {doc.coverPublicId && !doc.coverPublicId.startsWith("pending:") && (
-                      <div className="relative mb-5 h-[22vh] min-h-[140px] w-full overflow-hidden rounded-lg border border-line">
-                        <Pic src={doc.coverPublicId} alt="Cover" fill className="object-cover" />
-                      </div>
+              {/* desktop-only: the visual/classic choice */}
+              <div className="hidden items-center gap-1 rounded-full border border-line bg-raise p-1 text-xs sm:flex">
+                {([true, false] as const).map((visual) => (
+                  <button
+                    key={String(visual)}
+                    type="button"
+                    onClick={() => setIsVisual(visual)}
+                    aria-pressed={isVisual === visual}
+                    className={cn(
+                      "rounded-full px-3 py-1 font-semibold transition-colors",
+                      isVisual === visual ? "bg-hl text-hl-ink" : "text-soft hover:text-ink"
                     )}
-                    <header className="rounded-xl border border-line bg-raise p-4 sm:p-8">
-                      <div className="flex flex-wrap items-center gap-2 text-2xs text-faint">
-                        <span className="font-semibold uppercase tracking-wider text-pen">
-                          {STREAMS[doc.stream as Stream]?.name ?? doc.stream}
-                        </span>
-                        {doc.year && (
-                          <>
-                            <span>·</span>
-                            <span>{doc.year}</span>
-                          </>
-                        )}
-                      </div>
+                  >
+                    {visual ? "Canvas" : "Form"}
+                  </button>
+                ))}
+              </div>
 
+              <MoreButton onClick={() => setMenuOpen(true)} className="-mr-1.5" />
+            </div>
+
+            {/* Tapping the status is how you ask "where is this, exactly?" — the
+                sheet answers in three lines. The full sync panel stays for the
+                queue itself, which is a different question. */}
+            <button
+              type="button"
+              onClick={() => setSyncOpen(true)}
+              aria-haspopup="dialog"
+              className="-mx-1 flex min-h-8 w-full items-center gap-2 rounded px-1 text-left transition-colors active:bg-card-hover"
+            >
+              <StatusLine tone={status.tone}>{status.statusLine}</StatusLine>
+              <span aria-hidden className="text-2xs text-faint">
+                ›
+              </span>
+            </button>
+          </header>
+        }
+        actions={
+          <>
+            {/* Recovery is a different promise from saving, so it gets its own
+                line rather than being folded into the status. It appears only
+                when it has genuinely failed — saying "recovery copy kept" after
+                every keystroke would be noise, and noise is what makes a real
+                warning invisible.
+
+                It sits in the action rows rather than sticking to the bottom of
+                the content: there was a second `sticky bottom-0` here, competing
+                with the action bar for the same edge. */}
+            {recovery === "failed" && dirty && (
+              <p
+                role="alert"
+                className="border-t border-red bg-red-soft px-4 py-2 text-sm text-red lg:-mx-8 lg:px-8"
+              >
+                Couldn&apos;t keep a recovery copy on {device}. Keep Studio open until this is
+                saved.
+              </p>
+            )}
+
+            <EditorActionBar
+              status={status}
+              onAction={runAction}
+              blockedReason={blocked}
+              trailing={
+                published && publicHref ? (
+                  <a
+                    href={publicHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="-my-2 flex min-h-11 shrink-0 items-center font-mono text-2xs uppercase tracking-wide text-pen"
+                  >
+                    View live ↗
+                  </a>
+                ) : null
+              }
+              idleActions={
+                <p className="pb-1 text-xs text-faint">
+                  Everything here is on the site. Edit anything to get the save options back.
+                </p>
+              }
+            />
+          </>
+        }
+      >
+        {recovered && (
+          <div className="mb-4 rounded-md border border-hl bg-hl-soft p-3.5">
+            <p className="text-sm font-semibold text-ink">
+              There's a newer version of this {kind} saved on {device}.
+            </p>
+            <p className="mt-1 text-sm text-soft">
+              It never reached the site. Restoring only refills the editor — you still choose what
+              to do with it.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void deleteDraft(draftKey);
+                  setRecovered(null);
+                }}
+                className="min-h-12 rounded-md border border-line bg-surface text-sm font-semibold text-soft"
+              >
+                Discard it
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    const restored = JSON.parse(recovered.snapshot) as EditorDoc;
+                    setDoc(restored);
+                  } catch {
+                    /* nothing usable in the stored draft */
+                  }
+                  setRecovered(null);
+                }}
+                className="min-h-12 rounded-md bg-hl text-sm font-semibold text-hl-ink"
+              >
+                Restore it
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div>
+          {/* Desktop keeps the full settings panel; the phone gets one line. */}
+          <div className="hidden sm:block">
+            <MetaBar kind={kind} doc={doc} patch={patch} allTags={allTags} published={published} />
+          </div>
+          <div className="mb-4 sm:hidden">
+            <MetadataSummary kind={kind} doc={doc} published={published} onOpen={() => setDetailsOpen(true)} />
+          </div>
+
+          <div className="mb-8">
+            {isVisual ? (
+              /* No card below `sm`. Inside an app shell the writing is the
+                 screen; a bordered panel around it is a second frame inside a
+                 frame that is already the phone. Desktop keeps the sheet,
+                 where the editor really is a document on a page. */
+              <div className="sm:rounded-lg sm:border sm:border-line sm:bg-surface sm:p-8">
+                {/* Tapping the page, rather than a block, puts the block down.
+                    Selection carries a toolbar now, so it needs a way out; a
+                    block that stays lit until you select another one is a mode,
+                    not a selection. Blocks stop their own clicks, so anything
+                    arriving here came from the document around them. */}
+                <div
+                  className="mx-auto max-w-prose space-y-2"
+                  onClick={() => setActiveBlockId(null)}
+                >
+                  {isProject ? (
+                    <div className="mb-8">
+                      {doc.coverPublicId && !doc.coverPublicId.startsWith("pending:") && (
+                        <div className="relative mb-5 h-[22vh] min-h-[140px] w-full overflow-hidden rounded-lg border border-line">
+                          <Pic src={doc.coverPublicId} alt="Cover" fill className="object-cover" />
+                        </div>
+                      )}
+                      <header className="border-b border-dashed border-line-strong pb-5 sm:rounded-xl sm:border sm:border-solid sm:border-line sm:bg-raise sm:p-8">
+                        <div className="flex flex-wrap items-center gap-2 text-2xs text-faint">
+                          <span className="font-semibold uppercase tracking-wider text-pen">
+                            {STREAMS[doc.stream as Stream]?.name ?? doc.stream}
+                          </span>
+                          {doc.year && (
+                            <>
+                              <span>·</span>
+                              <span>{doc.year}</span>
+                            </>
+                          )}
+                        </div>
+
+                        <InlineTextarea
+                          value={doc.title}
+                          onChange={(title) => patch({ title })}
+                          placeholder="Project title"
+                          className="mt-2 font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl"
+                        />
+                        <InlineTextarea
+                          value={doc.subtitle}
+                          onChange={(subtitle) => patch({ subtitle })}
+                          placeholder="One line about it"
+                          className="mt-1.5 text-base text-soft"
+                        />
+
+                        <dl className="mt-4 grid gap-x-4 gap-y-2 border-t border-dashed border-line pt-4 sm:grid-cols-3">
+                          <MetaPair
+                            label="my role"
+                            value={String(meta.role ?? "")}
+                            placeholder="Art direction"
+                            onChange={(role) => patch({ rawMeta: JSON.stringify({ ...meta, role }, null, 2) })}
+                          />
+                          <MetaPair
+                            label="tools"
+                            value={Array.isArray(meta.tools) ? meta.tools.join(", ") : String(meta.tools ?? "")}
+                            placeholder="Figma, Riso"
+                            onChange={(value) =>
+                              patch({
+                                rawMeta: JSON.stringify(
+                                  { ...meta, tools: value.split(",").map((t) => t.trim()).filter(Boolean) },
+                                  null,
+                                  2
+                                ),
+                              })
+                            }
+                          />
+                          <MetaPair
+                            label="for"
+                            value={String(meta.client ?? "")}
+                            placeholder="Client"
+                            onChange={(client) => patch({ rawMeta: JSON.stringify({ ...meta, client }, null, 2) })}
+                          />
+                        </dl>
+                      </header>
+                    </div>
+                  ) : (
+                    <header className="mb-6 border-b border-dashed border-line-strong pb-5">
+                      <div className="flex flex-wrap items-center gap-2 text-2xs text-faint">
+                        <span>{published ? "Live" : "Draft"}</span>
+                        <span>·</span>
+                        <span>{doc.readingMinutes} min read</span>
+                      </div>
                       <InlineTextarea
                         value={doc.title}
                         onChange={(title) => patch({ title })}
-                        placeholder="Project title"
-                        className="mt-2 font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl"
+                        placeholder="What are you writing about?"
+                        className="mt-2 font-display text-2xl font-bold leading-tight tracking-tight text-ink sm:text-3xl"
                       />
                       <InlineTextarea
-                        value={doc.subtitle}
-                        onChange={(subtitle) => patch({ subtitle })}
-                        placeholder="One line about it"
-                        className="mt-1.5 text-base text-soft"
+                        value={doc.excerpt}
+                        onChange={(excerpt) => patch({ excerpt })}
+                        placeholder="A line to show on the card"
+                        className="mt-2.5 text-base italic text-soft"
                       />
-
-                      <dl className="mt-4 grid gap-x-4 gap-y-2 border-t border-dashed border-line pt-4 sm:grid-cols-3">
-                        <MetaPair
-                          label="my role"
-                          value={String(meta.role ?? "")}
-                          placeholder="Art direction"
-                          onChange={(role) => patch({ rawMeta: JSON.stringify({ ...meta, role }, null, 2) })}
-                        />
-                        <MetaPair
-                          label="tools"
-                          value={Array.isArray(meta.tools) ? meta.tools.join(", ") : String(meta.tools ?? "")}
-                          placeholder="Figma, Riso"
-                          onChange={(value) =>
-                            patch({
-                              rawMeta: JSON.stringify(
-                                { ...meta, tools: value.split(",").map((t) => t.trim()).filter(Boolean) },
-                                null,
-                                2
-                              ),
-                            })
-                          }
-                        />
-                        <MetaPair
-                          label="for"
-                          value={String(meta.client ?? "")}
-                          placeholder="Client"
-                          onChange={(client) => patch({ rawMeta: JSON.stringify({ ...meta, client }, null, 2) })}
-                        />
-                      </dl>
                     </header>
-                  </div>
-                ) : (
-                  <header className="mb-6 border-b border-dashed border-line-strong pb-5">
-                    <div className="flex flex-wrap items-center gap-2 text-2xs text-faint">
-                      <span>{published ? "Live" : "Draft"}</span>
-                      <span>·</span>
-                      <span>{doc.readingMinutes} min read</span>
-                    </div>
-                    <InlineTextarea
-                      value={doc.title}
-                      onChange={(title) => patch({ title })}
-                      placeholder="What are you writing about?"
-                      className="mt-2 font-display text-2xl font-bold leading-tight tracking-tight text-ink sm:text-3xl"
-                    />
-                    <InlineTextarea
-                      value={doc.excerpt}
-                      onChange={(excerpt) => patch({ excerpt })}
-                      placeholder="A line to show on the card"
-                      className="mt-2.5 text-base italic text-soft"
-                    />
-                  </header>
-                )}
+                  )}
 
-                <Reorder.Group
-                  axis="y"
-                  values={blocks}
-                  onReorder={setPreview}
-                  className="space-y-1"
-                >
-                  {blocks.map((block, index) => (
-                    <div key={block.id}>
-                      {/* The hover-only insert control is a pointer affordance;
-                          the phone gets the full-width button below instead. */}
-                      <div className="hidden sm:block">
-                        <InsertZone onInsert={(type) => insertBlock(type, index)} />
+                  <Reorder.Group
+                    axis="y"
+                    values={blocks}
+                    onReorder={setPreview}
+                    className="space-y-1"
+                  >
+                    {blocks.map((block, index) => (
+                      <div key={block.id}>
+                        {/* The hover-only insert control is a pointer affordance;
+                            the phone gets the full-width button below instead. */}
+                        <div className="hidden sm:block">
+                          <InsertZone onInsert={(type) => insertBlock(type, index)} />
+                        </div>
+                        <EditableBlock
+                          block={block}
+                          active={activeBlockId === block.id}
+                          index={index}
+                          total={blocks.length}
+                          canMoveUp={index > 0}
+                          canMoveDown={index < blocks.length - 1}
+                          onActivate={() => setActiveBlockId(block.id)}
+                          onChange={(data) => updateBlock(block.id, data)}
+                          onOpenDrawer={() => setDrawerOpen(true)}
+                          onRemove={() => removeBlock(block.id)}
+                          onMove={(dir) => moveBlock(block.id, dir)}
+                          onDuplicate={() => duplicateBlock(block.id)}
+                          onInsertBelow={(type) => insertBlock(type, index + 1)}
+                          onConvert={(type) => convertBlock(block.id, type)}
+                          onDragStart={() => beginReorder(block.id)}
+                          onDragEnd={commitReorder}
+                          onAddBelow={() => setAddBlockAt(index + 1)}
+                        />
+                        {/* Add where you are, not at the end and then drag it
+                            back. Only under the selected block, for the same
+                            reason its toolbar is. */}
+                        {activeBlockId === block.id && (
+                          <InlineAdd
+                            onAdd={() => setAddBlockAt(index + 1)}
+                            label="Add a block after this one"
+                            className="sm:hidden"
+                          />
+                        )}
                       </div>
-                      <EditableBlock
-                        block={block}
-                        active={activeBlockId === block.id}
-                        index={index}
-                        total={blocks.length}
-                        canMoveUp={index > 0}
-                        canMoveDown={index < blocks.length - 1}
-                        onActivate={() => setActiveBlockId(block.id)}
-                        onChange={(data) => updateBlock(block.id, data)}
-                        onOpenDrawer={() => setDrawerOpen(true)}
-                        onRemove={() => removeBlock(block.id)}
-                        onMove={(dir) => moveBlock(block.id, dir)}
-                        onDuplicate={() => duplicateBlock(block.id)}
-                        onInsertBelow={(type) => insertBlock(type, index + 1)}
-                        onConvert={(type) => convertBlock(block.id, type)}
-                        onDragStart={() => beginReorder(block.id)}
-                        onDragEnd={commitReorder}
-                        onAddBelow={() => setAddBlockAt(index + 1)}
-                      />
+                    ))}
+                  </Reorder.Group>
+
+                  {blocks.length === 0 && (
+                    /* The empty state is the one moment templates are obviously
+                       useful, so they lead — but "just start typing" stays the
+                       first option, because most of the time that is the answer. */
+                    <div className="my-5 space-y-3">
+                      <p className="text-sm text-soft">
+                        Nothing written yet. How do you want to start?
+                      </p>
+
+                      {/* Blank comes from the registry like everything else —
+                          it used to be a button wired straight to insertBlock
+                          here, which is how this list and the import sheet's
+                          list could come to offer different things. */}
+                      <div className="grid gap-2">
+                        {templatesFor(kind).map((template) => (
+                          <button
+                            key={template.id}
+                            type="button"
+                            onClick={() => applyTemplate(template.id)}
+                            className={cn(
+                              "min-h-14 rounded-md p-3 text-left transition-colors active:bg-card-hover",
+                              template.emphasis === "primary"
+                                ? "border border-hl bg-hl-soft"
+                                : "border border-line bg-raise hover:border-pen"
+                            )}
+                          >
+                            <span className="block text-sm font-semibold text-ink">{template.name}</span>
+                            <span className="mt-0.5 block text-xs leading-relaxed text-soft">
+                              {template.description}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setImportOpen(true)}
+                        className="flex min-h-12 w-full items-center justify-between rounded-md border border-line px-3.5 text-sm font-medium text-soft transition-colors hover:border-pen active:bg-card-hover"
+                      >
+                        Import or paste content
+                        <span aria-hidden>›</span>
+                      </button>
+
+                      <p className="text-xs text-faint">
+                        Templates only add prompts to replace — they never write claims for you.
+                      </p>
                     </div>
-                  ))}
-                </Reorder.Group>
+                  )}
 
-                {blocks.length === 0 && (
-                  /* The empty state is the one moment templates are obviously
-                     useful, so they lead — but "just start typing" stays the
-                     first option, because most of the time that is the answer. */
-                  <div className="my-5 space-y-3">
-                    <p className="text-sm text-soft">
-                      Nothing written yet. How do you want to start?
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={() => insertBlock("paragraph", 0)}
-                      className="min-h-14 w-full rounded-md border border-hl bg-hl-soft/25 px-3.5 text-left transition-colors active:bg-card-hover"
-                    >
-                      <span className="block text-sm font-semibold text-ink">Blank</span>
-                      <span className="mt-0.5 block text-xs text-faint">Start typing</span>
-                    </button>
-
-                    <div className="grid gap-2">
-                      {templatesFor(kind).map((template) => (
-                        <button
-                          key={template.id}
-                          type="button"
-                          onClick={() => applyTemplate(template.id)}
-                          className="min-h-14 rounded-md border border-line bg-raise p-3 text-left transition-colors hover:border-pen active:bg-card-hover"
-                        >
-                          <span className="block text-sm font-semibold text-ink">{template.name}</span>
-                          <span className="mt-0.5 block text-xs leading-relaxed text-soft">
-                            {template.description}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setImportOpen(true)}
-                      className="flex min-h-12 w-full items-center justify-between rounded-md border border-line px-3.5 text-sm font-medium text-soft transition-colors hover:border-pen active:bg-card-hover"
-                    >
-                      Import or paste content
-                      <span aria-hidden>›</span>
-                    </button>
-
-                    <p className="text-xs text-faint">
-                      Templates only add prompts to replace — they never write claims for you.
-                    </p>
+                  <div className="hidden sm:block">
+                    <InsertZone onInsert={(type) => insertBlock(type, doc.blocks.length)} />
                   </div>
-                )}
-
-                <div className="hidden sm:block">
-                  <InsertZone onInsert={(type) => insertBlock(type, doc.blocks.length)} />
+                  {doc.blocks.length > 0 && (
+                    <InlineAdd
+                      onAdd={() => setAddBlockAt(doc.blocks.length)}
+                      label="Add a block at the end"
+                      className="mt-2 sm:hidden"
+                    />
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAddBlockAt(doc.blocks.length)}
-                  className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-dashed border-line-strong text-sm font-semibold text-soft transition-colors hover:border-pen hover:text-pen sm:hidden"
-                >
-                  <span aria-hidden>+</span> Add block
-                </button>
               </div>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-line bg-surface p-5">
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-soft">
-                Content blocks
-              </h2>
-              <BlockBuilder value={doc.blocks} onChange={(blocks) => patch({ blocks })} />
-            </div>
-          )}
+            ) : (
+              <div className="rounded-lg border border-line bg-surface p-5">
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-soft">
+                  Content blocks
+                </h2>
+                <BlockBuilder value={doc.blocks} onChange={(blocks) => patch({ blocks })} />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* What just happened to a block, for anyone not watching it happen.
-          Written only when the logical position changes — a pixel-by-pixel
-          commentary during a drag would be unusable. */}
-      <p aria-live="polite" role="status" className="sr-only">
-        {announcement}
-      </p>
-
-      {/* Recovery is a different promise from saving, so it gets its own line
-          rather than being folded into the status. It appears only when it has
-          genuinely failed — saying "recovery copy kept" after every keystroke
-          would be noise, and noise is what makes a real warning invisible. */}
-      {recovery === "failed" && dirty && (
-        <p
-          role="alert"
-          className="sticky bottom-0 z-30 -mx-4 border-t border-red/40 bg-red-soft/20 px-4 py-2 text-sm text-red sm:-mx-8 sm:px-8"
-        >
-          Couldn&apos;t keep a recovery copy on {device}. Keep Studio open until this is saved.
+        {/* What just happened to a block, for anyone not watching it happen.
+            Written only when the logical position changes — a pixel-by-pixel
+            commentary during a drag would be unusable. */}
+        <p aria-live="polite" role="status" className="sr-only">
+          {announcement}
         </p>
-      )}
 
-      <EditorActionBar
-        status={status}
-        onAction={runAction}
-        blockedReason={blocked}
-        trailing={
-          published && publicHref ? (
-            <a
-              href={publicHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="-my-2 flex min-h-11 shrink-0 items-center font-mono text-2xs uppercase tracking-wide text-pen"
-            >
-              View live ↗
-            </a>
-          ) : null
-        }
-        idleActions={
-          <p className="pb-1 text-xs text-faint">
-            Everything here is on the site. Edit anything to get the save options back.
-          </p>
-        }
-      />
 
+      </MobileEditorShell>
+
+      {/* Overlays, and siblings of the shell on purpose: a sheet belongs to
+          the screen, not to one of its rows, and nesting it under a row that
+          `backdrop-blur` would make its own `fixed` resolve against that row. */}
       <SyncStatusSheet
         open={syncOpen}
         onClose={() => setSyncOpen(false)}
@@ -1191,7 +1204,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         onChange={(data) => activeBlockId && updateBlock(activeBlockId, data)}
         onClose={() => setDrawerOpen(false)}
       />
-    </div>
+    </>
   );
 }
 

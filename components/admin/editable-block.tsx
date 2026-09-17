@@ -203,22 +203,10 @@ export function EditableBlock({
 
   // Photos in this block that have not reached Cloudinary yet.
   const stashedPhotos = collectPendingRefs(block.data);
-  const blockRef = useRef<HTMLDivElement>(null);
 
   // Keyboard navigation & slash menu states
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-
-  // Close active state when clicking outside
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (blockRef.current && !blockRef.current.contains(e.target as Node)) {
-        // We let the parent container handle deactivation if needed
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // Hide slash menu if block becomes inactive
   useEffect(() => {
@@ -368,7 +356,7 @@ export function EditableBlock({
               value={data.label ?? ""}
               placeholder="Button Label"
               onChange={(e) => onChange({ ...data, label: e.target.value })}
-              className="bg-transparent border-0 border-b border-dashed border-hl-ink/40 focus:border-hl-ink outline-none p-0 text-sm font-medium text-hl-ink placeholder:text-hl-ink/50 w-28 text-center"
+              className="bg-transparent border-0 border-b border-dashed border-hl-ink focus:border-hl-ink outline-none p-0 text-sm font-medium text-hl-ink placeholder:text-hl-ink/50 w-28 text-center"
             />
             <button
               type="button"
@@ -455,28 +443,43 @@ export function EditableBlock({
       className="relative group/block my-1"
     >
       <div
-        ref={blockRef}
         onClick={(e) => {
           e.stopPropagation();
           onActivate();
         }}
-        className={`relative rounded-lg p-3 -m-3 border transition-all duration-fast cursor-pointer ${
+        /*
+          A block is the writing, not a card containing the writing.
+
+          Every block used to carry a border box and, when selected, a shadow
+          as well, so a document of ten blocks read as ten stacked panels. Now
+          nothing is drawn around a block at rest; selection is a rail in the
+          left gutter and a barely-there wash, which is enough to answer "which
+          one am I in" without competing with the words for attention.
+        */
+        className={`relative -mx-3 cursor-pointer rounded-md px-3 py-1.5 transition-colors duration-fast ${
           lifted
-            ? "border-pen bg-raise"
+            ? "bg-raise"
             : active
-              ? "border-pen bg-raise shadow-card"
-              : "border-transparent hover:border-line-strong hover:bg-raise/30"
+              ? "bg-raise"
+              : "sm:hover:bg-raise"
         }`}
       >
+        {/* Absolutely positioned rather than a left border: a border would be
+            2px the layout has to find, so every block would step sideways as
+            selection moved down the document. */}
+        {(active || lifted) && (
+          <span
+            aria-hidden
+            className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-hl"
+          />
+        )}
         {/*
-          The block's controls.
+          The block's controls, twice, for the two input methods.
 
-          They used to exist only inside `group-hover:flex`, which on a phone
-          means they do not exist at all: there is no hover, so moving,
-          duplicating or deleting a block was unreachable by touch. They now
-          appear when the block is tapped as well — and on a small screen they
-          sit in the flow underneath it rather than floating over the text you
-          are editing, at a size a thumb can actually hit.
+          `floating` is the desktop pill: hover, or selected. `inline` is the
+          phone's row underneath, shown only for the selected block — a pill
+          hanging over the text at thumb size would cover the words being
+          edited, and a row under every block is what made the canvas unreadable.
         */}
         <BlockControls
           variant="floating"
@@ -554,9 +557,9 @@ interface BlockControlsProps {
  * Move / duplicate / settings / delete for one block.
  *
  * `floating` is the desktop pill that appears on hover and, now, whenever the
- * block is selected. Below `sm` it turns into a row underneath the block:
- * 44px targets in a pill hanging over the text would cover the words being
- * edited, which is the one thing a block toolbar must not do.
+ * block is selected. Below `sm` it turns into a row underneath the selected
+ * block: 44px targets in a pill hanging over the text would cover the words
+ * being edited, which is the one thing a block toolbar must not do.
  */
 function BlockControls({
   variant,
@@ -669,16 +672,19 @@ function BlockControls({
     </>
   );
 
-  // Phone: a row under the block. Always present, not only once the block has
-  // been tapped — the grip is how you move a block, and having to select one
-  // first would mean a tap before every drag.
+  // Phone: a row under the block, and only under the one you are in.
+  //
+  // It used to be under every block, so that the grip — the only way to drag —
+  // was always within reach. The cost turned out to be the whole canvas: seven
+  // icons and a rule under every paragraph is not a document you can read, and
+  // on a phone you are reading the document far more often than you are
+  // reordering it. Selecting a block is the tap you were already making to
+  // edit it, so reordering now shares that tap instead of charging every other
+  // block for it.
   if (variant === "inline") {
+    if (!active) return null;
     return (
-      <div
-        className={`mt-3 flex items-center justify-end gap-1 border-t pt-2 transition-colors sm:hidden ${
-          active ? "border-line" : "border-line/40"
-        }`}
-      >
+      <div className="mt-2.5 flex items-center justify-end gap-1 border-t border-line pt-1.5 sm:hidden">
         {buttons}
       </div>
     );
@@ -687,7 +693,7 @@ function BlockControls({
   // Pointer: the familiar floating pill, on hover or while selected.
   return (
     <div
-      className={`absolute -top-3.5 right-2 z-20 items-center gap-1 rounded-full border border-line bg-raise/95 px-2 py-0.5 shadow-card backdrop-blur transition-all ${
+      className={`absolute -top-3.5 right-2 z-20 items-center gap-1 rounded-full border border-line bg-raise px-2 py-0.5 shadow-card backdrop-blur transition-all ${
         active ? "hidden sm:flex" : "hidden sm:group-hover/block:flex"
       }`}
     >

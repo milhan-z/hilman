@@ -1,4 +1,5 @@
 import { mockJournal, mockProjects, mockSettings } from "./mock";
+import { BLOCK_TEMPLATES } from "./block-templates";
 import type { Block, JournalPost, Project, Settings } from "./types";
 
 export interface ContentQualityIssue {
@@ -65,25 +66,23 @@ function retainsDemoNarrative(content: ContentQualityInput, demos: ContentQualit
   });
 }
 
-// Exact author prompts from the CMS starter layouts. Ordinary short notes and
-// questions are allowed; only known, unchanged instructions are screened.
-const templatePrompts = new Set([
-  "What was the situation, and what needed to change? One paragraph, no jargon.",
-  "What was your part? Name what you did yourself and what the rest of the team did — a reader can't tell otherwise.",
-  "What came out of it? If there are no numbers, describe the concrete result and what you'd do differently. Don't invent impact figures.",
-  "Two or three choices that shaped the result — and the constraint behind each one.",
-  "What decision does this image show?",
-  "Who or what is this about, and why did it deserve filming?",
-  "Shooting conditions, the constraint you worked around, the choice you made in the edit.",
-  "Frame or still — say what it shows.",
-  "One paragraph a non-engineer can follow. Save the stack list for below.",
-  "A screenshot of the thing working.",
-  "The one design decision worth explaining — and what it cost.",
-  "// The smallest piece of code that shows the idea.",
-  "What prompted this note?",
-  "The observation, while it is still specific.",
-  "The next experiment, so future you has a starting point.",
-]);
+/**
+ * Author prompts from the starter templates, taken from the templates.
+ *
+ * This was a hand-copied list, and a hand-copied list of strings that exist
+ * somewhere else is a list that goes out of date silently — a template added
+ * over here produced placeholder text the gate could not recognise, which is
+ * the one failure this gate exists to prevent. Reading the registry means a new
+ * template is covered the moment it is written.
+ *
+ * Only exact, unchanged prompts. Ordinary short notes and genuine questions are
+ * publishable; "What happened today?" is a sentence someone might mean.
+ */
+const templatePrompts = new Set(
+  BLOCK_TEMPLATES.flatMap((template) => strings(template.build().map((block) => block.data)))
+    .map((text) => text.trim())
+    .filter(Boolean)
+);
 
 function strings(value: unknown): string[] {
   if (typeof value === "string") return [value];

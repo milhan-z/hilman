@@ -13,6 +13,14 @@ import { cn } from "@/lib/utils";
  * above them can never disagree — the old bar had a single "Save changes" and
  * a status dropdown hidden three sections up the page, which is how "did I
  * just publish that?" became a question worth redesigning the studio over.
+ *
+ * It does not position itself on a phone. It used to be `sticky` with
+ * `bottom: var(--keyboard-inset)`, which is two workarounds stacked: sticky to
+ * survive a scrolling document, and a measured keyboard offset to survive the
+ * keyboard covering it. Both were symptoms of living inside the scroller. It
+ * is now a row of <MobileEditorShell />, which is outside the scroller and
+ * above the keyboard by construction — and the shell takes the row out
+ * entirely while typing, so there is no offset left to compute.
  */
 
 export interface EditorActionBarProps {
@@ -39,12 +47,14 @@ export function EditorActionBar({
   return (
     <div
       className={cn(
-        "sticky z-30 -mx-4 border-t border-line bg-paper/95 backdrop-blur",
+        "border-t border-line bg-paper backdrop-blur",
         "px-4 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
-        "shadow-sticky sm:-mx-8 sm:px-8"
+        "pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]",
+        "shadow-sticky",
+        // Desktop is still a document, so the bar still has to stick to the
+        // bottom of it and bleed to the gutters <main> sets.
+        "lg:sticky lg:bottom-0 lg:z-30 lg:-mx-8 lg:px-8"
       )}
-      // Rides above the keyboard instead of under it — see <KeyboardInset />.
-      style={{ bottom: "var(--keyboard-inset, 0px)" }}
     >
       <div className="mx-auto flex max-w-3xl flex-col gap-2">
         <div className="flex min-h-6 items-center justify-between gap-3">
