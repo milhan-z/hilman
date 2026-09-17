@@ -32,7 +32,7 @@ export function HeroRoles({
     <span className="inline-flex items-center gap-[0.3em]" role="text" aria-label={`${prefix} ${role}`}>
       <span aria-hidden>{prefix}</span>
       <span aria-hidden className="inline-flex items-center gap-[0.1em]">
-        <span className="text-pen/50">[</span>
+        <span className="text-pen">[</span>
         <span className="relative inline-grid">
           {reduced ? (
             <span className="text-pen">{role}</span>
@@ -51,7 +51,7 @@ export function HeroRoles({
             </AnimatePresence>
           )}
         </span>
-        <span className="text-pen/50">]</span>
+        <span className="text-pen">]</span>
       </span>
     </span>
   );

@@ -1,4 +1,5 @@
 import type { Block, JournalPost, Project } from "@/lib/types";
+import { readTimeMinutes } from "@/lib/read-time";
 
 /**
  * Everything one project or journal entry is, while it is being edited.
@@ -27,7 +28,11 @@ export interface EditorDoc {
   sortOrder: string;
   /** The project `meta` column, as JSON text, so invalid input is still typed. */
   rawMeta: string;
-  readingMinutes: string;
+  /**
+   * No `readingMinutes`. It is derived from the words — see lib/read-time.ts —
+   * and a field here would be a second, editable answer to a question the
+   * content already answers.
+   */
   status: "published" | "draft";
   featured: boolean;
   tagIds: string[];
@@ -48,7 +53,6 @@ export function docFromInitial(initial: (Project & JournalPost) | null): EditorD
     year: initial?.year ? String(initial.year) : "",
     sortOrder: initial?.sort_order ? String(initial.sort_order) : "0",
     rawMeta: JSON.stringify(initial?.meta ?? {}, null, 2),
-    readingMinutes: initial?.reading_minutes ? String(initial.reading_minutes) : "3",
     status: initial?.status === "published" ? "published" : "draft",
     featured: initial?.featured ?? false,
     tagIds: (initial?.tags ?? []).map((tag) => tag.id),
@@ -109,7 +113,9 @@ export function fieldsFor(
     cover_public_id: doc.coverPublicId,
     status,
     featured: doc.featured,
-    reading_minutes: doc.readingMinutes,
+    // Derived at the save boundary, because the public list pages read the
+    // column and are served without blocks to count.
+    reading_minutes: readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks }),
   };
 }
 

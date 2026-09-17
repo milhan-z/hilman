@@ -75,7 +75,7 @@ export function ResumeWork() {
             <Link
               href={hrefFor(draft)!}
               prefetch={false}
-              className="flex min-h-[68px] items-center gap-3 rounded-lg border border-hl/50 bg-hl-soft/15 px-3.5 py-3 transition-[background-color,transform] duration-[120ms] hover:border-pen active:scale-[0.99] active:bg-card-hover"
+              className="flex min-h-[68px] items-center gap-3 rounded-lg border border-hl bg-hl-soft px-3.5 py-3 transition-[background-color,transform] duration-[120ms] hover:border-pen active:scale-[0.99] active:bg-card-hover"
             >
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">

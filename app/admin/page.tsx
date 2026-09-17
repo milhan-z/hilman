@@ -93,7 +93,7 @@ async function Recent() {
     return (
       <section className="space-y-2.5">
         <SectionHeading>Recent</SectionHeading>
-        <p role="alert" className="rounded-lg border border-red/40 bg-red-soft/10 p-4 text-sm text-red">
+        <p role="alert" className="rounded-lg border border-red bg-red-soft p-4 text-sm text-red">
           The studio could not read your work just now. {error}
         </p>
       </section>
@@ -237,7 +237,7 @@ async function HiddenFromSite() {
   return (
     <section
       role="status"
-      className="rounded-lg border border-hl/50 bg-hl-soft/15 p-4"
+      className="rounded-lg border border-hl bg-hl-soft p-4"
       aria-label="Published items that are not on the site"
     >
       <p className="text-sm font-semibold text-ink">
@@ -360,7 +360,7 @@ function Warnings({
   if (items.length === 0) return null;
 
   return (
-    <div role="alert" className="space-y-3 rounded-lg border border-red/40 bg-red-soft/10 p-4">
+    <div role="alert" className="space-y-3 rounded-lg border border-red bg-red-soft p-4">
       {items.map((item) => (
         <div key={item.title}>
           <p className="text-sm font-semibold text-red">{item.title}</p>

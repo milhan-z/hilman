@@ -70,7 +70,7 @@ export function PendingPhoto({
   }
 
   return (
-    <figure className={cn("overflow-hidden rounded-md border border-hl/50 bg-raise", className)}>
+    <figure className={cn("overflow-hidden rounded-md border border-hl bg-raise", className)}>
       {url && (
         // A local Blob, not a remote asset: next/image would only add a loader
         // in front of a URL that is already in memory.

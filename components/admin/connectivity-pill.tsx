@@ -85,7 +85,7 @@ export function ConnectivityPill({ onOpen }: { onOpen: () => void }) {
       className={cn(
         "inline-flex min-h-11 items-center gap-2 rounded-full border px-3 font-mono text-2xs uppercase tracking-wide transition-colors",
         kind === "attention"
-          ? "border-red/50 bg-red-soft text-red"
+          ? "border-red bg-red-soft text-red"
           : "border-line bg-raise text-soft hover:text-ink"
       )}
     >

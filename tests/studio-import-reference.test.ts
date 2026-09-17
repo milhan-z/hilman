@@ -153,6 +153,13 @@ test("the prompt asks for the kind it was generated for", () => {
   assert.match(aiPrompt("journal"), /"kind": "journal"/);
 });
 
+test("the prompt keeps the two width meanings apart, since a model will guess", () => {
+  const prompt = aiPrompt("project");
+  assert.ok(prompt.includes("span"), "the page-width key should be named");
+  assert.match(prompt, /"span" is the page width/);
+  assert.match(prompt, /pixel size/);
+});
+
 test("the prompt tells the model what the importer would refuse anyway", () => {
   const prompt = aiPrompt("project");
   for (const key of ["id", "slug", "status", "published_at"]) {

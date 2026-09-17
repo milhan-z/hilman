@@ -61,7 +61,7 @@ export default async function AboutPage() {
         <aside className="mx-auto w-full max-w-md lg:pt-4" aria-label="A personal note">
           {hasPortrait ? (
             <figure className="relative bg-cream p-3 pb-5 text-cream-ink shadow-lift sm:rotate-1">
-              <span aria-hidden className="absolute -top-2 left-1/2 z-10 h-5 w-20 -translate-x-1/2 -rotate-3 bg-hl/80" />
+              <span aria-hidden className="absolute -top-2 left-1/2 z-10 h-5 w-20 -translate-x-1/2 -rotate-3 bg-hl" />
               <Pic
                 src={d.portrait}
                 alt={d.portrait_alt || "Hilman"}
@@ -75,7 +75,7 @@ export default async function AboutPage() {
             </figure>
           ) : (
             <div className="relative rounded-sm bg-cream p-7 text-cream-ink shadow-lift sm:rotate-1 sm:p-9">
-              <span aria-hidden className="absolute -top-2 right-9 h-5 w-16 -rotate-6 bg-hl/80" />
+              <span aria-hidden className="absolute -top-2 right-9 h-5 w-16 -rotate-6 bg-hl" />
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-cream-soft">A few things I gravitate towards</p>
               <p className="mt-7 font-display text-3xl font-medium leading-[1.12] tracking-tight sm:text-4xl">
                 Design.<br />Code.<br /><span className="italic">And everything<br />in between.</span>

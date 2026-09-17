@@ -18,7 +18,7 @@ export function ContentUnavailable({
   return (
     <div
       role="alert"
-      className={`rounded-lg border border-dashed border-red/50 bg-red-soft/10 text-center ${
+      className={`rounded-lg border border-dashed border-red bg-red-soft text-center ${
         compact ? "p-8" : "p-12"
       }`}
     >

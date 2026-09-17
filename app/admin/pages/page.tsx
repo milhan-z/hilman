@@ -30,7 +30,7 @@ export default async function AdminPagesPage() {
       </div>
 
       {error && (
-        <p role="alert" className="rounded border border-red/40 bg-red-soft/10 p-4 text-sm text-red">
+        <p role="alert" className="rounded border border-red bg-red-soft p-4 text-sm text-red">
           Could not read the page list: {error.message}
         </p>
       )}

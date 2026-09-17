@@ -6,7 +6,7 @@ import { sendMessage, type ConnectState } from "@/app/(site)/connect/actions";
 
 const labelCls = "mb-1.5 block font-mono text-2xs uppercase tracking-widest text-faint";
 const inputCls =
-  "w-full rounded-md border border-line-strong bg-raise px-4 py-2.5 text-base text-ink outline-none transition-colors placeholder:text-faint/70 focus:border-pen focus:ring-1 focus:ring-pen";
+  "w-full rounded-md border border-line-strong bg-raise px-4 py-2.5 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-pen focus:ring-1 focus:ring-pen";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -88,7 +88,7 @@ export function ConnectForm() {
       </div>
 
       {state.status === "error" && (
-        <p role="alert" className="rounded-md border border-red/40 bg-red-soft px-4 py-3 text-sm text-red">
+        <p role="alert" className="rounded-md border border-red bg-red-soft px-4 py-3 text-sm text-red">
           {state.message ?? "Something went sideways. Mind trying again?"}
         </p>
       )}

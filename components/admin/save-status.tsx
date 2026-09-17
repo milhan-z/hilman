@@ -61,7 +61,7 @@ export function DraftRecoveryNotice<T>({
   if (!recovery) return null;
 
   return (
-    <div className="rounded-md border border-hl bg-hl-soft/25 p-4">
+    <div className="rounded-md border border-hl bg-hl-soft p-4">
       <p className="text-sm font-semibold text-ink">
         There are unsaved changes on {device} from {relative(recovery.savedAt)}.
       </p>

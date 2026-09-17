@@ -31,7 +31,31 @@ export type EditorState =
   | "QUEUED"
   | "OFFLINE"
   | "ERROR"
+  | "BLOCKED"
+  | "MEDIA_WAIT"
+  | "MEDIA_ERROR"
   | "CONFLICT";
+
+/**
+ * Why the last attempt did not reach the site.
+ *
+ * Everything used to arrive as one sentence and come out as "Couldn't sync",
+ * which is true of a dropped connection and misleading about everything else.
+ * A document held back because two paragraphs are still the template's
+ * questions has not failed to sync — it has not been finished, and the useful
+ * next action is to look at those paragraphs rather than to press Try again.
+ *
+ * The caller says which kind it was where it can tell. Where it cannot, the
+ * sentence alone still works and the old behaviour is what happens.
+ */
+export type FailureKind =
+  | "CONTENT_BLOCKED"
+  | "MEDIA_PENDING"
+  | "MEDIA_FAILED"
+  | "CONFLICT"
+  | "OFFLINE"
+  | "SERVER_ERROR"
+  | "AUTH_ERROR";
 
 /** How much attention the line deserves — never colour alone, see StatusLine. */
 export type StatusTone = "neutral" | "pending" | "good" | "warn" | "bad";
@@ -42,7 +66,10 @@ export type EditorActionId =
   | "save-changes"
   | "update-live"
   | "retry"
-  | "review";
+  | "review"
+  | "review-prompts"
+  | "remove-prompts"
+  | "retry-photo";
 
 export interface EditorAction {
   id: EditorActionId;
@@ -70,9 +97,20 @@ export interface EditorSnapshot {
   /** Evidence of a reachable server, not navigator.onLine. See sync.ts. */
   reachable: boolean;
   error: string | null;
+  /** What kind of failure `error` is, when the caller could tell. */
+  failure?: FailureKind;
+  /**
+   * How many starter prompts are still unanswered.
+   *
+   * Only the count: this module turns state into a sentence, and the sentences
+   * that name the prompts belong to the sheet that can show them.
+   */
+  blockedPrompts?: number;
   conflict: boolean;
   /** Queued behind a photograph that has not been uploaded yet. */
   waitingOnPhoto?: boolean;
+  /** Photographs still going up, and ones that have given up. */
+  photos?: { pending: number; failed: number };
 }
 
 export interface EditorStatus {
@@ -109,6 +147,9 @@ const SAVE_CHANGES: EditorAction = { id: "save-changes", label: "Save changes", 
 const UPDATE_LIVE: EditorAction = { id: "update-live", label: "Update live", emphasis: "accent" };
 const RETRY: EditorAction = { id: "retry", label: "Try again", emphasis: "accent" };
 const REVIEW: EditorAction = { id: "review", label: "Review changes", emphasis: "accent" };
+const SHOW_PROMPTS: EditorAction = { id: "review-prompts", label: "Show them", emphasis: "accent" };
+const REMOVE_PROMPTS: EditorAction = { id: "remove-prompts", label: "Remove them", emphasis: "plain" };
+const RETRY_PHOTO: EditorAction = { id: "retry-photo", label: "Retry photo", emphasis: "accent" };
 
 const savedOn = (device: string) => `Saved on ${device}`;
 
@@ -138,6 +179,44 @@ export function describeEditor(
       note: "This was also edited somewhere else. Nothing has been overwritten.",
       primary: REVIEW,
       secondary: null,
+    };
+  }
+
+  /* ── a photograph gave up ──
+     Before the generic error, because "couldn't sync" would describe the
+     writing, and the writing is fine: it is one upload that is stuck. */
+  if (snapshot.failure === "MEDIA_FAILED" || (snapshot.photos?.failed ?? 0) > 0) {
+    const failed = snapshot.photos?.failed ?? 1;
+    return {
+      state: "MEDIA_ERROR",
+      publishLabel,
+      localLabel: "Photo problem",
+      statusLine: line("Photo problem"),
+      tone: "bad",
+      note: `${failed === 1 ? "A photo" : `${failed} photos`} couldn't upload. Everything you wrote is safe on ${device}.`,
+      primary: RETRY_PHOTO,
+      secondary: null,
+    };
+  }
+
+  /* ── the writing is not finished ──
+     A held-back document is not a failed request, and "Try again" would do
+     nothing for it. The two useful moves are to look at the prompts or to
+     take them out, so those are the two buttons. */
+  if (snapshot.failure === "CONTENT_BLOCKED") {
+    const count = snapshot.blockedPrompts ?? 0;
+    const subject = count === 1 ? "one starter prompt" : `${count} starter prompts`;
+    return {
+      state: "BLOCKED",
+      publishLabel,
+      localLabel: "Needs your words",
+      statusLine: line("Needs your words"),
+      tone: "warn",
+      note: count
+        ? `${savedOn(device)}. The site is waiting on ${subject} that still say what the template said.`
+        : `${savedOn(device)}. ${snapshot.error ?? ""}`.trim(),
+      primary: SHOW_PROMPTS,
+      secondary: count ? REMOVE_PROMPTS : null,
     };
   }
 
@@ -189,22 +268,36 @@ export function describeEditor(
      app now" — and the only one of the three that is reassuring. */
   if (snapshot.queued) {
     const offline = !snapshot.reachable;
+    const pendingPhotos = snapshot.photos?.pending ?? 0;
+
+    // Waiting on a photograph is a different wait from waiting on a signal,
+    // and saying so is the difference between "something is wrong" and
+    // "something is happening". Only when there is a connection to upload on:
+    // offline, the connection is the thing being waited for.
+    const uploading = !offline && (snapshot.waitingOnPhoto || pendingPhotos > 0);
+
     const localLabel = offline
       ? "Waiting for connection"
-      : snapshot.syncing
-        ? "Syncing…"
-        : savedOn(device);
+      : uploading
+        ? pendingPhotos > 1
+          ? `${pendingPhotos} photos uploading`
+          : "Photo uploading"
+        : snapshot.syncing
+          ? "Syncing…"
+          : savedOn(device);
 
     const note = snapshot.publishQueued
       ? `${PUBLISH_QUEUED_TITLE} — ${PUBLISH_QUEUED_BODY}`
-      : snapshot.waitingOnPhoto
-        ? `${savedOn(device)}. The photo goes up first, then the writing.`
+      : uploading
+        ? `Your writing is safe on ${device}. It goes to the site once the ${
+            pendingPhotos > 1 ? "photos are" : "photo is"
+          } up.`
         : offline
           ? `${savedOn(device)}. It sends itself when you're back.`
           : null;
 
     return {
-      state: offline ? "OFFLINE" : "QUEUED",
+      state: offline ? "OFFLINE" : uploading ? "MEDIA_WAIT" : "QUEUED",
       publishLabel,
       localLabel,
       statusLine: line(localLabel),

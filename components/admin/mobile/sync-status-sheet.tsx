@@ -129,7 +129,7 @@ export function SyncStatusSheet({
               onClose();
               window.dispatchEvent(new Event("hilman:sync"));
             }}
-            className="min-h-12 w-full rounded-md border border-red/50 bg-red-soft/20 text-sm font-semibold text-red"
+            className="min-h-12 w-full rounded-md border border-red bg-red-soft text-sm font-semibold text-red"
           >
             Something needs your decision — open sync
           </button>

@@ -40,7 +40,7 @@ export function SignOutButton({ className }: { className?: string }) {
           type="button"
           onClick={leave}
           disabled={pending}
-          className="inline-flex min-h-11 items-center rounded border border-red/50 px-3 text-sm font-semibold text-red disabled:opacity-50"
+          className="inline-flex min-h-11 items-center rounded border border-red px-3 text-sm font-semibold text-red disabled:opacity-50"
         >
           {pending ? "Signing out…" : "Discard & sign out"}
         </button>

@@ -1,19 +1,20 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { readTimeLabel, readTimeMinutes } from "@/lib/read-time";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Reorder } from "framer-motion";
-import { InsertZone, InlineAdd } from "./insert-zone";
+import { InlineAdd } from "./insert-zone";
 import { EditableBlock } from "./editable-block";
 import { PropertyDrawer } from "./property-drawer";
 import { MetaBar } from "./meta-bar";
-import { BlockBuilder } from "./block-builder";
 import { DEFAULT_DATA } from "./block-editors";
 import { templatesFor } from "@/lib/block-templates";
 import { ActionSheet, MoreButton, type ActionItem } from "./mobile/action-sheet";
 import { AddBlockSheet } from "./mobile/add-block-sheet";
 import { ImportContentSheet } from "./mobile/import-content-sheet";
+import { StarterPromptsSheet } from "./mobile/starter-prompts-sheet";
 import { useDragEdgeScroll } from "./mobile/use-drag-edge-scroll";
 import { MobileEditorShell } from "./mobile/mobile-editor-shell";
 import { EditorActionBar } from "./mobile/editor-action-bar";
@@ -25,9 +26,11 @@ import { Pic } from "../cld-image";
 import { STREAMS, type Stream } from "@/lib/types";
 import { deleteJournal, deleteProject } from "@/app/admin/actions";
 import { handOffSave } from "@/lib/studio-local/save";
-import { subscribeSyncEvents } from "@/lib/studio-local/sync";
+import { intentFor } from "@/lib/studio-save-intent";
+import { subscribeSyncEvents, type SyncState } from "@/lib/studio-local/sync";
 import { deleteDraft, readDraft, writeDraft } from "@/lib/studio-local/drafts";
 import { hasPendingRefs, replacePendingRefs } from "@/lib/studio-media-refs";
+import { clearStarterMark, findStarterPrompts, stripStarterPrompts } from "@/lib/starter-prompts";
 import {
   blockingReason,
   docFromInitial,
@@ -35,7 +38,7 @@ import {
   parsedMeta,
   type EditorDoc,
 } from "./editor-doc";
-import { describeEditor, type EditorAction } from "@/lib/studio-editor-state";
+import { describeEditor, type EditorAction, type FailureKind } from "@/lib/studio-editor-state";
 import { describePosition, normalisePositions } from "@/lib/studio-gestures";
 import { useMediaSelector } from "./media-library-context";
 import { cn, slugify, uid } from "@/lib/utils";
@@ -97,6 +100,19 @@ async function carryDraftOver(from: string, to: string) {
   await deleteDraft(from);
 }
 
+/**
+ * The queue's word for a refusal, in the status machine's vocabulary.
+ *
+ * "MALFORMED" is a payload this build should never have produced, so it is a
+ * server error from the author's point of view: there is nothing in the
+ * document for them to fix.
+ */
+function failureOf(reason: SyncState["lastFailure"]): FailureKind {
+  if (reason === "CONTENT_BLOCKED") return "CONTENT_BLOCKED";
+  if (reason === "AUTH_ERROR") return "AUTH_ERROR";
+  return "SERVER_ERROR";
+}
+
 export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const isProject = kind === "project";
   const isNew = !initial;
@@ -140,7 +156,6 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const lastAction = useRef<EditorAction | null>(null);
 
   /* ── editor chrome ── */
-  const [isVisual, setIsVisual] = useState(true);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -189,6 +204,15 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const blocked = blockingReason(doc);
   const waitingOnPhoto = hasPendingRefs(doc);
 
+  /* ── the starter prompts still waiting for an answer ──
+     Run here rather than discovered from a rejection. The gate is pure and the
+     document is right there, so the editor can say which paragraphs are still
+     the template's questions *before* asking the site to take them — which
+     turns a round trip that comes back "couldn't sync" into a sheet that
+     points at the two paragraphs and offers to remove them. */
+  const starterPrompts = useMemo(() => findStarterPrompts(doc.blocks), [doc.blocks]);
+  const [promptsOpen, setPromptsOpen] = useState(false);
+
   const status = describeEditor(
     {
       isNew: entityId === null,
@@ -201,8 +225,16 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       reachable: sync.reachable,
       syncing: sync.syncing,
       error,
+      // A refusal the editor can explain outranks the generic one it cannot.
+      failure: error
+        ? starterPrompts.length
+          ? "CONTENT_BLOCKED"
+          : failureOf(sync.lastFailure)
+        : undefined,
+      blockedPrompts: starterPrompts.length,
       conflict,
       waitingOnPhoto,
+      photos: sync.photos,
     },
     device
   );
@@ -372,32 +404,48 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
 
   /* ── saving ── */
 
+  /**
+   * Send a version of this document to the site.
+   *
+   * `outgoing` exists because React state is not applied synchronously, and
+   * one caller edits the document and publishes it in the same breath:
+   * "Remove & publish" takes the starter prompts out and continues the
+   * publication the author already asked for. Reading `doc` from the closure
+   * there sent the *unedited* document — prompts included — which the site
+   * then refused, leaving a cleaned-up editor showing a stale complaint about
+   * prompts that were no longer in it.
+   *
+   * So the version being sent is an argument, and the snapshot recorded as
+   * submitted is taken from that same version rather than from whatever the
+   * last render happened to hold.
+   */
   const sendToSite = useCallback(
-    async (nextStatus: "published" | "draft") => {
-      if (blockingReason(doc)) return;
+    async (nextStatus: "published" | "draft", outgoing?: EditorDoc) => {
+      const source = outgoing ?? doc;
+      const sourceSnapshot = outgoing ? JSON.stringify(outgoing) : snapshot;
+      if (blockingReason(source)) return;
 
       setError(null);
       setConflict(false);
       setPublishQueued(false);
       setInFlight(nextStatus === "published" ? "publishing" : "saving");
-      submitted.current = { snapshot, published: nextStatus === "published" };
+      submitted.current = { snapshot: sourceSnapshot, published: nextStatus === "published" };
 
       const result = await handOffSave({
         entity: kind,
         entityId,
         localId,
         baseUpdatedAt,
-        intent:
-          nextStatus === "draft" ? "SYNC_DRAFT" : published ? "UPDATE_LIVE" : "PUBLISH",
+        intent: intentFor({ nextStatus, published }),
         payload: {
-          fields: fieldsFor(kind, doc, nextStatus),
-          blocks: doc.blocks,
-          tagIds: doc.tagIds,
+          fields: fieldsFor(kind, source, nextStatus),
+          blocks: source.blocks,
+          tagIds: source.tagIds,
         },
       });
 
       // Whatever happens next, this version is written down somewhere.
-      setKept(snapshot);
+      setKept(sourceSnapshot);
 
       if (result.status === "stored") {
         setQueued(true);
@@ -409,7 +457,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       if (result.status === "saved") {
         setEntityId(result.id);
         setBaseUpdatedAt(result.updatedAt);
-        setSynced(snapshot);
+        setSynced(sourceSnapshot);
         setPublished(nextStatus === "published");
         setInFlight("none");
         setQueued(false);
@@ -467,12 +515,26 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
           return;
         case "publish":
         case "update-live":
+          // Stopped here rather than at the server. The site would refuse this
+          // document anyway; refusing it in the editor means the answer arrives
+          // with the paragraphs attached instead of as a sync failure.
+          if (starterPrompts.length > 0) {
+            setPromptsOpen(true);
+            return;
+          }
           void sendToSite("published");
           return;
         case "save-changes":
           void keepHere();
           return;
         case "review":
+          window.dispatchEvent(new Event("hilman:sync"));
+          return;
+        case "review-prompts":
+        case "remove-prompts":
+          setPromptsOpen(true);
+          return;
+        case "retry-photo":
           window.dispatchEvent(new Event("hilman:sync"));
           return;
         case "retry": {
@@ -482,7 +544,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         }
       }
     },
-    [sendToSite, keepHere]
+    [sendToSite, keepHere, starterPrompts.length]
   );
 
   /* ── blocks ── */
@@ -536,8 +598,21 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     if (!EDITS_INLINE.includes(type)) setDrawerOpen(true);
   };
 
+  /**
+   * An edit to one block's data.
+   *
+   * Passes through clearStarterMark, which is how a template's paragraph stops
+   * being a template's paragraph: the moment its prose differs from what the
+   * starter put there, the `starter` marker is turned off and the publication
+   * gate stops holding it back. Nothing else clears it, and nothing turns it
+   * back on — a block you have written in is yours from then on.
+   */
   const updateBlock = (id: string, data: Record<string, any>) =>
-    patch({ blocks: doc.blocks.map((b) => (b.id === id ? { ...b, data } : b)) });
+    patch({
+      blocks: doc.blocks.map((b) =>
+        b.id === id ? { ...b, data: clearStarterMark(b.type, b.data ?? {}, data) } : b
+      ),
+    });
 
   const convertBlock = (id: string, newType: BlockType) => {
     patch({
@@ -784,24 +859,6 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                 {doc.title.trim() || `New ${kind}`}
               </h1>
 
-              {/* desktop-only: the visual/classic choice */}
-              <div className="hidden items-center gap-1 rounded-full border border-line bg-raise p-1 text-xs sm:flex">
-                {([true, false] as const).map((visual) => (
-                  <button
-                    key={String(visual)}
-                    type="button"
-                    onClick={() => setIsVisual(visual)}
-                    aria-pressed={isVisual === visual}
-                    className={cn(
-                      "rounded-full px-3 py-1 font-semibold transition-colors",
-                      isVisual === visual ? "bg-hl text-hl-ink" : "text-soft hover:text-ink"
-                    )}
-                  >
-                    {visual ? "Canvas" : "Form"}
-                  </button>
-                ))}
-              </div>
-
               <MoreButton onClick={() => setMenuOpen(true)} className="-mr-1.5" />
             </div>
 
@@ -908,28 +965,51 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
 
         <div>
           {/* Desktop keeps the full settings panel; the phone gets one line. */}
-          <div className="hidden sm:block">
+          <div className="hidden lg:block">
             <MetaBar kind={kind} doc={doc} patch={patch} allTags={allTags} published={published} />
           </div>
-          <div className="mb-4 sm:hidden">
+          <div className="mb-4 lg:hidden">
             <MetadataSummary kind={kind} doc={doc} published={published} onOpen={() => setDetailsOpen(true)} />
           </div>
 
+          {/* One editor, at every width.
+              There used to be a Canvas/Form switch in the header, and Form
+              rendered <BlockBuilder /> — the original stack of collapsible
+              block cards with ↑ ↓ ✕ glyphs. Keeping it meant the studio had
+              two editors with different capabilities, and the one a desktop
+              could reach had no templates, no import and no inline add. The
+              canvas is the editor; a wide screen gets more room for it, not a
+              different one. */}
           <div className="mb-8">
-            {isVisual ? (
-              /* No card below `sm`. Inside an app shell the writing is the
-                 screen; a bordered panel around it is a second frame inside a
-                 frame that is already the phone. Desktop keeps the sheet,
-                 where the editor really is a document on a page. */
-              <div className="sm:rounded-lg sm:border sm:border-line sm:bg-surface sm:p-8">
+            {/* No card below `lg`. Inside the app shell the writing is the
+                screen, and a bordered panel around it is a second frame inside
+                a frame that is already the phone. From `lg` the editor really
+                is a document on a page, so it gets the sheet.
+
+                `lg`, not `sm`: the shell itself switches at `lg`, and these
+                two disagreeing is what made a 768px window a chimera — the
+                mobile fixed shell wrapped around desktop internals. */}
+            <div className="lg:rounded-lg lg:border lg:border-line lg:bg-surface lg:p-8">
                 {/* Tapping the page, rather than a block, puts the block down.
                     Selection carries a toolbar now, so it needs a way out; a
                     block that stays lit until you select another one is a mode,
-                    not a selection. Blocks stop their own clicks, so anything
-                    arriving here came from the document around them. */}
+                    not a selection.
+
+                    Controls are exempt, and that exemption is not a nicety: the
+                    template buttons live inside this container, so a plain
+                    handler here cancelled the selection applyTemplate had just
+                    made — you pressed Blank and got an empty, unfocused,
+                    invisible paragraph. Blocks stop their own clicks; this
+                    covers everything else that is a button rather than a page. */}
                 <div
                   className="mx-auto max-w-prose space-y-2"
-                  onClick={() => setActiveBlockId(null)}
+                  onClick={(event) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("button, a, input, textarea, select, label, [role='button']")) {
+                      return;
+                    }
+                    setActiveBlockId(null);
+                  }}
                 >
                   {isProject ? (
                     <div className="mb-8">
@@ -938,7 +1018,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                           <Pic src={doc.coverPublicId} alt="Cover" fill className="object-cover" />
                         </div>
                       )}
-                      <header className="border-b border-dashed border-line-strong pb-5 sm:rounded-xl sm:border sm:border-solid sm:border-line sm:bg-raise sm:p-8">
+                      <header className="border-b border-dashed border-line-strong pb-5 lg:rounded-xl lg:border lg:border-solid lg:border-line lg:bg-raise lg:p-8">
                         <div className="flex flex-wrap items-center gap-2 text-2xs text-faint">
                           <span className="font-semibold uppercase tracking-wider text-pen">
                             {STREAMS[doc.stream as Stream]?.name ?? doc.stream}
@@ -999,7 +1079,11 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                       <div className="flex flex-wrap items-center gap-2 text-2xs text-faint">
                         <span>{published ? "Live" : "Draft"}</span>
                         <span>·</span>
-                        <span>{doc.readingMinutes} min read</span>
+                        <span>
+                          {readTimeLabel(
+                            readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks })
+                          )}
+                        </span>
                       </div>
                       <InlineTextarea
                         value={doc.title}
@@ -1023,12 +1107,9 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                     className="space-y-1"
                   >
                     {blocks.map((block, index) => (
-                      <div key={block.id}>
-                        {/* The hover-only insert control is a pointer affordance;
-                            the phone gets the full-width button below instead. */}
-                        <div className="hidden sm:block">
-                          <InsertZone onInsert={(type) => insertBlock(type, index)} />
-                        </div>
+                      /* Addressable, so "Show them" can scroll to the exact
+                         paragraph the publication gate is waiting on. */
+                      <div key={block.id} id={`editor-block-${block.id}`}>
                         <EditableBlock
                           block={block}
                           active={activeBlockId === block.id}
@@ -1050,12 +1131,17 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                         />
                         {/* Add where you are, not at the end and then drag it
                             back. Only under the selected block, for the same
-                            reason its toolbar is. */}
+                            reason its toolbar is — and at every width, because
+                            this is the control that hands over to the Add sheet
+                            and from there to Import. The pointer-only
+                            <InsertZone /> that used to sit here on desktop had
+                            its own block-type grid and no route to templates or
+                            import at all, so a laptop got a smaller product
+                            from the same editor. */}
                         {activeBlockId === block.id && (
                           <InlineAdd
                             onAdd={() => setAddBlockAt(index + 1)}
                             label="Add a block after this one"
-                            className="sm:hidden"
                           />
                         )}
                       </div>
@@ -1111,26 +1197,15 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                     </div>
                   )}
 
-                  <div className="hidden sm:block">
-                    <InsertZone onInsert={(type) => insertBlock(type, doc.blocks.length)} />
-                  </div>
                   {doc.blocks.length > 0 && (
                     <InlineAdd
                       onAdd={() => setAddBlockAt(doc.blocks.length)}
                       label="Add a block at the end"
-                      className="mt-2 sm:hidden"
+                      className="mt-2"
                     />
                   )}
                 </div>
               </div>
-            ) : (
-              <div className="rounded-lg border border-line bg-surface p-5">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-soft">
-                  Content blocks
-                </h2>
-                <BlockBuilder value={doc.blocks} onChange={(blocks) => patch({ blocks })} />
-              </div>
-            )}
           </div>
         </div>
 
@@ -1147,6 +1222,49 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       {/* Overlays, and siblings of the shell on purpose: a sheet belongs to
           the screen, not to one of its rows, and nesting it under a row that
           `backdrop-blur` would make its own `fixed` resolve against that row. */}
+      {/* ── the starter prompts, when there are still some ──
+          Opened instead of publishing, and by the two actions the BLOCKED
+          status offers. Nothing here publishes on its own: removing the
+          prompts continues the same press that opened it. */}
+      <StarterPromptsSheet
+        open={promptsOpen}
+        onClose={() => setPromptsOpen(false)}
+        prompts={starterPrompts}
+        publishLabel={published ? "Update live" : "Publish"}
+        onShow={(finding) => {
+          const block = doc.blocks[finding.index];
+          setPromptsOpen(false);
+          if (!block) return;
+          setActiveBlockId(block.id);
+          // After the sheet has gone, so the scroll lands where the block ends
+          // up rather than where it was behind an overlay.
+          requestAnimationFrame(() => {
+            document
+              .getElementById(`editor-block-${block.id}`)
+              ?.scrollIntoView({ block: "center", behavior: "smooth" });
+          });
+        }}
+        onRemove={() => {
+          const blocks = stripStarterPrompts(doc.blocks).map((block, position) => ({
+            ...block,
+            position,
+          }));
+          const cleaned = { ...doc, blocks };
+          patch({ blocks });
+          setPromptsOpen(false);
+          setAnnouncement(
+            `${starterPrompts.length} starter ${
+              starterPrompts.length === 1 ? "prompt" : "prompts"
+            } removed.`
+          );
+          // The same publication the author asked for, continued — not a new
+          // one started because a block went away. The cleaned document is
+          // handed over explicitly: `doc` in this closure is still the one
+          // with the prompts in it.
+          void sendToSite("published", cleaned);
+        }}
+      />
+
       <SyncStatusSheet
         open={syncOpen}
         onClose={() => setSyncOpen(false)}

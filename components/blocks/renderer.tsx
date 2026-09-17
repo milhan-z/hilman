@@ -6,6 +6,7 @@ import { CustomBlock } from "../lab/registry";
 import { fileSrc } from "@/lib/cloudinary";
 import { parseEmbed } from "@/lib/embed";
 import { sanitizeStudioHtml } from "@/lib/studio-html";
+import { blockLayoutClasses, pixelDimension } from "@/lib/block-layout";
 import { cn } from "@/lib/utils";
 import type { Block, BlockType } from "@/lib/types";
 import type { ReactNode } from "react";
@@ -39,8 +40,11 @@ const ImageBlock: BlockFC = ({ data }) => (
       <Pic
         src={data.public_id ?? data.src}
         alt={data.alt ?? ""}
-        width={data.width ?? 1600}
-        height={data.height ?? 1000}
+        // Pixels only. `width` used to be handed straight to <Pic />, which
+        // meant a block whose width said "wide" produced a Cloudinary URL
+        // reading w_wide — see lib/block-layout.ts.
+        width={pixelDimension(data.width, 1600)}
+        height={pixelDimension(data.height, 1000)}
         sizes="(max-width: 900px) 100vw, 860px"
         className="w-full"
       />
@@ -214,32 +218,14 @@ export const renderers: Record<BlockType, BlockFC> = {
   custom: ({ data }) => <CustomBlock component={data.component} props={data.props} />,
 };
 
-export function getBlockLayoutClasses(type: BlockType, data: Record<string, any>) {
-  const isText = ["paragraph", "heading", "quote", "markdown", "button"].includes(type);
-  const width = (data.width as string) || "prose";
-  const spacing = (data.spacing as string) || "medium";
+/*
+   The span and spacing tables moved to lib/block-layout.ts, where they can be
+   tested without a DOM and where the one comment explaining why `span` is not
+   called `width` sits next to the code it explains.
 
-  // Width mapping
-  const widthCls = (
-    {
-      prose: "max-w-prose mx-auto w-full px-5",
-      wide: "max-w-content mx-auto w-full px-5 sm:px-8",
-      full: "max-w-none w-full",
-    } as Record<string, string>
-  )[width] ?? "max-w-prose mx-auto w-full px-5";
-
-  // Spacing mapping
-  const spacingCls = (
-    {
-      none: "py-0",
-      small: "py-2 sm:py-3.5",
-      medium: "py-4 sm:py-7",
-      large: "py-8 sm:py-16",
-    } as Record<string, string>
-  )[spacing] ?? "py-4 sm:py-7";
-
-  return cn(widthCls, spacingCls);
-}
+   The `type` argument went with them: it only ever fed an `isText` local that
+   nothing read.
+*/
 
 export function BlockRenderer({ blocks }: { blocks: Block[] }) {
   if (!blocks?.length) return null;
@@ -252,7 +238,7 @@ export function BlockRenderer({ blocks }: { blocks: Block[] }) {
           const Renderer = renderers[block.type];
           if (!Renderer) return null;
           return (
-            <div key={block.id} id={`block-${block.id}`} className={cn("scroll-mt-24", getBlockLayoutClasses(block.type, block.data ?? {}))}>
+            <div key={block.id} id={`block-${block.id}`} className={cn("scroll-mt-24", blockLayoutClasses(block.data))}>
               <Renderer data={block.data ?? {}} />
             </div>
           );

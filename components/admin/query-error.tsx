@@ -10,7 +10,7 @@ export function QueryError({ what, error }: { what: string; error?: string | nul
   return (
     <p
       role="alert"
-      className="rounded border border-red/40 bg-red-soft/10 p-4 text-sm text-red"
+      className="rounded border border-red bg-red-soft p-4 text-sm text-red"
     >
       Could not load {what}: {error}
     </p>

@@ -157,7 +157,7 @@ export function MessageCard({
       </div>
 
       {confirming && (
-        <div className="mt-3 rounded border border-red/50 bg-red-soft/10 p-3 text-xs">
+        <div className="mt-3 rounded border border-red bg-red-soft p-3 text-xs">
           <p className="font-semibold text-red">
             Delete this message from {message.name} for good?
           </p>

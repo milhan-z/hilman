@@ -13,7 +13,7 @@ export function SiteNav({ items }: { items: { label: string; href: string }[] })
   useEffect(() => setOpen(false), [pathname]);
   const isActive = (href: string) => href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  return <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur-md" onKeyDown={(event) => {
+  return <header className="sticky top-0 z-40 border-b border-line bg-paper backdrop-blur-md" onKeyDown={(event) => {
     if (event.key === "Escape" && open) { setOpen(false); toggleRef.current?.focus(); }
   }}>
     <nav aria-label="Main" className="mx-auto flex h-20 max-w-wide items-center justify-between gap-4 px-5 sm:px-8 lg:px-12">
@@ -22,7 +22,7 @@ export function SiteNav({ items }: { items: { label: string; href: string }[] })
         <span className="hidden border-l border-line-strong pl-4 font-hand text-lg text-soft xl:block">a personal notebook</span>
       </Link>
       <div className="hidden items-center gap-1 md:flex">
-        {items.map((item) => <Link key={item.href} href={item.href} aria-current={isActive(item.href) ? "page" : undefined} className={cn("inline-flex min-h-11 items-center rounded px-3 text-sm font-medium transition-colors", isActive(item.href) ? "text-pen underline decoration-pen/50 underline-offset-8" : "text-soft hover:text-ink")}>{item.label}</Link>)}
+        {items.map((item) => <Link key={item.href} href={item.href} aria-current={isActive(item.href) ? "page" : undefined} className={cn("inline-flex min-h-11 items-center rounded px-3 text-sm font-medium transition-colors", isActive(item.href) ? "text-pen underline decoration-pen underline-offset-8" : "text-soft hover:text-ink")}>{item.label}</Link>)}
       </div>
       <div className="flex items-center gap-1 md:border-l md:border-line md:pl-2">
         <ThemeToggle />

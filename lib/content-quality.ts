@@ -1,10 +1,19 @@
 import { mockJournal, mockProjects, mockSettings } from "./mock";
-import { BLOCK_TEMPLATES } from "./block-templates";
+import { findStarterPrompts, type StarterFinding } from "./starter-prompts";
 import type { Block, JournalPost, Project, Settings } from "./types";
 
 export interface ContentQualityIssue {
   code: "demo" | "template" | "placeholder-link" | "test-text";
   message: string;
+  /**
+   * The blocks the issue is actually about, when it is about blocks.
+   *
+   * "Replace the remaining starter-template instructions" is unactionable on a
+   * phone with twenty blocks: it names a category, not a place. Carrying the
+   * findings lets the editor say which two paragraphs, show them, and offer to
+   * remove them.
+   */
+  prompts?: StarterFinding[];
 }
 
 /** Accepts both database rows and unsaved CMS form payloads. */
@@ -66,24 +75,6 @@ function retainsDemoNarrative(content: ContentQualityInput, demos: ContentQualit
   });
 }
 
-/**
- * Author prompts from the starter templates, taken from the templates.
- *
- * This was a hand-copied list, and a hand-copied list of strings that exist
- * somewhere else is a list that goes out of date silently — a template added
- * over here produced placeholder text the gate could not recognise, which is
- * the one failure this gate exists to prevent. Reading the registry means a new
- * template is covered the moment it is written.
- *
- * Only exact, unchanged prompts. Ordinary short notes and genuine questions are
- * publishable; "What happened today?" is a sentence someone might mean.
- */
-const templatePrompts = new Set(
-  BLOCK_TEMPLATES.flatMap((template) => strings(template.build().map((block) => block.data)))
-    .map((text) => text.trim())
-    .filter(Boolean)
-);
-
 function strings(value: unknown): string[] {
   if (typeof value === "string") return [value];
   if (Array.isArray(value)) return value.flatMap(strings);
@@ -93,9 +84,16 @@ function strings(value: unknown): string[] {
 
 function sharedIssues(content: ContentQualityInput): ContentQualityIssue[] {
   const issues: ContentQualityIssue[] = [];
-  const blockStrings = (content.blocks ?? []).flatMap((block) => strings(block.data));
-  if (blockStrings.some((text) => templatePrompts.has(text.trim()))) {
-    issues.push({ code: "template", message: "Replace the remaining starter-template instructions with your own story before publishing." });
+  // Which blocks, not just whether. See lib/starter-prompts.ts for why this is
+  // matched per field rather than against every string in a block's data.
+  const prompts = findStarterPrompts(content.blocks);
+  if (prompts.length) {
+    const count = `${prompts.length} starter ${prompts.length === 1 ? "prompt" : "prompts"}`;
+    issues.push({
+      code: "template",
+      message: `${count} still ${prompts.length === 1 ? "needs" : "need"} your words before this can go on the site.`,
+      prompts,
+    });
   }
   // Restrict detection to URLs and the demo video ID, never ordinary prose
   // mentioning example.com or discussing a video.

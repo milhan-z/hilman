@@ -312,7 +312,7 @@ function QuickNote({
         </p>
 
         {error && (
-          <p role="alert" className="rounded border border-red/40 bg-red-soft/20 px-3 py-2 text-sm text-red">
+          <p role="alert" className="rounded border border-red bg-red-soft px-3 py-2 text-sm text-red">
             {error}
           </p>
         )}

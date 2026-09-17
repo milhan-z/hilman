@@ -124,9 +124,11 @@ test("a figure becomes one image block with its caption", () => {
 });
 
 /**
- * `data.width` is read as a pixel width by <Pic /> and as a layout token
- * (prose | wide | full) by getBlockLayoutClasses. Copying <img width> into it
- * would set a layout that does not exist, so the importer must not carry it.
+ * Dimensions from a pasted page describe that page, not this one — see
+ * pushImage() in lib/studio-import-html.ts. (This used to also be a safety
+ * rule, because `data.width` meant two things at once; lib/block-layout.ts
+ * fixed that, and tests/block-layout.test.ts is where the separation is
+ * defended now.)
  */
 test("an image never carries width or height from the markup", () => {
   const summary = ok(

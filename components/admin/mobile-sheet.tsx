@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSwipeDismiss } from "./mobile/use-swipe-dismiss";
 import { useScrollLock } from "./mobile/use-scroll-lock";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,24 @@ import { cn } from "@/lib/utils";
  * Every sheet in the studio is this component, so the gesture is written once
  * and Add block, Details, More, Quick note, block settings and the media
  * picker all inherit it.
+ *
+ * ── why it is portalled ──
+ *
+ * The sheet is `position: fixed`, which normally means "the viewport". It does
+ * not mean that inside an ancestor with a `transform`, a `filter` or a
+ * `backdrop-filter`: any of those makes the ancestor a containing block, and a
+ * fixed child then resolves against *it*.
+ *
+ * That is not hypothetical. <SyncIndicator /> is mounted in the mobile header,
+ * which carries `backdrop-blur`, so this sheet resolved against a 60px-tall
+ * bar — the whole thing, backdrop and panel and buttons, squeezed into a strip
+ * across the top of the screen. From the phone it looked like a yellow
+ * "Nothing to send" banner stuck above the app. Nothing was stuck: the sheet
+ * was simply being laid out inside its own header.
+ *
+ * Rendering into <body> removes the class of bug rather than the instance. No
+ * caller has to know which of its ancestors happens to blur something today,
+ * and none of them has to keep knowing tomorrow.
  */
 
 export interface MobileSheetProps {
@@ -101,9 +120,14 @@ export function MobileSheet({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  // Portals need a DOM to render into, and the server has none. Mounting is
+  // tracked rather than assumed so the first client render matches the HTML.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  return (
+  if (!open || !mounted) return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm"
       // Pointer, not mouse: a tap on the backdrop of a touch device never
@@ -193,7 +217,7 @@ export function MobileSheet({
 
         {actions && (
           <div
-            className="shrink-0 border-t border-line bg-surface/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6"
+            className="shrink-0 border-t border-line bg-surface px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6"
             // The sheet's own actions have to clear the keyboard too: a Quick
             // note's Save button is directly under the field you are typing in.
             style={{ marginBottom: "var(--keyboard-inset, 0px)" }}
@@ -202,7 +226,8 @@ export function MobileSheet({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

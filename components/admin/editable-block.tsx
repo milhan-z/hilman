@@ -356,7 +356,7 @@ export function EditableBlock({
               value={data.label ?? ""}
               placeholder="Button Label"
               onChange={(e) => onChange({ ...data, label: e.target.value })}
-              className="bg-transparent border-0 border-b border-dashed border-hl-ink focus:border-hl-ink outline-none p-0 text-sm font-medium text-hl-ink placeholder:text-hl-ink/50 w-28 text-center"
+              className="bg-transparent border-0 border-b border-dashed border-hl-ink focus:border-hl-ink outline-none p-0 text-sm font-medium text-hl-ink placeholder:text-hl-ink w-28 text-center"
             />
             <button
               type="button"
@@ -364,7 +364,7 @@ export function EditableBlock({
                 e.stopPropagation();
                 onOpenDrawer();
               }}
-              className="text-hl-ink/70 hover:text-hl-ink"
+              className="text-hl-ink hover:text-hl-ink"
               title="Edit Link & Variant"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -576,7 +576,7 @@ function BlockControls({
   canMoveDown,
 }: BlockControlsProps) {
   const button =
-    "flex min-h-11 min-w-11 items-center justify-center rounded text-faint transition-colors sm:min-h-0 sm:min-w-0 sm:p-1";
+    "flex min-h-11 min-w-11 items-center justify-center rounded text-faint transition-colors lg:min-h-0 lg:min-w-0 lg:p-1";
 
   const stop = (run: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -589,7 +589,7 @@ function BlockControls({
           it starts the drag immediately; a finger has to hold. It used to be
           `hidden sm:flex`, which meant the phone — the device this studio is
           for — had no way to drag a block at all. */}
-      <BlockDragGrip dragControls={dragControls} className="sm:h-9 sm:w-9" />
+      <BlockDragGrip dragControls={dragControls} className="lg:h-9 lg:w-9" />
 
       <button
         type="button"
@@ -684,7 +684,7 @@ function BlockControls({
   if (variant === "inline") {
     if (!active) return null;
     return (
-      <div className="mt-2.5 flex items-center justify-end gap-1 border-t border-line pt-1.5 sm:hidden">
+      <div className="mt-2.5 flex items-center justify-end gap-1 border-t border-line pt-1.5 lg:hidden">
         {buttons}
       </div>
     );
@@ -694,7 +694,7 @@ function BlockControls({
   return (
     <div
       className={`absolute -top-3.5 right-2 z-20 items-center gap-1 rounded-full border border-line bg-raise px-2 py-0.5 shadow-card backdrop-blur transition-all ${
-        active ? "hidden sm:flex" : "hidden sm:group-hover/block:flex"
+        active ? "hidden lg:flex" : "hidden lg:group-hover/block:flex"
       }`}
     >
       {buttons}

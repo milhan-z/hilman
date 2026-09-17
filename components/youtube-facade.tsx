@@ -38,7 +38,7 @@ export function YouTubeFacade({ youtubeId, caption }: { youtubeId: string; capti
               className="h-full w-full object-cover opacity-90 transition-opacity duration-base group-hover:opacity-100"
             />
             <span className="absolute inset-0 flex items-center justify-center">
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-paper/90 shadow-lift transition-transform duration-base ease-out group-hover:scale-110">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-paper shadow-lift transition-transform duration-base ease-out group-hover:scale-110">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--pen)" aria-hidden>
                   <path d="M8 5.5v13l11-6.5z" />
                 </svg>

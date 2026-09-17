@@ -95,7 +95,7 @@ export function HtmlBlockEditor({
       )}
 
       {review.removed.length > 0 && (
-        <ul role="status" className="space-y-1 rounded-md border border-hl/50 bg-hl-soft/15 p-3">
+        <ul role="status" className="space-y-1 rounded-md border border-hl bg-hl-soft p-3">
           {review.removed.map((note) => (
             <li key={note} className="text-xs leading-relaxed text-soft">
               {note}

@@ -447,12 +447,17 @@ function findFirst(node: Element, tag: string): Element | null {
 /**
  * An <img> as an image block.
  *
- * `width` and `height` are deliberately dropped. On an image block `data.width`
- * is read twice for two different things — as a pixel width by the renderer's
- * <Pic />, and as a layout token (`prose` | `wide` | `full`) by
- * getBlockLayoutClasses — so copying `<img width="800">` into it would set a
- * layout that does not exist and silently fall back. Aspect ratio comes from
- * the file.
+ * `width` and `height` are still deliberately dropped, though the reason has
+ * changed. It used to be unsafe: `data.width` was read both as a pixel width
+ * and as a page-width token, so carrying `<img width="800">` across set a
+ * layout that did not exist. That collision is gone — the token lives in
+ * `data.span` now, and lib/block-layout.ts only accepts a number as pixels.
+ *
+ * It stays dropped because those numbers describe the page the markup came
+ * from. A pasted `width="800" height="1400"` is that site's column and that
+ * site's crop; reproducing it here reserves the wrong space and lays the photo
+ * out to the wrong shape. The file's own dimensions are the honest answer, and
+ * <Pic /> falls back to them.
  */
 function pushImage(node: Element, out: Collector, caption = "") {
   const src = (node.attribs.src ?? "").trim();

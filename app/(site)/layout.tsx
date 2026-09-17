@@ -27,7 +27,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       {chromeDegraded && (
         <p
           role="alert"
-          className="border-b border-red/40 bg-red-soft/10 px-5 py-2 text-center text-sm text-red sm:px-8"
+          className="border-b border-red bg-red-soft px-5 py-2 text-center text-sm text-red sm:px-8"
         >
           Some site data couldn&apos;t be loaded right now — parts of this page may be missing.
         </p>

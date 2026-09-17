@@ -83,7 +83,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
         </div>
 
         {/* Filter and Search Bar */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-raise/50 p-4">
+        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-raise p-4">
           <div className="flex-1 min-w-[200px]">
             <input
               type="text"
@@ -135,7 +135,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
                     onClick={() => setSelectedItem(item)}
                     className={`relative aspect-square cursor-pointer overflow-hidden rounded-lg border transition-all ${
                       isSelected
-                        ? "border-pen ring-2 ring-pen/30 scale-98 bg-raise"
+                        ? "border-pen ring-2 ring-pen scale-98 bg-raise"
                         : "border-line bg-surface hover:border-line-strong hover:scale-102"
                     }`}
                   >

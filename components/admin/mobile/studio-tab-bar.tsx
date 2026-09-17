@@ -7,6 +7,12 @@ import { ActionSheet, type ActionItem } from "./action-sheet";
 import { QuickCreateSheet } from "./quick-create-sheet";
 import { useKeyboardOpen } from "./keyboard-inset";
 import { EDITOR_ROUTE } from "./routes";
+import {
+  type StudioIcon,
+  PRIMARY_DESTINATIONS,
+  SECONDARY_DESTINATIONS,
+  isDestinationActive,
+} from "@/lib/studio-nav";
 import { cn } from "@/lib/utils";
 
 /**
@@ -55,7 +61,7 @@ const icons = {
   ),
 } as const;
 
-function Icon({ name }: { name: keyof typeof icons }) {
+function Icon({ name }: { name: StudioIcon | "more" }) {
   return (
     <svg
       width="22"
@@ -68,24 +74,22 @@ function Icon({ name }: { name: keyof typeof icons }) {
       strokeLinejoin="round"
       aria-hidden
     >
-      {icons[name]}
+      {icons[name as keyof typeof icons] ?? null}
     </svg>
   );
 }
 
-const TABS = [
-  { label: "Home", href: "/admin", icon: "home" },
-  { label: "Projects", href: "/admin/projects", icon: "projects" },
-  { label: "Journal", href: "/admin/journal", icon: "journal" },
-] as const;
+// Both lists come from lib/studio-nav.ts, which the desktop rail reads too.
+// They used to be written out here and again in components/admin/nav.tsx, and
+// the two copies disagreed about what half the screens were called.
+const TABS = PRIMARY_DESTINATIONS;
 
-const MORE_ITEMS: ActionItem[] = [
-  { id: "pages", label: "Pages", href: "/admin/pages", detail: "Home, About and Connect" },
-  { id: "media", label: "Media library", href: "/admin/media" },
-  { id: "taxonomy", label: "Tags & categories", href: "/admin/taxonomy" },
-  { id: "messages", label: "Messages", href: "/admin/messages" },
-  { id: "settings", label: "Settings", href: "/admin/settings" },
-];
+const MORE_ITEMS: ActionItem[] = SECONDARY_DESTINATIONS.map((destination) => ({
+  id: destination.id,
+  label: destination.label,
+  href: destination.href,
+  detail: destination.detail,
+}));
 
 const tabClass = (active: boolean, pressed: boolean) =>
   cn(
@@ -119,8 +123,7 @@ export function StudioTabBar() {
   // so nothing below reflows while the bar is away.
 
   const current = pressed ?? pathname;
-  const isActive = (href: string) =>
-    href === "/admin" ? current === "/admin" : current.startsWith(href);
+  const isActive = (href: string) => isDestinationActive(href, current);
 
   return (
     <>
@@ -222,7 +225,7 @@ function Tab({
 }: {
   label: string;
   href: string;
-  icon: keyof typeof icons;
+  icon: StudioIcon | "more";
   active: boolean;
   pressed: boolean;
   onPress: (href: string | null) => void;

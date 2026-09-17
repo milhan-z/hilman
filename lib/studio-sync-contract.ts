@@ -63,10 +63,32 @@ export type SyncOutcome =
       serverUpdatedAt: string;
       server: ServerDocument;
     }
-  /** Will never succeed as written — a validation or permission problem. */
-  | { status: "rejected"; mutationId: string; localId: string; message: string }
+  /**
+   * Will never succeed as written — a validation or permission problem.
+   *
+   * `reason` says which kind, so the editor can offer the move that would
+   * actually help. A document held back because two paragraphs are still the
+   * template's questions needs those paragraphs looked at; "Try again" is the
+   * one thing that is guaranteed not to work.
+   */
+  | {
+      status: "rejected";
+      mutationId: string;
+      localId: string;
+      message: string;
+      reason?: RejectionReason;
+      /** How many starter prompts are unanswered, when that is the reason. */
+      prompts?: number;
+    }
   /** Might succeed later — the network or the server was unavailable. */
   | { status: "retry"; mutationId: string; localId: string; message: string };
+
+/** Why a mutation will never be accepted as written. */
+export type RejectionReason =
+  | "CONTENT_BLOCKED"
+  | "MALFORMED"
+  | "AUTH_ERROR"
+  | "SERVER_ERROR";
 
 export interface SyncRequest {
   mutations: SyncMutation[];

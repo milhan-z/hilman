@@ -41,7 +41,7 @@ export default async function AdminMessagesPage(
       </p>
 
       {error && (
-        <p role="alert" className="mt-5 rounded border border-red/40 bg-red-soft/10 p-4 text-sm text-red">
+        <p role="alert" className="mt-5 rounded border border-red bg-red-soft p-4 text-sm text-red">
           Could not read the inbox: {error.message}
         </p>
       )}

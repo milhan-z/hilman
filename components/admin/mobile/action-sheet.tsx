@@ -90,7 +90,7 @@ export function ActionSheet({
 
           if (armed) {
             return (
-              <li key={item.id} className="rounded-md border border-red/50 bg-red-soft/20 p-3">
+              <li key={item.id} className="rounded-md border border-red bg-red-soft p-3">
                 <p className="text-sm font-semibold text-red">{item.confirm}</p>
                 <div className="mt-2.5 grid grid-cols-2 gap-2">
                   <button
@@ -132,7 +132,7 @@ export function ActionSheet({
                   ROW,
                   "disabled:opacity-40",
                   danger
-                    ? "border-red/40 bg-red-soft/15 text-red"
+                    ? "border-red bg-red-soft text-red"
                     : "border-line bg-raise text-ink hover:border-pen"
                 )}
               >

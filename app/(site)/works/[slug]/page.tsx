@@ -54,7 +54,7 @@ export default async function ProjectPage(props: { params: Promise<{ slug: strin
     <article className="pb-20">
       {/* cover */}
       {project.cover_public_id && (
-        <div className="relative h-[42vh] min-h-[280px] w-full overflow-hidden border-b-2 border-ink/80 sm:h-[56vh]">
+        <div className="relative h-[42vh] min-h-[280px] w-full overflow-hidden border-b-2 border-ink sm:h-[56vh]">
           <Pic src={project.cover_public_id} alt={`${project.title} — cover`} fill priority sizes="100vw" />
         </div>
       )}

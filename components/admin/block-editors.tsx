@@ -9,6 +9,7 @@ import { discardPendingMedia } from "@/lib/studio-local/media";
 import { useMediaSelector } from "./media-library-context";
 import { mediaSrc } from "@/lib/cloudinary";
 import { HtmlBlockEditor } from "./html-block-editor";
+import { normalizeBlockLayout, resolveSpacing, resolveSpan } from "@/lib/block-layout";
 import type { BlockType } from "@/lib/types";
 
 /* ─────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ export function MediaField({
             from somewhere else. Hidden on a phone — "folder/asset-id" is how
             Cloudinary files a picture, not something anyone should have to
             type to add one, and every route above produces it for you. */}
-        <details className="hidden sm:block">
+        <details className="hidden lg:block">
           <summary className="cursor-pointer text-xs text-faint">Paste a reference instead</summary>
           <div className="mt-2">
             <TextInput
@@ -581,7 +582,7 @@ export function BlockEditorFields({
   onChange: (data: Record<string, any>) => void;
 }) {
   const Editor = EDITORS[type];
-  const supportsWidth = ["image", "gallery", "youtube", "embed", "code", "custom", "divider"].includes(type);
+  const supportsSpan = ["image", "gallery", "youtube", "embed", "code", "custom", "divider"].includes(type);
 
   return (
     <div className="space-y-4">
@@ -594,7 +595,7 @@ export function BlockEditorFields({
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Vertical Margin">
             <Select
-              value={data.spacing ?? "medium"}
+              value={resolveSpacing(data)}
               onChange={(e) => onChange({ ...data, spacing: e.target.value })}
             >
               <option value="none">None (0px)</option>
@@ -604,11 +605,18 @@ export function BlockEditorFields({
             </Select>
           </Field>
 
-          {supportsWidth && (
+          {supportsSpan && (
+            /* This control used to write `data.width`, which on an image block
+               was also the pixel width handed to Cloudinary — so choosing Wide
+               here produced `w_wide` in the URL and a broken photo. It writes
+               `data.span` now, and normalizeBlockLayout() retires the old key
+               from this block on the way past. */
             <Field label="Layout Width">
               <Select
-                value={data.width ?? "prose"}
-                onChange={(e) => onChange({ ...data, width: e.target.value })}
+                value={resolveSpan(data)}
+                onChange={(e) =>
+                  onChange({ ...normalizeBlockLayout(data), span: e.target.value })
+                }
               >
                 <option value="prose">Standard Prose</option>
                 <option value="wide">Wide Width</option>

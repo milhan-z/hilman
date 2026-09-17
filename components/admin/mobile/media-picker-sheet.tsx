@@ -275,13 +275,13 @@ export function MediaPickerSheet({
         />
 
         {progress && (
-          <p role="status" className="rounded border border-hl/50 bg-hl-soft/20 px-3 py-2 text-sm text-soft">
+          <p role="status" className="rounded border border-hl bg-hl-soft px-3 py-2 text-sm text-soft">
             Keeping photos… {progress.done + 1} of {progress.total}
           </p>
         )}
 
         {error && (
-          <p role="alert" className="rounded border border-red/40 bg-red-soft/20 px-3 py-2 text-sm text-red">
+          <p role="alert" className="rounded border border-red bg-red-soft px-3 py-2 text-sm text-red">
             {error}
           </p>
         )}

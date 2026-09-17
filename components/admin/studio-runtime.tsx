@@ -28,6 +28,9 @@ const serverSnapshot: SyncState = {
   media: 0,
   lastSyncedAt: null,
   lastError: null,
+  lastFailure: null,
+  blockedPrompts: 0,
+  photos: { pending: 0, failed: 0 },
 };
 
 /** Live queue and connectivity state, shared by every studio screen. */

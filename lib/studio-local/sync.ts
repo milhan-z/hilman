@@ -22,6 +22,7 @@ import { touchSnapshot } from "./snapshots";
 import { flushPendingMedia, listPendingMedia } from "./media";
 import { listDrafts, writeDraft } from "./drafts";
 import { hasPendingRefs, replacePendingRefs } from "../studio-media-refs";
+import type { RejectionReason } from "../studio-sync-contract";
 
 /**
  * Getting the queue to the server.
@@ -54,6 +55,18 @@ export interface SyncState {
   media: number;
   lastSyncedAt: string | null;
   lastError: string | null;
+  /**
+   * What kind of refusal `lastError` was.
+   *
+   * Without it every failure reads "Couldn't sync", which is right for a
+   * dropped connection and wrong for a document the site declined to publish
+   * because it still contains the template's questions.
+   */
+  lastFailure: RejectionReason | null;
+  /** Unanswered starter prompts, when that is why it was refused. */
+  blockedPrompts: number;
+  /** Photographs still on this device: still going up, and given up on. */
+  photos: { pending: number; failed: number };
 }
 
 const initialState: SyncState = {
@@ -65,6 +78,9 @@ const initialState: SyncState = {
   media: 0,
   lastSyncedAt: null,
   lastError: null,
+  lastFailure: null,
+  blockedPrompts: 0,
+  photos: { pending: 0, failed: 0 },
 };
 
 let state: SyncState = initialState;
@@ -137,6 +153,12 @@ export async function refreshSyncState(): Promise<SyncState> {
     blocked: queue.filter((entry) => entry.blocked).length + media.filter((m) => m.blocked).length,
     conflicts: conflicts.length,
     media: media.filter((m) => !m.blocked).length,
+    // Split, because "still going up" and "gave up" need different sentences
+    // and different buttons — see FailureKind in lib/studio-editor-state.ts.
+    photos: {
+      pending: media.filter((m) => !m.blocked).length,
+      failed: media.filter((m) => m.blocked).length,
+    },
   });
   return state;
 }
@@ -249,12 +271,15 @@ async function runFlush(): Promise<SyncState> {
   // trip where every entry came back refused is contact with the server, not a
   // sync, and dating it would tell you your work is safer than it is.
   const savedSomething = results.some((result) => result.status === "saved");
+  const rejected = results.find((result) => result.status === "rejected");
 
   setState({
     syncing: false,
     reachable: true,
     ...(savedSomething ? { lastSyncedAt: new Date().toISOString() } : {}),
-    lastError: results.find((r) => r.status === "rejected")?.message ?? null,
+    lastError: rejected?.message ?? null,
+    lastFailure: rejected?.reason ?? (rejected ? "SERVER_ERROR" : null),
+    blockedPrompts: rejected?.prompts ?? 0,
   });
   await refreshSyncState();
 
@@ -381,7 +406,7 @@ export async function sendDirect(mutation: SyncMutation): Promise<SyncOutcome | 
 
   if (!response.ok) {
     const message = await readError(response);
-    setState({ reachable: true, lastError: message });
+    setState({ reachable: true, lastError: message, lastFailure: "SERVER_ERROR" });
     return { status: "rejected", mutationId: mutation.mutationId, localId: mutation.localId, message };
   }
 
@@ -393,7 +418,13 @@ export async function sendDirect(mutation: SyncMutation): Promise<SyncOutcome | 
       title: String(mutation.payload.fields.title ?? ""),
       status: String(mutation.payload.fields.status ?? "draft"),
     });
-    setState({ reachable: true, lastSyncedAt: new Date().toISOString(), lastError: null });
+    setState({
+      reachable: true,
+      lastSyncedAt: new Date().toISOString(),
+      lastError: null,
+      lastFailure: null,
+      blockedPrompts: 0,
+    });
     emit({
       type: "applied",
       save: {

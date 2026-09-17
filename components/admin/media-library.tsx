@@ -100,7 +100,7 @@ export function MediaLibrary({ media }: { media: MediaRow[] }) {
           </p>
         )}
         {warnings.length > 0 && (
-          <div role="alert" className="mt-3 rounded border border-red/40 bg-red-soft/10 p-3">
+          <div role="alert" className="mt-3 rounded border border-red bg-red-soft p-3">
             <p className="text-sm font-semibold text-red">Uploaded, but not fully filed</p>
             <ul className="mt-1.5 space-y-1 text-xs text-soft">
               {warnings.map((w) => (

@@ -86,7 +86,7 @@ function PinForm({ onUseEmail }: { onUseEmail: () => void }) {
       </div>
 
       {state.status === "error" && (
-        <p id="pin-error" role="alert" className="mt-5 rounded border border-red/40 bg-red-soft px-3 py-2 text-sm text-red">
+        <p id="pin-error" role="alert" className="mt-5 rounded border border-red bg-red-soft px-3 py-2 text-sm text-red">
           {state.message}
         </p>
       )}
@@ -119,7 +119,7 @@ function EmailForm({ onUsePin }: { onUsePin: () => void }) {
         <input name="password" type="password" required autoComplete="current-password" className={fieldCls} />
       </label>
       {state.status === "error" && (
-        <p role="alert" className="rounded border border-red/40 bg-red-soft px-3 py-2 text-sm text-red">
+        <p role="alert" className="rounded border border-red bg-red-soft px-3 py-2 text-sm text-red">
           {state.message}
         </p>
       )}

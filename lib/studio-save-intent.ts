@@ -56,3 +56,29 @@ export class LocalOnlySaveError extends Error {
 export function assertMayReachServer(intent: SaveIntent): void {
   if (!intentMayReachServer(intent)) throw new LocalOnlySaveError();
 }
+
+/**
+ * Which of the four a Save/Publish press is.
+ *
+ * Written down as a function because it is the one decision that turns a
+ * button into a change to the public site, and an inline ternary in a 1300-line
+ * component is not somewhere that decision can be reviewed or tested.
+ *
+ *   Save draft        → SYNC_DRAFT   (a server draft; the public sees nothing)
+ *   Publish, new      → PUBLISH      (first time the public sees it)
+ *   Update live       → UPDATE_LIVE  (replacing what the public already reads)
+ *
+ * `published` is what the *site* currently serves, not what the form says — so
+ * pressing Publish on a document the site already has is an update, and
+ * pressing it on one the site has never seen is a first publication. Collapsing
+ * those two into one "save" is how a studio loses the ability to say whether
+ * something is about to go public for the first time.
+ */
+export function intentFor(input: {
+  nextStatus: "published" | "draft";
+  /** Whether the public site already serves this document. */
+  published: boolean;
+}): SaveIntent {
+  if (input.nextStatus === "draft") return "SYNC_DRAFT";
+  return input.published ? "UPDATE_LIVE" : "PUBLISH";
+}

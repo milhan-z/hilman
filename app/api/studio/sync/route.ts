@@ -5,6 +5,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { normaliseFields } from "@/lib/studio-content";
 import { sanitizeStudioHtml } from "@/lib/studio-html";
 import { getJournalQualityIssues, getProjectQualityIssues } from "@/lib/content-quality";
+import { readTimeMinutes } from "@/lib/read-time";
 import {
   describeMalformedMutation,
   type ServerDocument,
@@ -101,7 +102,8 @@ async function applyMutation(
   const mutationId = typeof mutation?.mutationId === "string" ? mutation.mutationId : "";
   const localId = typeof mutation?.localId === "string" ? mutation.localId : "";
 
-  if (malformed) return { status: "rejected", mutationId, localId, message: malformed };
+  if (malformed)
+    return { status: "rejected", mutationId, localId, reason: "MALFORMED", message: malformed };
 
   const entity: SyncEntity = mutation.entity;
   const fields = normaliseFields(entity, mutation.payload.fields);
@@ -119,6 +121,16 @@ async function applyMutation(
   if (blockError)
     return { status: "rejected", mutationId, localId, message: `${blockError} Nothing was saved.` };
 
+  // Reading time is derived, and derived here as well as in the editor: the
+  // column is read by list pages that are served without blocks, and a payload
+  // is something a client composed. Counting the words we are about to store is
+  // the only version that cannot be stale or wrong.
+  if (entity === "journal") {
+    fields.reading_minutes = String(
+      readTimeMinutes({ excerpt: String(fields.excerpt ?? ""), blocks })
+    );
+  }
+
   // Publishing has to clear the same quality gate as the editor does, or the
   // queue would become a way to publish a placeholder that the form refuses.
   if (fields.status === "published") {
@@ -127,10 +139,13 @@ async function applyMutation(
         ? getProjectQualityIssues({ ...fields, blocks })
         : getJournalQualityIssues({ ...fields, blocks });
     if (issues.length) {
+      const prompts = issues.find((issue) => issue.code === "template")?.prompts?.length ?? 0;
       return {
         status: "rejected",
         mutationId,
         localId,
+        reason: "CONTENT_BLOCKED",
+        prompts,
         message: `${issues.map((issue) => issue.message).join(" ")} It is still saved here as a draft.`,
       };
     }

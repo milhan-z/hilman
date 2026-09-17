@@ -12,11 +12,6 @@ export function slugify(input: string) {
     .replace(/^-|-$/g, "");
 }
 
-export function readingMinutes(text: string) {
-  const words = text.trim().split(/\s+/).length;
-  return Math.max(1, Math.round(words / 200));
-}
-
 export function formatDate(iso: string | null | undefined) {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-US", {

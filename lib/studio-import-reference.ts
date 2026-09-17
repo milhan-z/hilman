@@ -1,3 +1,9 @@
+import {
+  DEFAULT_SPACING,
+  DEFAULT_SPAN,
+  SPACING_VALUES,
+  SPAN_VALUES,
+} from "./block-layout";
 import { BLOCK_HINTS, type BlockType } from "./types";
 
 /**
@@ -123,15 +129,26 @@ export function blockReference(): BlockReferenceRow[] {
 /**
  * Keys every block understands, which are not in BLOCK_HINTS.
  *
- * They are read by getBlockLayoutClasses in components/blocks/renderer.tsx
- * rather than by any one block, which is why they are documented separately —
- * and why `width` is worth a warning: on an image block the renderer also
- * reads `data.width` as a pixel width, so the two meanings collide. Leave it
- * out of image blocks.
+ * They are read by lib/block-layout.ts rather than by any one block, which is
+ * why they are documented separately. Generated from that module so the values
+ * offered here cannot drift from the ones the renderer accepts.
+ *
+ * `span` was called `width` until the two meanings were separated; a document
+ * written against the old shape still imports correctly, because the reader
+ * still accepts a string `width` naming a span. New documents should say
+ * `span`, and that is what this tells anyone — or any model — writing one.
  */
 export const LAYOUT_KEYS = [
-  { key: "width", values: "prose | wide | full", note: "Defaults to prose. Do not set it on an image block." },
-  { key: "spacing", values: "none | small | medium | large", note: "Defaults to medium." },
+  {
+    key: "span",
+    values: SPAN_VALUES.join(" | "),
+    note: `Defaults to ${DEFAULT_SPAN}. On an image block, "width" means pixels — use "span" for the page width.`,
+  },
+  {
+    key: "spacing",
+    values: SPACING_VALUES.join(" | "),
+    note: `Defaults to ${DEFAULT_SPACING}.`,
+  },
 ];
 
 /* ── a document to start from ─────────────────────────────── */
@@ -187,6 +204,11 @@ export function jsonTemplate(kind: DocumentKind): string {
  * publication fields to be left out is not security (the importer drops them
  * regardless, see REFUSED_KEYS in lib/studio-import.ts); it is so the reply
  * does not contain fields whose absence you then have to verify.
+ *
+ * `span` versus `width` is spelled out because a model asked for a wide image
+ * will reach for `width` on its own. They are separate keys now — see
+ * lib/block-layout.ts — but a reply that guesses wrong is still a reply you
+ * have to correct by hand.
  */
 export function aiPrompt(kind: DocumentKind): string {
   const reference = blockReference()
@@ -209,9 +231,9 @@ ${reference}
 
 Optional on any block:
 ${layout}
-Do not set width on an image block.
 
 Rules:
+- "span" is the page width. On an image block "width" and "height" are the photo's own pixel size — they are different keys and do not interact.
 - Use "markdown" with an "md" string for lists and tables. There is no list or table block.
 - Image addresses must be full https:// URLs. Leave a photo out rather than inventing one.
 - No "id", "slug", "status", "published_at" or timestamps. I decide what gets published.

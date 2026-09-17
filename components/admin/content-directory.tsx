@@ -239,7 +239,7 @@ export function ContentDirectory({
       </div>
 
       {error && (
-        <p role="alert" className="rounded-md border border-red/40 bg-red-soft/20 px-3.5 py-3 text-sm text-red">
+        <p role="alert" className="rounded-md border border-red bg-red-soft px-3.5 py-3 text-sm text-red">
           {error}
         </p>
       )}
@@ -261,7 +261,7 @@ export function ContentDirectory({
               key={item.id}
               className={cn(
                 "transition-colors",
-                isSelected && "bg-hl-soft/15",
+                isSelected && "bg-hl-soft",
                 busy && "opacity-60"
               )}
             >
@@ -343,7 +343,7 @@ export function ContentDirectory({
       {selecting && selected.length > 0 && (
         <div
           className={cn(
-            "fixed inset-x-0 bottom-0 z-[85] border-t border-line-strong bg-paper/95 backdrop-blur",
+            "fixed inset-x-0 bottom-0 z-[85] border-t border-line-strong bg-paper backdrop-blur",
             "px-4 pt-3 pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+68px))] lg:pb-4"
           )}
         >
@@ -370,7 +370,7 @@ export function ContentDirectory({
                 type="button"
                 disabled={!sync.reachable || busyId !== null}
                 onClick={() => void remove(selected)}
-                className="min-h-12 rounded-md border border-red/50 bg-red-soft/20 text-sm font-semibold text-red disabled:opacity-50"
+                className="min-h-12 rounded-md border border-red bg-red-soft text-sm font-semibold text-red disabled:opacity-50"
               >
                 Delete
               </button>

@@ -11,7 +11,7 @@
  */
 
 function Bar({ w, h = "h-4" }: { w: string; h?: string }) {
-  return <div aria-hidden className={`${h} ${w} rounded bg-line/70`} />;
+  return <div aria-hidden className={`${h} ${w} rounded bg-line`} />;
 }
 
 /** The pulse is one animation on the wrapper, not one per bar. */
@@ -33,7 +33,7 @@ export function ListSkeleton({
       <h1 className="font-display text-2xl font-bold">{title}</h1>
       <Pulse>
         <div className="space-y-4">
-          {search && <div aria-hidden className="h-12 rounded-md bg-line/40" />}
+          {search && <div aria-hidden className="h-12 rounded-md bg-line" />}
           <div className="flex gap-2">
             <Bar w="w-16" h="h-9" />
             <Bar w="w-20" h="h-9" />

@@ -37,9 +37,34 @@ export interface BlockTemplate {
   build: () => Omit<Block, "id" | "position">[];
 }
 
+/**
+ * A heading is structure, not an instruction.
+ *
+ * It carries no `starter` marker and its text is not a prompt: an author who
+ * keeps "What I noticed" as a heading and writes underneath it has used the
+ * template correctly. Marking these is what once made a finished Journal
+ * unpublishable — see lib/starter-prompts.ts.
+ */
 const h = (level: 2 | 3, text: string) => ({ type: "heading" as BlockType, data: { level, text } });
-const p = (text: string) => ({ type: "paragraph" as BlockType, data: { text } });
+
+/**
+ * A paragraph from a template is a question waiting for an answer, so it says
+ * so. `starter: true` is what lets the studio point at exactly these blocks,
+ * offer to remove exactly these blocks, and leave them out of the reading time
+ * until they are written in.
+ */
+const p = (text: string) => ({
+  type: "paragraph" as BlockType,
+  data: text ? { text, starter: true } : { text },
+});
+
 const rule = () => ({ type: "divider" as BlockType, data: { style: "line" } });
+
+/** Marks any other block whose copy is a prompt rather than content. */
+const prompt = <T extends { type: BlockType; data: Record<string, any> }>(block: T): T => ({
+  ...block,
+  data: { ...block.data, starter: true },
+});
 
 /** The prompts are written as instructions to the author, not as filler copy. */
 const CONTEXT = "What was the situation, and what needed to change? One paragraph, no jargon.";
@@ -69,7 +94,7 @@ export const BLOCK_TEMPLATES: BlockTemplate[] = [
       p(ROLE),
       h(2, "Decisions"),
       p("Two or three choices that shaped the result — and the constraint behind each one."),
-      {
+      prompt({
         type: "gallery",
         data: {
           layout: "grid",
@@ -79,7 +104,7 @@ export const BLOCK_TEMPLATES: BlockTemplate[] = [
             { public_id: "", alt: "", caption: "" },
           ],
         },
-      },
+      }),
       rule(),
       h(2, "Where it landed"),
       p(OUTCOME),
@@ -95,10 +120,10 @@ export const BLOCK_TEMPLATES: BlockTemplate[] = [
       p("Who or what is this about, and why did it deserve filming?"),
       h(2, "My role"),
       p(ROLE),
-      { type: "youtube", data: { youtube_id: "", caption: "The finished piece." } },
+      prompt({ type: "youtube", data: { youtube_id: "", caption: "The finished piece." } }),
       h(2, "How it was made"),
       p("Shooting conditions, the constraint you worked around, the choice you made in the edit."),
-      {
+      prompt({
         type: "gallery",
         data: {
           layout: "columns",
@@ -107,7 +132,7 @@ export const BLOCK_TEMPLATES: BlockTemplate[] = [
             { public_id: "", alt: "", caption: "" },
           ],
         },
-      },
+      }),
       rule(),
       h(2, "What it did"),
       p(OUTCOME),
@@ -123,14 +148,14 @@ export const BLOCK_TEMPLATES: BlockTemplate[] = [
       p(CONTEXT),
       h(2, "What I built"),
       p("One paragraph a non-engineer can follow. Save the stack list for below."),
-      { type: "image", data: { public_id: "", alt: "", caption: "A screenshot of the thing working." } },
+      prompt({ type: "image", data: { public_id: "", alt: "", caption: "A screenshot of the thing working." } }),
       h(2, "How it works"),
       p("The one design decision worth explaining — and what it cost."),
-      { type: "code", data: { language: "ts", code: "// The smallest piece of code that shows the idea." } },
+      prompt({ type: "code", data: { language: "ts", code: "// The smallest piece of code that shows the idea." } }),
       rule(),
       h(2, "Where it landed"),
       p(OUTCOME),
-      { type: "link", data: { url: "", title: "Live demo or repository", description: "" } },
+      prompt({ type: "link", data: { url: "", title: "Live demo or repository", description: "" } }),
     ],
   },
   {
@@ -165,10 +190,10 @@ export const BLOCK_TEMPLATES: BlockTemplate[] = [
       p("The work, the conversation or the reading that put it there."),
       h(2, "What changes if it's true"),
       p("The consequence — for how you work, not in general."),
-      {
+      prompt({
         type: "quote",
         data: { text: "Something you read that said it better.", source: "Who said it" },
-      },
+      }),
       rule(),
       h(2, "What I'm still unsure about"),
       p("The part you have not resolved. Leaving it open is the honest ending."),

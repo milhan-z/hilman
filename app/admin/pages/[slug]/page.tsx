@@ -29,7 +29,7 @@ export default async function PageEditorPage(props: { params: Promise<{ slug: st
     return (
       <div className="max-w-3xl">
         <h1 className="font-display text-2xl font-bold">Edit page</h1>
-        <p role="alert" className="mt-4 rounded border border-red/40 bg-red-soft/10 p-4 text-sm text-red">
+        <p role="alert" className="mt-4 rounded border border-red bg-red-soft p-4 text-sm text-red">
           Could not read this page: {error.message}
         </p>
       </div>

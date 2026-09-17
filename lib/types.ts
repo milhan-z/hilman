@@ -53,13 +53,20 @@ export interface Block {
   data: Record<string, any>;
 }
 
-/** Field hints used by the CMS editor & docs. */
+/**
+ * Field hints used by the CMS editor & docs.
+ *
+ * These describe the keys a block type owns. Two further keys belong to every
+ * block and are not listed per type — `span` and `spacing`, documented in
+ * lib/block-layout.ts and surfaced to the importer through LAYOUT_KEYS in
+ * lib/studio-import-reference.ts.
+ */
 export const BLOCK_HINTS: Record<BlockType, string> = {
   heading: "{ level: 2|3|4, text }",
   paragraph: "{ text } — inline markdown allowed",
   markdown: "{ md }",
-  image: "{ public_id | src, alt, caption, width?, height? }",
-  gallery: "{ items: [{ public_id | src, alt, caption }], layout: 'grid'|'columns' }",
+  image: "{ public_id | src, alt, caption, width?, height? } — width/height in pixels",
+  gallery: "{ items: [{ public_id | src, alt, caption }], layout: 'grid'|'columns' } — `layout` is this block's own key, not the page span",
   youtube: "{ youtube_id (id · URL · or <iframe>), caption }",
   embed: "{ url (share URL or full <iframe>), provider?, height? }",
   quote: "{ text, source }",

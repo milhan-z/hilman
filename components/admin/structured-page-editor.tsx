@@ -112,7 +112,7 @@ export function StructuredPageEditor({
       </div>
 
       <div
-        className="sticky -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-1 sm:px-1"
+        className="sticky -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-paper px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-1 sm:px-1"
         // Rides above the keyboard — see <KeyboardInset />.
         style={{ bottom: "var(--keyboard-inset, 0px)" }}
       >

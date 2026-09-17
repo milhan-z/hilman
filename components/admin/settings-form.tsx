@@ -282,7 +282,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
       </fieldset>
 
       <div
-        className="sticky flex flex-wrap items-center gap-3 border-t border-line bg-paper/95 pt-3 pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+68px))] backdrop-blur lg:pb-4"
+        className="sticky flex flex-wrap items-center gap-3 border-t border-line bg-paper pt-3 pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+68px))] backdrop-blur lg:pb-4"
         // Clears the keyboard, and on a phone the tab bar below it too.
         style={{ bottom: "var(--keyboard-inset, 0px)" }}
       >

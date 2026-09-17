@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { readTimeLabel, readTimeMinutes } from "@/lib/read-time";
 import { MobileSheet } from "../mobile-sheet";
 import { CheckRow, Field, Select, TextArea, TextInput } from "../fields";
 import { MediaField } from "../block-editors";
@@ -48,7 +49,9 @@ export function MetadataSummary({
   const bits = [
     published ? "Live" : "Draft",
     kind === "project" ? STREAMS[doc.stream as Stream]?.name ?? doc.stream : null,
-    kind === "project" ? doc.year || null : `${doc.readingMinutes || "3"} min read`,
+    kind === "project"
+      ? doc.year || null
+      : readTimeLabel(readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks })),
     doc.tagIds.length > 0 ? `${doc.tagIds.length} tag${doc.tagIds.length === 1 ? "" : "s"}` : null,
   ].filter(Boolean) as string[];
 
@@ -139,13 +142,13 @@ export function MetadataSheet({
         )}
 
         {!isProject && (
-          <Field label="Reading minutes">
-            <TextInput
-              type="number"
-              inputMode="numeric"
-              value={doc.readingMinutes}
-              onChange={(event) => patch({ readingMinutes: event.target.value })}
-            />
+          /* Shown, not asked for. It moves as you type, with no request and
+             nothing to keep up to date. */
+          <Field label="Reading time">
+            <p className="text-sm text-ink">
+              {readTimeLabel(readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks }))}
+            </p>
+            <p className="mt-0.5 text-xs text-faint">Calculated from your story.</p>
           </Field>
         )}
 

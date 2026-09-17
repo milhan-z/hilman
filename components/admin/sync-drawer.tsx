@@ -54,6 +54,8 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   const [photos, setPhotos] = useState<PendingMedia[]>([]);
   const [space, setSpace] = useState<{ usage: number; quota: number } | null>(null);
   const summary = connectivityFrom(state);
+  /** Work actually addressed to the site: saves queued, plus photos going up. */
+  const waiting = state.queued + state.media;
 
   const reload = useCallback(async () => {
     const [nextQueue, nextConflicts, nextPhotos, report] = await Promise.all([
@@ -128,22 +130,42 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       title="Sync"
       subtitle={summary.label}
       actions={
-        <button
-          type="button"
-          onClick={() => void flushOutbox()}
-          disabled={state.syncing || (state.queued === 0 && state.media === 0)}
-          className="min-h-12 w-full rounded-md bg-hl px-4 text-sm font-semibold text-hl-ink shadow-card transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {state.syncing
-            ? "Syncing…"
-            : state.queued + state.media > 0
-              ? "Send now"
-              : "Nothing to send"}
-        </button>
+        /* Two different buttons, not one button with two labels.
+           There is something to send: a highlighted Send now. There is not:
+           a plain Done that closes the panel. The old version was a single
+           `bg-hl` button reading "Nothing to send" — warning-yellow, disabled,
+           and unpressable — which is emphasis spent on the one state that is
+           entirely fine. Yellow is for something needing attention. */
+        waiting > 0 || state.syncing ? (
+          <button
+            type="button"
+            onClick={() => void flushOutbox()}
+            disabled={state.syncing}
+            className="min-h-12 w-full rounded-md bg-hl px-4 text-sm font-semibold text-hl-ink shadow-card transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {state.syncing ? "Syncing…" : `Send ${waiting === 1 ? "it" : "them"} now`}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-12 w-full rounded-md border border-line-strong bg-surface px-4 text-sm font-semibold text-soft transition-colors hover:text-ink"
+          >
+            Done
+          </button>
+        )
       }
     >
       <div className="space-y-5">
         <p className="text-sm text-soft">{summary.detail}</p>
+
+        {/* The information the old yellow button was carrying, in the place
+            information belongs. Stated plainly, and only when it is true. */}
+        {waiting === 0 && state.conflicts === 0 && state.blocked === 0 && (
+          <p className="rounded-md border border-line bg-raise p-3 text-sm text-soft">
+            Nothing waiting to send.
+          </p>
+        )}
 
         {state.lastSyncedAt && (
           <p className="font-mono text-2xs uppercase tracking-wide text-faint">
@@ -158,7 +180,7 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             </h3>
             <ul className="space-y-3">
               {conflicts.map((conflict) => (
-                <li key={conflict.key} className="rounded-md border border-red/40 bg-red-soft/20 p-3.5">
+                <li key={conflict.key} className="rounded-md border border-red bg-red-soft p-3.5">
                   <p className="text-sm font-semibold text-ink">
                     {String(conflict.server.fields.title ?? "Untitled")}
                   </p>
@@ -245,7 +267,7 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                   key={mutation.mutationId}
                   className={cn(
                     "rounded-md border p-3.5",
-                    mutation.blocked ? "border-red/40 bg-red-soft/15" : "border-line bg-raise"
+                    mutation.blocked ? "border-red bg-red-soft" : "border-line bg-raise"
                   )}
                 >
                   <div className="flex items-baseline justify-between gap-3">

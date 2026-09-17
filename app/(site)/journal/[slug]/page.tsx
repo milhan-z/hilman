@@ -69,7 +69,7 @@ export default async function JournalEntryPage(props: { params: Promise<{ slug: 
             ))}
           </div>
         )}
-        <hr className="mt-8 border-t-2 border-ink/80" />
+        <hr className="mt-8 border-t-2 border-ink" />
       </header>
 
       <div className="mt-12 w-full">

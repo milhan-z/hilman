@@ -221,7 +221,7 @@ export function CommandPalette() {
                       </span>
                     )}
                     {item.hint && (
-                      <span className={cn("text-2xs", i === active ? "text-hl-ink/70" : "text-faint")}>
+                      <span className={cn("text-2xs", i === active ? "text-hl-ink" : "text-faint")}>
                         {item.hint}
                       </span>
                     )}
