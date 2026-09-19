@@ -615,3 +615,75 @@ export async function getCommandIndex(): Promise<CommandIndex> {
     pages: pages.data ?? [],
   };
 }
+
+/* ── internal link targets ─────────────────────────────── */
+
+export interface LinkTargetRow {
+  /** The public path a Link block should point at. */
+  url: string;
+  title: string;
+  description: string;
+  thumbnail: string | null;
+  /** Drafts are selectable, but the Studio has to say so — see the picker. */
+  live: boolean;
+}
+
+export interface LinkTargetIndex {
+  projects: LinkTargetRow[];
+  journal: LinkTargetRow[];
+}
+
+/**
+ * Everything a Link block could point at on this site, for the Studio picker.
+ *
+ * Deliberately shaped as the block's own fields rather than as database rows:
+ * what the picker does on selection is copy these straight into the block, so
+ * the public renderer never has to look anything up. That snapshot is the
+ * whole point — no N+1 query when a page with six related cards is served, and
+ * an exported Studio JSON document that still makes sense on its own.
+ *
+ * It follows getCommandIndex() above: owner-checked, newest first, capped.
+ */
+export async function getLinkTargets(): Promise<LinkTargetIndex> {
+  const check = await checkOwner();
+  if (!check.ok) return { projects: [], journal: [] };
+
+  const supabase = await createServerSupabase();
+  const [projects, journal] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("slug, title, subtitle, excerpt, thumbnail_public_id, cover_public_id, status")
+      .order("updated_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("journal_posts")
+      .select("slug, title, excerpt, cover_public_id, status")
+      .order("updated_at", { ascending: false })
+      .limit(100),
+  ]);
+
+  for (const res of [projects, journal]) {
+    if (res.error) console.error("[link-targets] query failed:", res.error.message);
+  }
+
+  const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+  return {
+    projects: (projects.data ?? []).map((row) => ({
+      url: `/works/${row.slug}`,
+      title: text(row.title),
+      // The subtitle is the one-line description of a project; the excerpt is
+      // the longer one. Prefer the short one on a card.
+      description: text(row.subtitle) || text(row.excerpt),
+      thumbnail: row.thumbnail_public_id ?? row.cover_public_id ?? null,
+      live: row.status === "published",
+    })),
+    journal: (journal.data ?? []).map((row) => ({
+      url: `/journal/${row.slug}`,
+      title: text(row.title),
+      description: text(row.excerpt),
+      thumbnail: row.cover_public_id ?? null,
+      live: row.status === "published",
+    })),
+  };
+}

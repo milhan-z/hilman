@@ -12,6 +12,7 @@ import { HtmlBlockEditor } from "./html-block-editor";
 import { LoopClipField } from "./loop-clip-field";
 import { normalizeBlockLayout, resolveSpacing, resolveSpan } from "@/lib/block-layout";
 import { LayoutPicker } from "./layout-picker";
+import { LinkBlockEditor } from "./link-block-editor";
 import { hasLayoutChoices } from "@/lib/media-layouts";
 import type { BlockType } from "@/lib/types";
 
@@ -527,27 +528,7 @@ const EDITORS: Record<BlockType, (p: EditorProps) => React.JSX.Element> = {
       </Field>
     </div>
   ),
-  link: ({ data, onChange }) => (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="URL">
-          <TextInput value={data.url ?? ""} onChange={(e) => onChange({ ...data, url: e.target.value })} />
-        </Field>
-        <Field label="Title">
-          <TextInput value={data.title ?? ""} onChange={(e) => onChange({ ...data, title: e.target.value })} />
-        </Field>
-      </div>
-      <Field label="Description">
-        <TextInput value={data.description ?? ""} onChange={(e) => onChange({ ...data, description: e.target.value })} />
-      </Field>
-      <MediaField
-        label="Thumbnail (optional)"
-        value={data.thumbnail ?? ""}
-        onChange={(v) => onChange({ ...data, thumbnail: v })}
-        onSelectAsset={(id) => onChange({ ...data, thumbnail: id })}
-      />
-    </div>
-  ),
+  link: ({ data, onChange }) => <LinkBlockEditor data={data} onChange={onChange} />,
   file: ({ data, onChange }) => (
     <div className="space-y-3">
       <MediaField

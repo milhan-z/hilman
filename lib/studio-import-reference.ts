@@ -182,6 +182,19 @@ export function jsonTemplate(kind: DocumentKind): string {
           { type: "paragraph", data: { text: "Where it went next." } },
           { type: "divider", data: { style: "line" } },
           { type: "markdown", data: { md: "- A loose end\n- Another one" } },
+          {
+            // A journal entry pointing at the project it became. The path has
+            // to be one that actually exists — nothing writing this document
+            // should invent a slug, which is why the prompt says so too.
+            type: "link",
+            data: {
+              url: "/works/a-project-slug",
+              title: "The project this became",
+              description: "One line about where the thought ended up.",
+              label: "See the project",
+              presentation: "related",
+            },
+          },
         ];
 
   return JSON.stringify(
@@ -237,6 +250,8 @@ ${layout}
 Rules:
 - "span" is the page width. On an image block "width" and "height" are the photo's own pixel size — they are different keys and do not interact.
 - "layout" on image, gallery, youtube and loop-clip is presentation only, and optional. Omit it unless the content plainly asks for one — a screenshot of a website is a "browser", a set of chat captures is a "stack". Leaving it out is the normal case.
+- A "link" block may point at another page of this site using a path that starts with "/" — "/works/<slug>" for a project, "/journal/<slug>" for a journal entry. Those open in the same tab; full https:// addresses open in a new one. Use "presentation": "related" for a card that continues the story at the end of a piece, and "label" for its call to action. Only use a slug I have actually given you — do not invent one.
+- Never invent a "thumbnail". Leave it out unless I gave you the reference.
 - Use "markdown" with an "md" string for lists and tables. There is no list or table block.
 - Image addresses must be full https:// URLs. Leave a photo out rather than inventing one.
 - No "id", "slug", "status", "published_at" or timestamps. I decide what gets published.

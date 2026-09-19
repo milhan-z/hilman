@@ -21,6 +21,8 @@ import { GalleryCarousel } from "./gallery/carousel";
 import { GalleryStack } from "./gallery/stack";
 import { GalleryAccordion } from "./gallery/accordion";
 import { galleryItems } from "./gallery/shared";
+import { LinkCard } from "./link-card";
+import { resolveLinkPresentation } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import type { Block, BlockType } from "@/lib/types";
 import type { ReactNode } from "react";
@@ -187,24 +189,15 @@ const ButtonBlock: BlockFC = ({ data }) => (
   </div>
 );
 
+/**
+ * A destination, presented as a card.
+ *
+ * `presentation` is additive in exactly the way `layout` is on the media
+ * blocks: absent means the default card, which is what every Link block
+ * written before this existed renders as. See lib/links.ts.
+ */
 const LinkBlock: BlockFC = ({ data }) => (
-  <a
-    href={data.url}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="group flex items-center gap-4 rounded-md border border-line bg-surface p-4 shadow-card transition-all duration-base ease-out hover:-translate-y-0.5 hover:shadow-lift"
-  >
-    {data.thumbnail && (
-      <div className="hidden h-16 w-24 shrink-0 overflow-hidden rounded sm:block">
-        <Pic src={data.thumbnail} alt="" width={192} height={128} className="h-full w-full object-cover" />
-      </div>
-    )}
-    <div className="min-w-0">
-      <p className="truncate font-medium text-ink transition-colors group-hover:text-pen">{data.title ?? data.url}</p>
-      {data.description && <p className="mt-0.5 line-clamp-2 text-sm text-soft">{data.description}</p>}
-      <p className="mt-1 truncate text-xs text-faint">{data.url}</p>
-    </div>
-  </a>
+  <LinkCard data={data} presentation={resolveLinkPresentation(data)} />
 );
 
 const FileBlock: BlockFC = ({ data }) => {

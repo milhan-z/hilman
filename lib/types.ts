@@ -79,7 +79,7 @@ export const BLOCK_HINTS: Record<BlockType, string> = {
   divider: "{ style: 'line'|'dots'|'scribble' }",
   code: "{ language, code }",
   button: "{ label, href, variant: 'pen'|'ghost' }",
-  link: "{ url, title, description, thumbnail? }",
+  link: "{ url (https://… or an internal path like /works/slug), title, description, thumbnail?, label?, presentation?: 'default'|'related' } — `related` is the editorial cross-link card",
   file: "{ public_id | src, filename, size? }",
   html: "{ html } — pasted markup, sanitised before it is stored or shown",
   custom: "{ component, props } — see components/lab/registry",
