@@ -23,12 +23,16 @@ export function SiteFooter({ settings, blurb, based }: { settings: Settings; blu
           {/* index */}
           <nav aria-label="Site index">
             <h2 className="font-mono text-xs uppercase tracking-widest text-soft">Explore</h2>
-            <ul className="mt-4 space-y-1.5">
+            {/* A footer link is still a link somebody taps. At 22px tall these
+                were half the size a thumb needs, so each row carries its own
+                height on a phone and reverts to a compact list once there is a
+                pointer. The visual spacing barely moves — the target does. */}
+            <ul className="mt-3 sm:mt-4 sm:space-y-1.5">
               {settings.nav.map((item) => (
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className="group flex items-baseline gap-2 text-sm text-soft transition-colors hover:text-pen"
+                    className="group flex min-h-11 items-center gap-2 text-sm text-soft transition-colors hover:text-pen sm:min-h-0 sm:items-baseline"
                   >
                     {item.label}
                   </Link>
@@ -40,14 +44,14 @@ export function SiteFooter({ settings, blurb, based }: { settings: Settings; blu
           {/* elsewhere — hidden until real accounts exist in Settings */}
           <nav aria-label="Social links" hidden={settings.socials.length === 0}>
             <h2 className="font-mono text-xs uppercase tracking-widest text-soft">Elsewhere</h2>
-            <ul className="mt-4 space-y-1.5">
+            <ul className="mt-3 sm:mt-4 sm:space-y-1.5">
               {settings.socials.map((s) => (
                 <li key={s.label}>
                   <a
                     href={s.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-soft underline-offset-4 transition-colors hover:text-pen hover:underline"
+                    className="flex min-h-11 items-center text-sm text-soft underline-offset-4 transition-colors hover:text-pen hover:underline sm:min-h-0"
                   >
                     {s.label} ↗
                   </a>
