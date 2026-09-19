@@ -12,14 +12,16 @@ export function slugify(input: string) {
     .replace(/^-|-$/g, "");
 }
 
-export function formatDate(iso: string | null | undefined) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+/**
+ * Re-exported so every existing `import { formatDate } from "@/lib/utils"`
+ * keeps working and silently gets the zone-aware version.
+ *
+ * The implementation moved to lib/dates.ts, where the reason it has to name a
+ * time zone is written down next to it — this used to read the date in
+ * whatever zone the code happened to run in, which is how one entry came to
+ * show two different days on two different pages.
+ */
+export { formatDate } from "./dates";
 
 export function uid() {
   return Math.random().toString(36).slice(2, 10);

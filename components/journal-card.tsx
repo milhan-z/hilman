@@ -1,19 +1,10 @@
 import Link from "next/link";
 import { Stamp, Tag } from "./ui";
+import { formatDateParts } from "@/lib/dates";
 import type { JournalPost } from "@/lib/types";
 
-function dateParts(iso: string | null | undefined) {
-  if (!iso) return { day: "··", month: "———", year: "" };
-  const d = new Date(iso);
-  return {
-    day: String(d.getDate()).padStart(2, "0"),
-    month: d.toLocaleDateString("en-US", { month: "short" }).toUpperCase(),
-    year: String(d.getFullYear()),
-  };
-}
-
 export function JournalCard({ post }: { post: JournalPost }) {
-  const { day, month, year } = dateParts(post.published_at);
+  const { day, month, year } = formatDateParts(post.published_at);
   return (
     <Link
       href={`/journal/${post.slug}`}

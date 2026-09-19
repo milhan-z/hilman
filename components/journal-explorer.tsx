@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { yearOf } from "@/lib/dates";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { JournalCard } from "./journal-card";
 import { EntryMeta, Stamp } from "./ui";
@@ -12,7 +13,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 function groupByYear(posts: JournalPost[]) {
   const map = new Map<string, JournalPost[]>();
   for (const p of posts) {
-    const year = p.published_at ? String(new Date(p.published_at).getFullYear()) : "Undated";
+    const year = yearOf(p.published_at) ?? "Undated";
     if (!map.has(year)) map.set(year, []);
     map.get(year)!.push(p);
   }

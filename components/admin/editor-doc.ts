@@ -1,5 +1,6 @@
 import type { Block, JournalPost, Project } from "@/lib/types";
 import { readTimeMinutes } from "@/lib/read-time";
+import { authorDateInput, isoFromAuthorDate } from "@/lib/dates";
 
 /**
  * Everything one project or journal entry is, while it is being edited.
@@ -35,6 +36,21 @@ export interface EditorDoc {
    */
   status: "published" | "draft";
   featured: boolean;
+  /**
+   * The publication date, as the calendar day the author picked
+   * (`yyyy-mm-dd`), or empty to let the database decide.
+   *
+   * The database sets `published_at = now()` the first time something is
+   * published and keeps it thereafter, which is right for "I published this
+   * today" and wrong for everything else: a piece written last month, a date
+   * corrected after the fact, an entry backdated to when the thing actually
+   * happened. This is the override for those.
+   *
+   * A calendar day rather than an instant, because that is the editorial
+   * fact. It becomes an instant at the save boundary — see
+   * isoFromAuthorDate() in lib/dates.ts for why it anchors at midday.
+   */
+  publishedOn: string;
   tagIds: string[];
   blocks: Block[];
 }
@@ -55,6 +71,7 @@ export function docFromInitial(initial: (Project & JournalPost) | null): EditorD
     rawMeta: JSON.stringify(initial?.meta ?? {}, null, 2),
     status: initial?.status === "published" ? "published" : "draft",
     featured: initial?.featured ?? false,
+    publishedOn: authorDateInput(initial?.published_at),
     tagIds: (initial?.tags ?? []).map((tag) => tag.id),
     blocks: initial?.blocks ?? [],
   };
@@ -104,6 +121,7 @@ export function fieldsFor(
       thumbnail_public_id: doc.thumbnailPublicId,
       cover_public_id: doc.coverPublicId,
       meta: parsedMeta(doc),
+      ...publishedAtField(doc),
     };
   }
   return {
@@ -116,7 +134,21 @@ export function fieldsFor(
     // Derived at the save boundary, because the public list pages read the
     // column and are served without blocks to count.
     reading_minutes: readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks }),
+    ...publishedAtField(doc),
   };
+}
+
+/**
+ * The publication date, only when the author actually chose one.
+ *
+ * Absent rather than null when the field is empty, so the database keeps its
+ * existing behaviour — set `now()` on first publish, preserve it after. An
+ * explicit null would read as "clear the date", which is a different and much
+ * more destructive instruction than "I did not touch this".
+ */
+function publishedAtField(doc: EditorDoc): { published_at?: string } {
+  const iso = isoFromAuthorDate(doc.publishedOn ?? "");
+  return iso ? { published_at: iso } : {};
 }
 
 /** Why this cannot be saved yet, in one sentence, or null. */

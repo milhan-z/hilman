@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { readTimeLabel, readTimeMinutes } from "@/lib/read-time";
+import { formatDate, isoFromAuthorDate } from "@/lib/dates";
 import { MobileSheet } from "../mobile-sheet";
 import { CheckRow, Field, Select, TextArea, TextInput } from "../fields";
 import { MediaField } from "../block-editors";
@@ -204,6 +205,37 @@ export function MetadataSheet({
             onChange={(event) => patch({ featured: event.target.checked })}
           />
         </div>
+
+        {/* The date the piece belongs to, which is not always the date it was
+            uploaded. Left empty, the database keeps doing what it did: stamp
+            the moment of first publish and never move it. Filled in, this
+            wins — for something written last month, a date corrected after
+            the fact, or an entry backdated to when the thing happened. */}
+        <Field
+          label="Publication date"
+          hint={
+            doc.publishedOn
+              ? `Shows as ${formatDate(isoFromAuthorDate(doc.publishedOn))}`
+              : "Leave empty to use the day you first publish it"
+          }
+        >
+          <div className="flex gap-2">
+            <TextInput
+              type="date"
+              value={doc.publishedOn}
+              onChange={(event) => patch({ publishedOn: event.target.value })}
+            />
+            {doc.publishedOn && (
+              <button
+                type="button"
+                onClick={() => patch({ publishedOn: "" })}
+                className="min-h-12 shrink-0 rounded border border-line px-3 text-sm text-soft transition-colors hover:border-pen hover:text-pen"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </Field>
 
         <button
           type="button"

@@ -27,6 +27,27 @@ const flag = (value: unknown): boolean =>
 const status = (value: unknown): "published" | "draft" =>
   value === "published" ? "published" : "draft";
 
+/**
+ * A publication date the author chose, or nothing at all.
+ *
+ * `normaliseFields` is an allowlist that rebuilds the payload from known keys,
+ * which is what stops a client inventing columns — so a new field has to be
+ * added here on purpose, and this one carries real authority: it overrides a
+ * date the database would otherwise own.
+ *
+ * Two rules. It has to parse as an instant, because the value is handed to
+ * `::timestamptz` in the RPC and anything else would raise there instead of
+ * being refused here. And an empty or unparseable value yields *no key at
+ * all* rather than null: the migration reads a missing key as "leave the
+ * existing date alone", and null would read as "clear it".
+ */
+function publishedAt(value: unknown): { published_at?: string } {
+  const raw = text(value);
+  if (!raw) return {};
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? {} : { published_at: date.toISOString() };
+}
+
 export function normaliseProjectFields(raw: Record<string, unknown>): ContentPayload {
   const title = text(raw.title);
   return {
@@ -42,6 +63,7 @@ export function normaliseProjectFields(raw: Record<string, unknown>): ContentPay
     thumbnail_public_id: text(raw.thumbnail_public_id),
     cover_public_id: text(raw.cover_public_id),
     meta: isPlainObject(raw.meta) ? raw.meta : {},
+    ...publishedAt(raw.published_at),
   };
 }
 
@@ -55,6 +77,7 @@ export function normaliseJournalFields(raw: Record<string, unknown>): ContentPay
     status: status(raw.status),
     featured: flag(raw.featured),
     reading_minutes: text(raw.reading_minutes),
+    ...publishedAt(raw.published_at),
   };
 }
 

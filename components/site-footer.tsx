@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { currentYear } from "@/lib/dates";
 import type { Settings } from "@/lib/types";
 
 export function SiteFooter({ settings, blurb, based }: { settings: Settings; blurb?: string; based?: string }) {
-  const year = new Date().getFullYear();
+  const year = currentYear();
   return (
     <footer className="mt-16 border-t border-line-strong">
       <div className="mx-auto max-w-wide px-5 py-12 sm:px-8 lg:px-12">
