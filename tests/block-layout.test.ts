@@ -7,6 +7,7 @@ import {
   SPACING_CLASSES,
   SPACING_VALUES,
   SPAN_CLASSES,
+  MEDIA_SPAN_CLASS,
   SPAN_VALUES,
   WIDE_BY_DEFAULT,
   blockLayoutClasses,
@@ -170,7 +171,10 @@ test("a photograph gets more room than a paragraph, but only where there is room
   const media = blockLayoutClasses({}, "image");
   const text = blockLayoutClasses({}, "paragraph");
 
-  assert.equal(media.includes("lg:max-w-[54rem]"), true, "media widens at lg");
+  // The number itself moved into a custom property so the page can choose it
+  // (see the page-context tests below); what matters here is that media gets
+  // an lg override at all and prose does not.
+  assert.equal(media.includes("lg:max-w-[var(--media-lg)]"), true, "media widens at lg");
   assert.equal(text.includes("lg:max-w-"), false, "prose does not");
 
   // Below lg they are the same width, because on a phone the column is the
@@ -182,18 +186,18 @@ test("a photograph gets more room than a paragraph, but only where there is room
 test("every block type that is looked at rather than read takes the wider default", () => {
   for (const type of ["image", "gallery", "youtube", "loop-clip", "embed", "code"]) {
     assert.equal(WIDE_BY_DEFAULT.has(type), true, type);
-    assert.match(blockLayoutClasses({}, type), /lg:max-w-\[54rem\]/, type);
+    assert.match(blockLayoutClasses({}, type), /lg:max-w-\[var\(--media-lg\)\]/, type);
   }
   for (const type of ["paragraph", "markdown", "quote", "heading", "link", "button"]) {
     assert.equal(WIDE_BY_DEFAULT.has(type), false, type);
-    assert.ok(!blockLayoutClasses({}, type).includes("54rem"), type);
+    assert.ok(!blockLayoutClasses({}, type).includes("--media-lg"), type);
   }
 });
 
 test("an author who chose a span still gets exactly that span", () => {
   // The type-based width is a default, not a ceiling.
   assert.match(blockLayoutClasses({ span: "prose" }, "image"), /max-w-prose mx-auto/);
-  assert.ok(!blockLayoutClasses({ span: "prose" }, "image").includes("54rem"));
+  assert.ok(!blockLayoutClasses({ span: "prose" }, "image").includes("--media-lg"));
   assert.match(blockLayoutClasses({ span: "full" }, "image"), /max-w-none/);
   assert.match(blockLayoutClasses({ span: "wide" }, "gallery"), /max-w-content/);
 });
@@ -205,7 +209,7 @@ test("a legacy string width still overrides the media default", () => {
 test("a pixel width is not a span and does not stop a photo widening", () => {
   // `width: 1600` is an image's pixel size. It must not be read as a choice
   // of column — that confusion is the bug lib/block-layout.ts exists to end.
-  assert.match(blockLayoutClasses({ width: 1600 }, "image"), /lg:max-w-\[54rem\]/);
+  assert.match(blockLayoutClasses({ width: 1600 }, "image"), /lg:max-w-\[var\(--media-lg\)\]/);
 });
 
 test("calling without a type behaves exactly as before", () => {
@@ -261,4 +265,62 @@ test("the reading column is sized for the type, not the other way round", () => 
   assert.match(prose, /font-size:\s*1\.0625rem/, "17px base");
   assert.match(css, /@media \(min-width: 1024px\)[\s\S]{0,120}font-size:\s*1\.125rem/, "18px at lg");
   assert.match(prose, /max-width:\s*42rem/, "and the column itself is unchanged");
+});
+
+/* ── a page decides how expansive its media is ────────────── */
+
+/**
+ * Works and Journal run through the same block engine, and after the width
+ * split they were also the same *width* — which meant a case study and a
+ * reflective entry still read as one template with different metadata.
+ *
+ * The lever is two custom properties rather than a forked renderer: the media
+ * span reads them, the page sets them. Measured at 1440 after: Works media
+ * 960px, Journal media 768px, prose 672px on both.
+ */
+
+test("media width is asked for by the page, not baked into the block", () => {
+  assert.match(MEDIA_SPAN_CLASS, /lg:max-w-\[var\(--media-lg\)\]/);
+  assert.match(MEDIA_SPAN_CLASS, /xl:max-w-\[var\(--media-xl\)\]/);
+  // Below lg it is still the prose column, because a phone has nothing to
+  // widen into and neither page should differ there.
+  assert.match(MEDIA_SPAN_CLASS, /max-w-prose/);
+});
+
+test("a case study is expansive and a journal entry is calmer", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const root = css.slice(css.indexOf(":root {"), css.indexOf(":root {") + 220);
+  assert.match(root, /--media-lg:\s*54rem/, "Works keeps the wide default");
+  assert.match(root, /--media-xl:\s*60rem/);
+
+  const intimate = css.slice(css.indexOf('[data-reading="intimate"]'));
+  assert.match(intimate.slice(0, 200), /--media-lg:\s*46rem/, "Journal pulls media back in");
+  assert.match(intimate.slice(0, 200), /--media-xl:\s*48rem/);
+});
+
+test("the journal entry page is the thing that asks for the quieter setting", () => {
+  const page = readFileSync(
+    new URL("../app/(site)/journal/[slug]/page.tsx", import.meta.url),
+    "utf8"
+  );
+  assert.match(page, /data-reading="intimate"/);
+
+  // And the case study does not, so it keeps the default.
+  const works = readFileSync(
+    new URL("../app/(site)/works/[slug]/page.tsx", import.meta.url),
+    "utf8"
+  );
+  assert.ok(!works.includes('data-reading="intimate"'), "Works stays expansive");
+});
+
+test("nothing about this forked the block engine", () => {
+  // One renderer, one set of block components. The difference is a custom
+  // property, not a second code path.
+  const renderer = readFileSync(
+    new URL("../components/blocks/renderer.tsx", import.meta.url),
+    "utf8"
+  );
+  for (const smell of ["data-reading", "isJournal", "isWorks", "pageKind", "--media-lg"]) {
+    assert.ok(!renderer.includes(smell), `renderer must not branch on ${smell}`);
+  }
 });

@@ -35,7 +35,10 @@ export function JournalCard({ post }: { post: JournalPost }) {
             </span>
           )}
         </div>
-        <h3 className="mt-1.5 font-display text-xl font-semibold leading-snug tracking-tight transition-colors duration-fast group-hover:text-pen">
+        {/* 25px against the ~230px this column leaves at 390 put a long title on
+            four lines. The date rail was the suspect and was innocent — it is
+            only 16% of the card. The title was simply set at desktop size. */}
+        <h3 className="mt-1.5 font-display text-lg font-semibold leading-snug tracking-tight transition-colors duration-fast group-hover:text-pen sm:text-xl">
           {post.title}
         </h3>
         {post.excerpt && <p className="mt-2 text-sm leading-relaxed text-soft">{post.excerpt}</p>}

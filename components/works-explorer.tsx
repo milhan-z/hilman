@@ -152,7 +152,19 @@ export function WorksExplorer({
       </div>
 
       {/* filing tabs */}
-      <nav aria-label="Work streams" className="mt-6 flex flex-wrap items-end gap-1 border-b-2 border-line-strong">
+      {/* Tabs sit on a baseline. When they wrap — and at 390px the fourth one
+          does — the first row floats away from the border it is supposed to
+          rest on and the whole metaphor comes apart. So on a phone they are a
+          rail instead: one baseline, swipe for the rest, nothing hidden and
+          nothing removed. From `sm` up they all fit and it wraps as before. */}
+      <nav
+        aria-label="Work streams"
+        className={cn(
+          "mt-6 flex items-end gap-1 border-b-2 border-line-strong",
+          "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "sm:flex-wrap sm:overflow-x-visible"
+        )}
+      >
         {[undefined, ...streamKeys].map((s) => {
           const active = stream === s;
           return (
@@ -162,7 +174,7 @@ export function WorksExplorer({
               onClick={() => pickStream(s)}
               aria-pressed={active}
               className={cn(
-                "relative min-h-[44px] translate-y-[2px] rounded-t-md border border-b-0 px-4 py-2.5 font-mono text-2xs uppercase tracking-widest transition-colors duration-fast",
+                "relative min-h-[44px] shrink-0 translate-y-[2px] rounded-t-md border border-b-0 px-4 py-2.5 font-mono text-2xs uppercase tracking-widest transition-colors duration-fast",
                 active ? "border-line-strong bg-surface font-bold text-ink" : "border-transparent text-faint hover:text-ink"
               )}
               style={active && s ? { boxShadow: `inset 0 3px 0 ${STREAM_ACCENT[s]}` } : undefined}
@@ -230,7 +242,13 @@ export function WorksExplorer({
           </div>
         ) : (
           <LayoutGroup>
-            <motion.div layout={!reduced} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Three columns waited for `xl`, not `lg`. Measured at the old
+                breakpoint: a card was 323px wide at 768 and 289px at 1024 —
+                the third column arrived before the cards could afford it, so
+                a wider screen handed you a smaller project. They now keep
+                growing through the tablet range and go three-up at 1280,
+                where there is genuinely room for three. */}
+            <motion.div layout={!reduced} className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
               <AnimatePresence mode="popLayout">
                 {filtered.map((p, i) => (
                   <motion.div

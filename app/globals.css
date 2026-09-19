@@ -286,6 +286,24 @@
      column is the right width for an article; the type was simply too small
      for it. 17px on a phone and 18px from a laptop up brings the measure to
      roughly 70 characters without moving the column at all. */
+  /* How far media is allowed to step outside the reading column.
+     Works is the default: a case study is looked at, and its photographs
+     earn the room. See MEDIA_SPAN_CLASS in lib/block-layout.ts. */
+  :root {
+    --media-lg: 54rem;
+    --media-xl: 60rem;
+  }
+
+  /* A journal entry is writing that sometimes has a picture in it. At the
+     full case-study width a photograph stops punctuating the piece and starts
+     interrupting it — the eye leaves the column and has to find its way back.
+     Closer to the prose, the reading holds together. Same blocks, same
+     engine; the page simply asks for less. */
+  [data-reading="intimate"] {
+    --media-lg: 46rem;
+    --media-xl: 48rem;
+  }
+
   .prose-h {
     @apply text-ink;
     font-size: 1.0625rem;

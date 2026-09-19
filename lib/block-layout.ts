@@ -59,9 +59,19 @@ export const SPAN_CLASSES = {
  *
  * This is a *default*, not a ceiling. An author who sets `span` explicitly
  * still gets exactly what they asked for.
+ *
+ * ── and how wide is a page's business, not a block's ──
+ *
+ * The actual numbers come from two custom properties, so the *page* can say
+ * how expansive its media should be without the block engine being forked or
+ * a block learning which route it is on. A case study wants its photographs
+ * large; a journal entry is a piece of writing that occasionally has a picture
+ * in it, and the same width that reads as confident on the first reads as an
+ * interruption on the second. Defaults and the quieter override both live in
+ * app/globals.css.
  */
 export const MEDIA_SPAN_CLASS =
-  "max-w-prose lg:max-w-[54rem] xl:max-w-[60rem] mx-auto w-full px-5";
+  "max-w-prose lg:max-w-[var(--media-lg)] xl:max-w-[var(--media-xl)] mx-auto w-full px-5";
 
 /**
  * Block types that take the wider default.

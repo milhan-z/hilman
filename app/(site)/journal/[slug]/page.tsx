@@ -51,7 +51,14 @@ export default async function JournalEntryPage(props: { params: Promise<{ slug: 
   const toItem = (p: typeof newer) => (p ? { href: `/journal/${p.slug}`, title: p.title } : null);
 
   return (
-    <article className="w-full py-14">
+    <article
+      /* The one attribute that makes a journal entry read differently from a
+         case study: it narrows how far media may step out of the reading
+         column — see --media-lg in app/globals.css — without any block inside
+         knowing which page it landed on. */
+      data-reading="intimate"
+      className="w-full py-14"
+    >
       <header className="mx-auto max-w-3xl px-5 sm:px-8">
         <EntryMeta items={[formatDate(post.published_at), `${post.reading_minutes} min read`]} />
         <h1 className="mt-4 font-display text-[clamp(2rem,7.2vw,3.815rem)] font-bold leading-[1.14] tracking-tight sm:leading-[1.06]">
