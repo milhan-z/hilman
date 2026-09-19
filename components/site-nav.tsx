@@ -16,7 +16,7 @@ export function SiteNav({ items }: { items: { label: string; href: string }[] })
   return <header className="sticky top-0 z-40 border-b border-line bg-paper backdrop-blur-md" onKeyDown={(event) => {
     if (event.key === "Escape" && open) { setOpen(false); toggleRef.current?.focus(); }
   }}>
-    <nav aria-label="Main" className="mx-auto flex h-20 max-w-wide items-center justify-between gap-4 px-5 sm:px-8 lg:px-12">
+    <nav aria-label="Main" className="mx-auto flex h-16 max-w-wide items-center justify-between gap-4 px-5 sm:h-20 sm:px-8 lg:px-12">
       <Link href="/" className="group flex items-center gap-4" aria-label="Hilman — home">
         <span className="font-display text-2xl font-bold tracking-tight transition-colors group-hover:text-pen">Hilman<span className="text-pen">.</span></span>
         <span className="hidden border-l border-line-strong pl-4 font-hand text-lg text-soft xl:block">a personal notebook</span>

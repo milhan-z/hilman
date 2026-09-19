@@ -275,7 +275,7 @@ export function BlockRenderer({ blocks }: { blocks: Block[] }) {
           const Renderer = renderers[block.type];
           if (!Renderer) return null;
           return (
-            <div key={block.id} id={`block-${block.id}`} className={cn("scroll-mt-24", blockLayoutClasses(block.data))}>
+            <div key={block.id} id={`block-${block.id}`} className={cn("scroll-mt-24", blockLayoutClasses(block.data, block.type))}>
               <Renderer data={block.data ?? {}} />
             </div>
           );

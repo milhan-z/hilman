@@ -42,6 +42,43 @@ export const SPAN_CLASSES = {
   full: "max-w-none w-full",
 } as const;
 
+/**
+ * What a photograph gets when nobody chose a width for it.
+ *
+ * Text and media were the same 672 px column at every size, which measured
+ * badly in both directions at once: on a 1440 px screen every one of an
+ * article's blocks — paragraph, gallery, video — came out at exactly 672 px,
+ * so a photograph was cramped for no reason and the page had the mechanical
+ * evenness of a form.
+ *
+ * A reading column has a right width and it is not very wide; a photograph
+ * does not, and benefits from the room. So they stop sharing. Below `lg` this
+ * is identical to `prose` — on a phone the column *is* the screen and there is
+ * nothing to widen into — and only past a laptop's width does the media step
+ * out, to 54rem and then 60rem.
+ *
+ * This is a *default*, not a ceiling. An author who sets `span` explicitly
+ * still gets exactly what they asked for.
+ */
+export const MEDIA_SPAN_CLASS =
+  "max-w-prose lg:max-w-[54rem] xl:max-w-[60rem] mx-auto w-full px-5";
+
+/**
+ * Block types that take the wider default.
+ *
+ * Everything here is something you look at rather than read. `code` is in the
+ * list because a wrapped line of code is a misread line of code, and `embed`
+ * because the thing inside it was designed for a viewport, not a column.
+ */
+export const WIDE_BY_DEFAULT = new Set([
+  "image",
+  "gallery",
+  "youtube",
+  "loop-clip",
+  "embed",
+  "code",
+]);
+
 /** Vertical rhythm around a block. */
 export const SPACING_CLASSES = {
   none: "py-0",
@@ -49,6 +86,27 @@ export const SPACING_CLASSES = {
   medium: "py-4 sm:py-7",
   large: "py-8 sm:py-16",
 } as const;
+
+/**
+ * The gap a block gets when nobody chose one.
+ *
+ * `medium` for everything was the old answer, and it made an article read as a
+ * list of separate announcements: the space between two sentences of the same
+ * thought was the same as the space between a paragraph and a gallery. Prose
+ * needs to flow and media needs air, and one number cannot do both.
+ *
+ * Headings are deliberately `none` here — they carry their own `mt-12`/`mt-10`
+ * in the renderer, and adding padding on top of that was stacking two
+ * different systems' idea of a chapter break on top of each other.
+ */
+export function defaultSpacingFor(type: string | undefined): BlockSpacing {
+  if (!type) return "medium";
+  if (type === "heading") return "none";
+  if (type === "divider") return "large";
+  if (WIDE_BY_DEFAULT.has(type)) return "medium";
+  // paragraph, markdown, quote, list-ish things: keep the thought together.
+  return "small";
+}
 
 export type BlockSpan = keyof typeof SPAN_CLASSES;
 export type BlockSpacing = keyof typeof SPACING_CLASSES;
@@ -80,14 +138,43 @@ export function resolveSpan(data: Record<string, unknown> | null | undefined): B
   return DEFAULT_SPAN;
 }
 
-export function resolveSpacing(data: Record<string, unknown> | null | undefined): BlockSpacing {
-  if (!data) return DEFAULT_SPACING;
-  return isSpacing(data.spacing) ? data.spacing : DEFAULT_SPACING;
+/**
+ * The gap a block asked for, or the one its kind deserves.
+ *
+ * `type` is optional so every existing caller keeps working unchanged; when it
+ * is missing the answer is the old `medium` for everything.
+ */
+export function resolveSpacing(
+  data: Record<string, unknown> | null | undefined,
+  type?: string
+): BlockSpacing {
+  if (data && isSpacing(data.spacing)) return data.spacing;
+  return defaultSpacingFor(type);
 }
 
-/** The wrapper classes for one block. */
-export function blockLayoutClasses(data: Record<string, unknown> | null | undefined): string {
-  return cn(SPAN_CLASSES[resolveSpan(data)], SPACING_CLASSES[resolveSpacing(data)]);
+/**
+ * The wrapper classes for one block.
+ *
+ * `type` came out of this function once before, when it only fed a local that
+ * nothing read. It is back for a real reason: width and rhythm now depend on
+ * what kind of block this is, because a paragraph and a gallery genuinely want
+ * different answers and pretending otherwise is what made every article 672 px
+ * of evenly-spaced rectangles.
+ *
+ * An explicit `span` still wins over the type-based default — the author's
+ * choice is not a suggestion.
+ */
+export function blockLayoutClasses(
+  data: Record<string, unknown> | null | undefined,
+  type?: string
+): string {
+  const chose = Boolean(data && (isSpan(data.span) || isSpan(data.width)));
+  const span =
+    !chose && type && WIDE_BY_DEFAULT.has(type)
+      ? MEDIA_SPAN_CLASS
+      : SPAN_CLASSES[resolveSpan(data)];
+
+  return cn(span, SPACING_CLASSES[resolveSpacing(data, type)]);
 }
 
 /**

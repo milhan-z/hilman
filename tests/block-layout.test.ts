@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import {
   DEFAULT_SPACING,
   DEFAULT_SPAN,
@@ -7,7 +8,9 @@ import {
   SPACING_VALUES,
   SPAN_CLASSES,
   SPAN_VALUES,
+  WIDE_BY_DEFAULT,
   blockLayoutClasses,
+  defaultSpacingFor,
   normalizeBlockLayout,
   pixelDimension,
   resolveSpacing,
@@ -151,4 +154,111 @@ test("every value the reference offers is one the renderer accepts", () => {
       assert.equal(resolved, value, `the guide offers ${row.key}: ${value}, which is not accepted`);
     }
   }
+});
+
+/* ── text and media stop sharing one column ───────────────── */
+
+/**
+ * Measured before this changed: on a 1440px screen every one of an article's
+ * 122 blocks came out at exactly 672px — paragraph, gallery and video alike.
+ * The same column was simultaneously too wide for 16px text (79 characters a
+ * line) and too narrow for a photograph. Splitting them is the fix; these
+ * tests are what stop them being re-merged.
+ */
+
+test("a photograph gets more room than a paragraph, but only where there is room", () => {
+  const media = blockLayoutClasses({}, "image");
+  const text = blockLayoutClasses({}, "paragraph");
+
+  assert.equal(media.includes("lg:max-w-[54rem]"), true, "media widens at lg");
+  assert.equal(text.includes("lg:max-w-"), false, "prose does not");
+
+  // Below lg they are the same width, because on a phone the column is the
+  // screen and there is nothing to widen into.
+  assert.equal(media.includes("max-w-prose"), true);
+  assert.equal(text.includes("max-w-prose"), true);
+});
+
+test("every block type that is looked at rather than read takes the wider default", () => {
+  for (const type of ["image", "gallery", "youtube", "loop-clip", "embed", "code"]) {
+    assert.equal(WIDE_BY_DEFAULT.has(type), true, type);
+    assert.match(blockLayoutClasses({}, type), /lg:max-w-\[54rem\]/, type);
+  }
+  for (const type of ["paragraph", "markdown", "quote", "heading", "link", "button"]) {
+    assert.equal(WIDE_BY_DEFAULT.has(type), false, type);
+    assert.ok(!blockLayoutClasses({}, type).includes("54rem"), type);
+  }
+});
+
+test("an author who chose a span still gets exactly that span", () => {
+  // The type-based width is a default, not a ceiling.
+  assert.match(blockLayoutClasses({ span: "prose" }, "image"), /max-w-prose mx-auto/);
+  assert.ok(!blockLayoutClasses({ span: "prose" }, "image").includes("54rem"));
+  assert.match(blockLayoutClasses({ span: "full" }, "image"), /max-w-none/);
+  assert.match(blockLayoutClasses({ span: "wide" }, "gallery"), /max-w-content/);
+});
+
+test("a legacy string width still overrides the media default", () => {
+  assert.match(blockLayoutClasses({ width: "full" }, "image"), /max-w-none/);
+});
+
+test("a pixel width is not a span and does not stop a photo widening", () => {
+  // `width: 1600` is an image's pixel size. It must not be read as a choice
+  // of column — that confusion is the bug lib/block-layout.ts exists to end.
+  assert.match(blockLayoutClasses({ width: 1600 }, "image"), /lg:max-w-\[54rem\]/);
+});
+
+test("calling without a type behaves exactly as before", () => {
+  // Every existing caller keeps working: same prose column, same medium gap.
+  assert.equal(blockLayoutClasses({}), blockLayoutClasses({}, undefined));
+  assert.match(blockLayoutClasses({}), /max-w-prose/);
+  assert.match(blockLayoutClasses({}), /py-4 sm:py-7/);
+});
+
+/* ── rhythm follows what a block is ───────────────────────── */
+
+test("prose closes up and media breathes", () => {
+  // One gap for everything made an article read as a list of separate
+  // announcements: the space between two sentences of one thought was the
+  // space between a paragraph and a gallery.
+  assert.equal(defaultSpacingFor("paragraph"), "small");
+  assert.equal(defaultSpacingFor("markdown"), "small");
+  assert.equal(defaultSpacingFor("quote"), "small");
+  assert.equal(defaultSpacingFor("image"), "medium");
+  assert.equal(defaultSpacingFor("gallery"), "medium");
+});
+
+test("a heading brings its own chapter break and is not given a second one", () => {
+  // The renderer already puts mt-12/mt-10 on headings; padding on top of that
+  // was two systems' idea of a break, stacked.
+  assert.equal(defaultSpacingFor("heading"), "none");
+  assert.match(blockLayoutClasses({}, "heading"), /py-0/);
+});
+
+test("a divider is meant to be felt", () => {
+  assert.equal(defaultSpacingFor("divider"), "large");
+});
+
+test("an explicit spacing always wins over the type default", () => {
+  for (const type of ["paragraph", "image", "heading", "divider"]) {
+    assert.equal(resolveSpacing({ spacing: "large" }, type), "large");
+    assert.equal(resolveSpacing({ spacing: "none" }, type), "none");
+  }
+});
+
+test("an unknown block type falls back rather than losing its spacing", () => {
+  assert.equal(defaultSpacingFor("something-new"), "small");
+  assert.equal(defaultSpacingFor(undefined), "medium");
+});
+
+/* ── the reading measure ──────────────────────────────────── */
+
+test("the reading column is sized for the type, not the other way round", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const prose = css.slice(css.indexOf(".prose-h {"), css.indexOf(".prose-h > * + *"));
+  // 17px on a phone, 18px from a laptop up: 632px of 18px type is about 70
+  // characters a line, where 16px was about 79.
+  assert.match(prose, /font-size:\s*1\.0625rem/, "17px base");
+  assert.match(css, /@media \(min-width: 1024px\)[\s\S]{0,120}font-size:\s*1\.125rem/, "18px at lg");
+  assert.match(prose, /max-width:\s*42rem/, "and the column itself is unchanged");
 });

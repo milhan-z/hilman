@@ -280,9 +280,22 @@
 
 @layer components {
   /* ── reading typography ── */
+  /* The reading size, and the one number this whole file is really about.
+     16px across a 632px column is about 79 characters a line, which is past
+     the point where the eye starts losing its place on the return sweep. The
+     column is the right width for an article; the type was simply too small
+     for it. 17px on a phone and 18px from a laptop up brings the measure to
+     roughly 70 characters without moving the column at all. */
   .prose-h {
-    @apply text-base text-ink;
+    @apply text-ink;
+    font-size: 1.0625rem;
+    line-height: 1.7;
     max-width: 42rem;
+  }
+  @media (min-width: 1024px) {
+    .prose-h {
+      font-size: 1.125rem;
+    }
   }
   .prose-h > * + * {
     margin-top: 1.1em;

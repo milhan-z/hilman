@@ -54,7 +54,7 @@ export default async function JournalEntryPage(props: { params: Promise<{ slug: 
     <article className="w-full py-14">
       <header className="mx-auto max-w-3xl px-5 sm:px-8">
         <EntryMeta items={[formatDate(post.published_at), `${post.reading_minutes} min read`]} />
-        <h1 className="mt-4 font-display text-4xl font-bold leading-[1.06] tracking-tight sm:text-5xl">
+        <h1 className="mt-4 font-display text-[clamp(2rem,7.2vw,3.815rem)] font-bold leading-[1.14] tracking-tight sm:leading-[1.06]">
           {post.title}
         </h1>
         {post.excerpt && (

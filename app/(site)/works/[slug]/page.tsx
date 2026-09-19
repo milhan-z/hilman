@@ -72,7 +72,7 @@ export default async function ProjectPage(props: { params: Promise<{ slug: strin
             />
             {project.featured && <Stamp tone="hl">pinned</Stamp>}
           </div>
-          <h1 className="mt-4 font-display text-4xl font-bold leading-[1.04] tracking-tight sm:text-5xl">
+          <h1 className="mt-4 font-display text-[clamp(2rem,7.2vw,3.815rem)] font-bold leading-[1.14] tracking-tight sm:leading-[1.06]">
             {project.title}
           </h1>
           {project.subtitle && <p className="mt-3 text-lg leading-relaxed text-soft">{project.subtitle}</p>}

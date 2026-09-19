@@ -256,7 +256,11 @@ export function SectionHeading({
         <span className="font-mono text-sm font-semibold text-pen tnum" aria-hidden>
           {index}
         </span>
-        <h2 className="font-display text-2xl font-semibold leading-none tracking-tight">{title}</h2>
+        {/* leading-none is right for the single line this usually is, and wrong
+            the moment a longer title wraps at 360px — the descenders of one
+            line land on the caps of the next. 1.1 is still tight enough to
+            read as a title and survives wrapping. */}
+        <h2 className="font-display text-2xl font-semibold leading-[1.1] tracking-tight">{title}</h2>
         {hint && <span className="hidden font-hand text-lg text-red sm:inline">{hint}</span>}
       </div>
       {href && hrefLabel && (
