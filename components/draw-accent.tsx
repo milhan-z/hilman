@@ -36,6 +36,7 @@ export function DrawAccent({
   variant = "underline",
   color = "yellow",
   width = 180,
+  fluid = false,
   strokeWidth = 3,
   delay = 0.2,
   duration = 0.9,
@@ -43,7 +44,23 @@ export function DrawAccent({
 }: {
   variant?: keyof typeof SHAPES;
   color?: "yellow" | "red" | "cyan" | "green" | string;
+  /** A fixed pixel width. Ignored when `fluid` is set. */
   width?: number;
+  /**
+   * Stretch to whatever contains this, instead of taking a fixed size.
+   *
+   * An underline sits in a holder sized to the *word*, and that is a different
+   * width in every heading and at every breakpoint. A fixed number cannot be
+   * right for all of them: measured on About at 390, the word was 160px while
+   * the accent asked for 260px, so the holder's `overflow-hidden` cropped 38%
+   * of the squiggle and what survived read as a stray mark rather than a drawn
+   * line.
+   *
+   * `preserveAspectRatio="none"` is deliberate — the squiggle is meant to look
+   * drawn under *that* word, so stretching it is the point, and the existing
+   * `vectorEffect="non-scaling-stroke"` keeps the pen weight even while it does.
+   */
+  fluid?: boolean;
   strokeWidth?: number;
   delay?: number;
   duration?: number;
@@ -57,9 +74,10 @@ export function DrawAccent({
 
   return (
     <svg
-      width={width}
+      width={fluid ? "100%" : width}
       height={height}
       viewBox={`0 0 ${vbW} ${vbH}`}
+      preserveAspectRatio={fluid ? "none" : undefined}
       fill="none"
       aria-hidden
       className={className}

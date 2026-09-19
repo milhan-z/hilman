@@ -106,8 +106,15 @@ export function GalleryCarousel({ items }: { items: GalleryItem[] }) {
         ref={trackRef}
         // px matches half the leftover width of a slide, so the first and last
         // can sit in the middle like every other one.
+        //
+        // The `sm` pair used to be 60% inside 20% padding, which made the
+        // slide 36% of the region — measured at 768 that was a 228px picture,
+        // *smaller* than the 236px the same carousel gives at 390. A wider
+        // screen handing back a smaller photograph is the same fault the
+        // project grid had. 68% inside 16% keeps it growing: 236px at 390,
+        // 291px at 768, 423px at 1440 in a Works column.
         className={cn(
-          "scrollbar-none flex snap-x snap-mandatory gap-3 overflow-x-auto px-[9%] py-1 sm:gap-4 sm:px-[20%]",
+          "scrollbar-none flex snap-x snap-mandatory gap-3 overflow-x-auto px-[9%] py-1 sm:gap-4 sm:px-[16%]",
           "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         )}
         tabIndex={0}
@@ -115,7 +122,7 @@ export function GalleryCarousel({ items }: { items: GalleryItem[] }) {
         {items.map((item, i) => (
           <li
             key={i}
-            className="w-[82%] shrink-0 snap-center sm:w-[60%]"
+            className="w-[82%] shrink-0 snap-center sm:w-[68%]"
             aria-label={`${i + 1} of ${items.length}`}
           >
             <figure>

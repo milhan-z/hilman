@@ -166,7 +166,7 @@ export function InkField({ density = 90 }: { density?: number }) {
         <button
           type="button"
           onClick={() => setPaused((v) => !v)}
-          className="rounded px-3 py-1.5 text-xs font-medium text-soft transition-colors hover:bg-n-100 hover:text-ink"
+          className="min-h-11 rounded px-3 py-1.5 text-xs font-medium text-soft transition-colors hover:bg-n-100 hover:text-ink sm:min-h-0"
         >
           {paused ? "Resume" : "Pause"}
         </button>

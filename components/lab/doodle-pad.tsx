@@ -107,7 +107,10 @@ export function DoodlePad() {
             type="button"
             onClick={() => setPen(key)}
             aria-pressed={pen === key}
-            className={`min-h-[36px] rounded-full border px-3.5 py-1 text-xs font-medium transition-colors duration-fast ${
+            /* 44px on a phone. These are the tools of an experiment whose
+               whole point is drawing with a finger, and 36px is smaller than
+               the finger doing it. They stay compact once there is a pointer. */
+            className={`min-h-11 rounded-full border px-4 py-1 text-xs font-medium transition-colors duration-fast sm:min-h-[36px] sm:px-3.5 ${
               pen === key
                 ? "border-transparent bg-hl text-hl-ink"
                 : "border-line text-soft hover:border-pen hover:text-pen"
@@ -119,7 +122,7 @@ export function DoodlePad() {
         <button
           type="button"
           onClick={clear}
-          className="ml-auto min-h-[36px] rounded-full px-3.5 py-1 text-xs font-medium text-red transition-colors hover:bg-red-soft"
+          className="ml-auto min-h-11 rounded-full px-4 py-1 text-xs font-medium text-red transition-colors hover:bg-red-soft sm:min-h-[36px] sm:px-3.5"
         >
           Tear page out
         </button>

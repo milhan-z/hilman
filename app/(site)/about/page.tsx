@@ -43,12 +43,12 @@ export default async function AboutPage() {
       <header className="grid items-start gap-10 lg:grid-cols-[1.3fr_0.85fr] lg:gap-20">
         <div>
           <Kicker>a little more than the work</Kicker>
-          <h1 className="mt-5 font-display text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
-            Hi, I&apos;m <span className="relative inline-block">Hilman.<span aria-hidden className="absolute -bottom-3 left-0 right-0 overflow-hidden"><DrawAccent variant="underline2" color="yellow" width={260} strokeWidth={4} /></span></span>
+          <h1 className="mt-5 font-display text-[clamp(2.75rem,6.5vw,5.96rem)] font-semibold tracking-tight">
+            Hi, I&apos;m <span className="relative inline-block">Hilman.<span aria-hidden className="absolute -bottom-3 left-0 right-0 overflow-hidden"><DrawAccent variant="underline2" color="yellow" fluid strokeWidth={4} /></span></span>
           </h1>
           {d.lede && <p className="mt-10 max-w-2xl text-pretty text-xl font-medium leading-relaxed sm:text-2xl">{d.lede}</p>}
           {story.length > 0 && (
-            <div className="mt-6 max-w-2xl space-y-5 text-base leading-relaxed text-soft sm:text-lg">
+            <div className="mt-6 max-w-2xl space-y-5 text-[1.0625rem] leading-relaxed text-soft sm:text-lg">
               {story.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
             </div>
           )}

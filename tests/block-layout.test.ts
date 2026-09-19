@@ -324,3 +324,80 @@ test("nothing about this forked the block engine", () => {
     assert.ok(!renderer.includes(smell), `renderer must not branch on ${smell}`);
   }
 });
+
+/** A file's code, with its prose stripped, so an assertion cannot match a comment. */
+const code = (path: string) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+/* ── a bigger screen must not hand back a smaller thing ───── */
+
+/**
+ * Two separate components had the same fault, both found by measuring rather
+ * than reading: a wider viewport produced a *smaller* element, because a
+ * breakpoint added columns or padding faster than the extra width could pay
+ * for them.
+ *
+ * These are behaviour assertions rather than frozen literals — what is being
+ * defended is the direction of the change, not the exact number.
+ */
+
+test("project cards keep growing through the tablet range", () => {
+  // Measured before: 323px wide at 768 and 289px at 1024, because the third
+  // column arrived at `lg`. After moving it to `xl`: 445px at 1024, 371px at
+  // 1280 — every step now leaves more room than the old worst case.
+  const explorer = code("components/works-explorer.tsx");
+  const grid = explorer.slice(explorer.indexOf("grid gap-6"), explorer.indexOf("grid gap-6") + 90);
+  assert.match(grid, /sm:grid-cols-2/, "two up once there is room for two");
+  assert.match(grid, /xl:grid-cols-3/, "and three only once there is room for three");
+  assert.ok(!grid.includes("lg:grid-cols-3"), "not at lg, where the cards shrank");
+});
+
+test("a carousel slide is never smaller on a tablet than on a phone", () => {
+  // Measured before: 236px at 390 but 228px at 768, because `sm` raised the
+  // track padding to 20% while dropping the slide to 60%.
+  //
+  // The contract is the *absolute* width, not the share of the region. The
+  // share has to fall as the region widens — that is what makes a neighbour
+  // visible — so an earlier version of this test asserted the wrong property
+  // and failed against correct code.
+  const carousel = code("components/blocks/gallery/carousel.tsx");
+  const pad = Number(carousel.match(/sm:px-\[(\d+)%\]/)![1]);
+  const slide = Number(carousel.match(/sm:w-\[(\d+)%\]/)![1]);
+  const phonePad = Number(carousel.match(/px-\[(\d+)%\]/)![1]);
+  const phoneSlide = Number(carousel.match(/w-\[(\d+)%\]/)![1]);
+
+  const px = (region: number, p: number, w: number) =>
+    region * ((100 - 2 * p) / 100) * (w / 100);
+
+  // Region widths the layout actually produces: the prose column at 390, the
+  // same at 768, and a Works media column at 1440.
+  const atPhone = px(350, phonePad, phoneSlide);
+  const atTablet = px(632, pad, slide);
+  const atDesktop = px(920, pad, slide);
+
+  assert.ok(atTablet > atPhone, `tablet ${atTablet} must exceed phone ${atPhone}`);
+  assert.ok(atDesktop > atTablet, `desktop ${atDesktop} must exceed tablet ${atTablet}`);
+  // And a neighbour still has to be visible at every size.
+  assert.ok(slide < 100 - 2 * pad + 20, "the slide never fills its track");
+});
+
+test("a hand-drawn accent can size itself to the word it underlines", () => {
+  // Measured on About at 390: the word was 160px and the accent asked for
+  // 260px, so the holder's overflow-hidden cropped 38% of the squiggle.
+  const accent = code("components/draw-accent.tsx");
+  assert.match(accent, /fluid\s*\?\s*"100%"\s*:\s*width/, "it can fill its holder");
+  assert.match(accent, /preserveAspectRatio=\{fluid \? "none" : undefined\}/, "stretching, not cropping");
+
+  const about = readFileSync(new URL("../app/(site)/about/page.tsx", import.meta.url), "utf8");
+  assert.match(about, /<DrawAccent[^>]*fluid/, "and About uses it");
+});
+
+test("the touch targets of a touch-first experiment are thumb-sized", () => {
+  // The Lab tools were 31-36px on a page whose whole point is drawing with a
+  // finger. They are 44px on a phone and stay compact once there is a pointer.
+  for (const path of ["components/lab/doodle-pad.tsx", "components/lab/ink-field.tsx"]) {
+    assert.match(code(path), /min-h-11/, `${path} meets the touch target on a phone`);
+  }
+});
