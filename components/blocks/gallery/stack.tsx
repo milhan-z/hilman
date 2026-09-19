@@ -3,7 +3,8 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Pic } from "../../cld-image";
 import { cn } from "@/lib/utils";
-import type { GalleryItem } from "./shared";
+import { Lightbox, ZoomTrigger, useLightbox } from "../lightbox";
+import { itemLabel, type GalleryItem } from "./shared";
 
 /**
  * Photographs dropped on a desk, in the order they were taken.
@@ -67,6 +68,7 @@ export function fanGeometry(count: number) {
 
 export function GalleryStack({ items }: { items: GalleryItem[] }) {
   const reduced = useReducedMotion();
+  const lightbox = useLightbox();
   if (items.length === 0) return null;
 
   const fan = fanGeometry(items.length);
@@ -132,7 +134,11 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
                   delay: reduced ? 0 : i * 0.05,
                 }}
               >
-                <div className="overflow-hidden rounded-md border border-line bg-paper p-1.5 shadow-lift sm:p-2">
+                <ZoomTrigger
+                  onOpen={() => lightbox.open(i)}
+                  label={`Open ${itemLabel(item, i, items.length)}`}
+                  className="overflow-hidden rounded-md border border-line bg-paper p-1.5 shadow-lift sm:p-2"
+                >
                   <Pic
                     src={item.src}
                     alt={item.alt}
@@ -165,12 +171,19 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
                       {item.caption}
                     </figcaption>
                   )}
-                </div>
+                </ZoomTrigger>
               </motion.figure>
             </div>
           );
         })}
       </div>
+
+      <Lightbox
+        items={items}
+        index={lightbox.index}
+        onClose={lightbox.close}
+        onIndex={lightbox.setIndex}
+      />
     </div>
   );
 }

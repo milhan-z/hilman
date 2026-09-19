@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { Pic } from "../../cld-image";
 import { cn } from "@/lib/utils";
+import { Lightbox, useLightbox } from "../lightbox";
 import { itemLabel, type GalleryItem } from "./shared";
 
 /**
@@ -32,6 +33,7 @@ import { itemLabel, type GalleryItem } from "./shared";
 export function GalleryAccordion({ items }: { items: GalleryItem[] }) {
   const [active, setActive] = useState(0);
   const reduced = useReducedMotion();
+  const lightbox = useLightbox();
   const panelRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   if (items.length === 0) return null;
@@ -59,8 +61,17 @@ export function GalleryAccordion({ items }: { items: GalleryItem[] }) {
               }}
               type="button"
               aria-pressed={isActive}
-              aria-label={itemLabel(item, i, items.length)}
-              onClick={() => setActive(i)}
+              aria-label={
+                isActive
+                  ? `Open ${itemLabel(item, i, items.length)}`
+                  : itemLabel(item, i, items.length)
+              }
+              /* One control, two meanings, in the order somebody actually
+                 wants them: a closed panel opens, and the panel that is
+                 already open shows the whole photograph. Tapping the open
+                 panel used to do nothing at all, which is a dead target
+                 sitting where the most obvious one should be. */
+              onClick={() => (isActive ? lightbox.open(i) : setActive(i))}
               onMouseEnter={() => setActive(i)}
               onKeyDown={(event) => {
                 if (event.key === "ArrowRight") {
@@ -73,6 +84,7 @@ export function GalleryAccordion({ items }: { items: GalleryItem[] }) {
               }}
               className={cn(
                 "group relative min-w-0 overflow-hidden rounded-md border bg-raise",
+                isActive && "cursor-zoom-in",
                 "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pen",
                 isActive ? "border-pen" : "border-line",
                 // The open panel takes more of the row on a phone, where there
@@ -109,6 +121,13 @@ export function GalleryAccordion({ items }: { items: GalleryItem[] }) {
       <p aria-live="polite" className="sr-only">
         {itemLabel(items[active], active, items.length)}
       </p>
+
+      <Lightbox
+        items={items}
+        index={lightbox.index}
+        onClose={lightbox.close}
+        onIndex={lightbox.setIndex}
+      />
     </div>
   );
 }

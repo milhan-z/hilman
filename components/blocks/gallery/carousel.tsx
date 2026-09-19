@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { Pic } from "../../cld-image";
 import { cn } from "@/lib/utils";
+import { Lightbox, ZoomTrigger, useLightbox } from "../lightbox";
 import { itemLabel, type GalleryItem } from "./shared";
 
 /**
@@ -28,6 +29,7 @@ export function GalleryCarousel({ items }: { items: GalleryItem[] }) {
   const trackRef = useRef<HTMLUListElement>(null);
   const [active, setActive] = useState(0);
   const reduced = useReducedMotion();
+  const lightbox = useLightbox();
 
   // Which slide is nearest the middle of the viewport, recomputed from the
   // scroll position itself rather than tracked as the buttons move it — a
@@ -117,7 +119,9 @@ export function GalleryCarousel({ items }: { items: GalleryItem[] }) {
             aria-label={`${i + 1} of ${items.length}`}
           >
             <figure>
-              <div
+              <ZoomTrigger
+                onOpen={() => lightbox.open(i)}
+                label={`Open ${itemLabel(item, i, items.length)}`}
                 className={cn(
                   "overflow-hidden rounded-md border border-line bg-raise",
                   // The neighbours are present but plainly not the subject.
@@ -133,7 +137,7 @@ export function GalleryCarousel({ items }: { items: GalleryItem[] }) {
                   sizes="(max-width: 640px) 82vw, 60vw"
                   className="aspect-[4/3] w-full object-cover"
                 />
-              </div>
+              </ZoomTrigger>
               {item.caption && (
                 <figcaption className="mt-2 font-hand text-base text-faint">
                   {item.caption}
@@ -177,6 +181,13 @@ export function GalleryCarousel({ items }: { items: GalleryItem[] }) {
       <p aria-live="polite" className="sr-only">
         {itemLabel(items[active] ?? items[0], active, items.length)}
       </p>
+
+      <Lightbox
+        items={items}
+        index={lightbox.index}
+        onClose={lightbox.close}
+        onIndex={lightbox.setIndex}
+      />
     </section>
   );
 }

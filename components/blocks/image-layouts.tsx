@@ -2,6 +2,7 @@ import { Pic } from "../cld-image";
 import { BrowserFrame, PhoneFrame } from "./media-frames";
 import { pixelDimension } from "@/lib/block-layout";
 import { cn } from "@/lib/utils";
+import { ZoomableImage } from "./zoomable-image";
 import type { ImageLayout } from "@/lib/media-layouts";
 
 /**
@@ -33,18 +34,24 @@ export function ImagePresentation({
   const width = pixelDimension(data.width, 1600);
   const height = pixelDimension(data.height, 1000);
 
+  // What the overlay shows. Every presentation frames the same photograph, so
+  // they all hand over the same thing.
+  const zoomItem = { src: String(src ?? ""), alt, caption };
+
   switch (layout) {
     case "full":
       return (
         <figure className="!max-w-none">
-          <Pic
-            src={src}
-            alt={alt}
-            width={width}
-            height={height}
-            sizes="(max-width: 900px) 100vw, 1200px"
-            className="w-full rounded-sm"
-          />
+          <ZoomableImage item={zoomItem}>
+            <Pic
+              src={src}
+              alt={alt}
+              width={width}
+              height={height}
+              sizes="(max-width: 900px) 100vw, 1200px"
+              className="w-full rounded-sm"
+            />
+          </ZoomableImage>
           {caption && <Caption>{caption}</Caption>}
         </figure>
       );
@@ -53,14 +60,16 @@ export function ImagePresentation({
       return (
         <figure className="!max-w-none">
           <BrowserFrame label={typeof data.alt === "string" ? data.alt : undefined}>
-            <Pic
-              src={src}
-              alt={alt}
-              width={width}
-              height={height}
-              sizes="(max-width: 900px) 100vw, 860px"
-              className="block w-full"
-            />
+            <ZoomableImage item={zoomItem}>
+              <Pic
+                src={src}
+                alt={alt}
+                width={width}
+                height={height}
+                sizes="(max-width: 900px) 100vw, 860px"
+                className="block w-full"
+              />
+            </ZoomableImage>
           </BrowserFrame>
           {caption && <Caption>{caption}</Caption>}
         </figure>
@@ -70,14 +79,16 @@ export function ImagePresentation({
       return (
         <figure className="!max-w-none">
           <PhoneFrame>
-            <Pic
-              src={src}
-              alt={alt}
-              width={width}
-              height={height}
-              sizes="280px"
-              className="block w-full"
-            />
+            <ZoomableImage item={zoomItem}>
+              <Pic
+                src={src}
+                alt={alt}
+                width={width}
+                height={height}
+                sizes="280px"
+                className="block w-full"
+              />
+            </ZoomableImage>
           </PhoneFrame>
           {caption && <Caption className="text-center">{caption}</Caption>}
         </figure>
@@ -93,14 +104,16 @@ export function ImagePresentation({
             // every render. See tiltFor().
             style={{ transform: `rotate(${tiltFor(String(src ?? ""))}deg)` }}
           >
-            <Pic
-              src={src}
-              alt={alt}
-              width={width}
-              height={height}
-              sizes="(max-width: 640px) 88vw, 26rem"
-              className="block w-full"
-            />
+            <ZoomableImage item={zoomItem}>
+              <Pic
+                src={src}
+                alt={alt}
+                width={width}
+                height={height}
+                sizes="(max-width: 640px) 88vw, 26rem"
+                className="block w-full"
+              />
+            </ZoomableImage>
             {caption && (
               <figcaption className="px-1 pt-3 text-center font-hand text-lg text-faint">
                 {caption}
@@ -115,7 +128,10 @@ export function ImagePresentation({
       // Byte for byte what every published image already renders as.
       return (
         <figure className="!max-w-none">
-          <div className="overflow-hidden rounded-md border border-line shadow-card">
+          <ZoomableImage
+            item={zoomItem}
+            className="overflow-hidden rounded-md border border-line shadow-card"
+          >
             <Pic
               src={src}
               alt={alt}
@@ -124,7 +140,7 @@ export function ImagePresentation({
               sizes="(max-width: 900px) 100vw, 860px"
               className="w-full"
             />
-          </div>
+          </ZoomableImage>
           {caption && <Caption>{caption}</Caption>}
         </figure>
       );
