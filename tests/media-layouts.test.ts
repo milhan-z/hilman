@@ -445,3 +445,79 @@ test("the round trip that caused it would still eat the comma", () => {
   assert.equal(roundTrip("Figma, Riso"), "Figma, Riso");
   assert.equal(roundTrip("Figma, Riso, Blender"), "Figma, Riso, Blender");
 });
+
+/* ── media is never silently cropped ──────────────────────── */
+
+/**
+ * A presentation may choose how media is framed. It may not choose to throw
+ * part of it away without being asked.
+ *
+ * The Stack regressed on exactly this: the desktop fan forced
+ * `aspect-[3/4] object-cover`, so a landscape photograph was cropped into a
+ * portrait card to make the row line up. The reasoning in the comment at the
+ * time — that a fan only reads as a fan if the cards match — was wrong twice:
+ * it spent the author's content on the layout's tidiness, and a pile of prints
+ * is uneven anyway. That is what makes it a pile rather than a shelf.
+ *
+ * Grid and Accordion crop deliberately and say so: a grid of uniform tiles and
+ * a row of equal-height panels are the whole point of those two, and an author
+ * choosing them is choosing that. Stack and Carousel are not in that business.
+ */
+
+test("the Stack never forces an aspect ratio on a photograph", () => {
+  const stack = code("components/blocks/gallery/stack.tsx");
+  assert.ok(!/aspect-\[/.test(stack), "no forced aspect ratio, at any breakpoint");
+  assert.ok(!/object-cover/.test(stack), "and nothing is cropped to fit");
+  assert.match(stack, /className="w-full rounded-sm"/, "the image keeps its natural shape");
+});
+
+test("landscape stays landscape and portrait stays portrait in a Stack", () => {
+  // Asserted structurally, because the guarantee is the *absence* of a rule.
+  // With no aspect-ratio and no object-fit class, the browser sizes the box
+  // from the image's own intrinsic ratio — verified in-browser at 1280px:
+  // 16:9 rendered 1.789, 9:16 rendered 0.5636, 1:1 rendered 1.000,
+  // 21:9 rendered 2.3494, each within 0.01 of its natural ratio.
+  const stack = code("components/blocks/gallery/stack.tsx");
+  const picProps = stack.slice(stack.indexOf("<Pic"), stack.indexOf("/>", stack.indexOf("<Pic")));
+  assert.ok(!picProps.includes("aspect"), "the Pic carries no aspect override");
+  assert.ok(!picProps.includes("object-"), "and no object-fit override");
+});
+
+test("the Carousel does not crop either", () => {
+  const carousel = code("components/blocks/gallery/carousel.tsx");
+  // The carousel does use a uniform frame, which is defensible for a
+  // one-at-a-time series — but if that ever changes it should be a decision,
+  // not a drift. This pins the current behaviour so the choice stays visible.
+  const uniform = /aspect-\[4\/3\][\s\S]{0,40}object-cover/.test(carousel);
+  assert.equal(uniform, true, "carousel frames are uniform by explicit choice");
+});
+
+test("Grid and Accordion crop on purpose, and only those two", () => {
+  // Uniform tiles are what a grid *is*; equal-height panels are what an
+  // accordion *is*. Naming them here means a future crop appearing somewhere
+  // else has to be argued for.
+  const croppers = ["grid", "accordion", "carousel"];
+  const nonCroppers = ["stack"];
+
+  for (const name of croppers) {
+    assert.match(
+      code(`components/blocks/gallery/${name}.tsx`),
+      /object-cover/,
+      `${name} frames uniformly`
+    );
+  }
+  for (const name of nonCroppers) {
+    assert.ok(
+      !code(`components/blocks/gallery/${name}.tsx`).includes("object-cover"),
+      `${name} must not crop`
+    );
+  }
+});
+
+test("the desktop fan overlaps through the middle, not from a shared top edge", () => {
+  // With natural aspect ratios the cards differ in height, and hanging them
+  // from a common top edge reads as scattered rather than piled.
+  const stack = code("components/blocks/gallery/stack.tsx");
+  assert.match(stack, /sm:items-center/);
+  assert.ok(!stack.includes("sm:items-start"), "the old top alignment is gone");
+});

@@ -83,7 +83,7 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
       <div
         className={cn(
           "mx-auto w-full max-w-[34rem] pb-2 sm:max-w-none",
-          fan.fits && "sm:flex sm:items-start sm:justify-center sm:pb-6"
+          fan.fits && "sm:flex sm:items-center sm:justify-center sm:pb-6"
         )}
       >
         {items.map((item, i) => {
@@ -139,12 +139,19 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
                     width={1100}
                     height={825}
                     sizes={`(max-width: 640px) 92vw, ${Math.round(fan.card)}vw`}
-                    className={cn(
-                      "w-full rounded-sm",
-                      // A fan only lines up if the cards are the same shape;
-                      // ragged heights read as a mistake rather than as a pile.
-                      fan.fits && "sm:aspect-[3/4] sm:object-cover"
-                    )}
+                    /* Natural aspect ratio, always. A landscape photograph
+                       stays landscape and a portrait one stays portrait,
+                       here and at every width.
+
+                       This used to force `aspect-[3/4] object-cover` on the
+                       desktop fan, on the theory that a fan only reads as a
+                       fan if the cards line up. That was wrong twice over: it
+                       cropped the author's photographs to make a layout
+                       tidier, which is never a trade this renderer gets to
+                       make on its own — and the tidiness was not even the
+                       goal. A pile of prints on a desk is uneven. That is
+                       what distinguishes it from a shelf. */
+                    className="w-full rounded-sm"
                   />
                   {item.caption && (
                     <figcaption
