@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { stashMedia, type PendingMediaKind } from "@/lib/studio-local/media";
+import { ingestLabel, savingNote } from "@/lib/studio-local/ingest-status";
+import type { IngestProgress } from "@/lib/studio-local/media-optimize";
 import { flushOutbox } from "./studio-runtime";
 
 /**
@@ -34,6 +36,8 @@ export function MediaCapture({
   disabled?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<IngestProgress | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const libraryInput = useRef<HTMLInputElement>(null);
@@ -42,15 +46,20 @@ export function MediaCapture({
     if (!file) return;
     setBusy(true);
     setError(null);
+    setSaved(null);
+    setProgress({ phase: "inspecting" });
 
-    const result = await stashMedia(file, folder, kind);
+    const result = await stashMedia(file, folder, kind, setProgress);
     setBusy(false);
+    setProgress(null);
 
     if (!result.ok) {
       setError(result.reason);
       return;
     }
 
+    // Only when the saving was big enough to be interesting — see savingNote().
+    setSaved(savingNote(result.report));
     onCaptured(result.ref);
     // If there is a signal, this finishes within the second and the
     // placeholder is replaced before you have scrolled away from it.
@@ -60,7 +69,11 @@ export function MediaCapture({
   const tile =
     "flex min-h-14 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border text-sm font-semibold transition-colors disabled:opacity-50";
 
-  const primaryLabel = busy ? "Keeping…" : kind === "loop-clip" ? "Record" : "Camera";
+  const primaryLabel = busy
+    ? ingestLabel(progress, kind)
+    : kind === "loop-clip"
+      ? "Record"
+      : "Camera";
   const secondaryLabel = kind === "loop-clip" ? "Videos" : "Photos";
 
   return (
@@ -118,6 +131,12 @@ export function MediaCapture({
           event.target.value = "";
         }}
       />
+
+      {saved && (
+        <p role="status" className="mt-2 font-mono text-2xs uppercase tracking-wide text-faint">
+          {saved}
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="mt-2 text-sm font-medium text-red">

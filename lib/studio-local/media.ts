@@ -4,6 +4,12 @@ import { recordMedia } from "@/app/admin/actions";
 import { PENDING_PREFIX } from "../studio-media-refs";
 import { checkClipFile } from "./clip-check";
 import { dbDelete, dbGetAll, dbPut } from "./db";
+import {
+  MediaTooLargeError,
+  optimizeForIngest,
+  type MediaReport,
+  type ProgressFn,
+} from "./media-optimize";
 import { newMutationId } from "./save";
 
 /**
@@ -59,7 +65,7 @@ export interface PendingMedia {
 }
 
 export type StashResult =
-  | { ok: true; ref: string }
+  | { ok: true; ref: string; report?: MediaReport }
   | { ok: false; reason: string };
 
 /**
@@ -71,8 +77,25 @@ export type StashResult =
  */
 const QUOTA_CEILING = 0.8;
 
-/** Big enough for a phone photo, small enough to notice a video by mistake. */
+/**
+ * Big enough for a phone photo, small enough to notice a video by mistake.
+ *
+ * Checked against the file *after* optimization, because the question it asks
+ * is "is this reasonable to keep and send", and what gets kept and sent is the
+ * optimized one. A 40 MB export that becomes a 3 MB upload is a photograph
+ * this studio can happily take.
+ */
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+/**
+ * A ceiling on what is worth *decoding*, as opposed to what is worth keeping.
+ *
+ * Optimization has to get the pixels into memory before it can shrink them,
+ * and a phone asked to decode a few hundred megapixels will drop the tab
+ * rather than say no. Refusing early is the difference between a sentence and
+ * a lost draft.
+ */
+const MAX_SOURCE_IMAGE_BYTES = 80 * 1024 * 1024;
 
 export interface StorageReport {
   usage: number;
@@ -100,43 +123,90 @@ const readable = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
  * silently dropped when the browser ran out of room is worse than one that was
  * never taken, because you stop checking.
  *
- * A Loop Clip goes through `checkClipFile()` first, which is where a MOV/HEVC
- * export is caught — see lib/studio-local/clip-check.ts for what that check
- * can and cannot promise. Rejected here means it never becomes a Blob in
- * IndexedDB at all, which is the same "refuse, don't half-succeed" rule
- * applied one step earlier than the size/quota checks below.
+ * ── the ingest boundary ──
+ *
+ * This is where local media optimization happens, and it is here rather than
+ * in any component on purpose: the camera, the single-file picker and the
+ * multi-photo sheet all arrive at this function, so there is no route into
+ * IndexedDB that can quietly skip it and no way for two surfaces to disagree
+ * about what a stored photograph is.
+ *
+ * The order matters. Optimization runs *before* storage and before the
+ * network, so what gets written down is already the small version — uploading
+ * an original and shrinking it later would defeat the point on a phone, and
+ * would not survive being offline. Everything after it asks its questions
+ * about the optimized file, including the quota check.
+ *
+ * A Loop Clip is still gated by `checkClipFile()` — see
+ * lib/studio-local/clip-check.ts for what that check can and cannot promise —
+ * but now on the way out rather than the way in. A MOV that the optimizer
+ * managed to normalize into an MP4 passes it; one that could not be normalized
+ * meets exactly the refusal it always did.
  */
 export async function stashMedia(
   file: File,
   folder = "hilman",
-  kind: PendingMediaKind = "image"
+  kind: PendingMediaKind = "image",
+  onProgress?: ProgressFn
 ): Promise<StashResult> {
-  if (kind === "loop-clip") {
-    const clip = await checkClipFile(file);
-    if (!clip.ok) return { ok: false, reason: clip.reason! };
-  } else if (file.size > MAX_FILE_BYTES) {
+  if (kind === "image" && file.size > MAX_SOURCE_IMAGE_BYTES) {
     return {
       ok: false,
-      reason: `That file is ${readable(file.size)}. Keeping something that large on the phone risks pushing your drafts out of storage — upload it from a computer instead.`,
+      reason: `That image is ${readable(file.size)}, which is too large for Studio to open on a phone. Export it smaller, or add it from a computer.`,
+    };
+  }
+
+  /* ── optimize first, then judge what came out ──
+     Everything below this point asks its questions about `kept`, not about
+     what was selected: the optimized file is the one that goes into IndexedDB
+     and across the network, so it is the one the limits are about. */
+  let kept = file;
+  let optimization: MediaReport | undefined;
+
+  try {
+    const outcome = await optimizeForIngest(file, kind, onProgress);
+    kept = outcome.file;
+    optimization = outcome.report;
+  } catch (error) {
+    // The only failure worth refusing over: a source too big to process
+    // without taking the tab down. Everything else fell back to the original
+    // inside the optimizer and never reaches here.
+    if (error instanceof MediaTooLargeError) {
+      return { ok: false, reason: error.message };
+    }
+  }
+
+  if (kind === "loop-clip") {
+    // Still the gate it always was, now applied to the finished clip — so a
+    // MOV that was normalized into an MP4 passes, and one that could not be
+    // gets exactly the refusal it got before.
+    const clip = await checkClipFile(kept);
+    if (!clip.ok) return { ok: false, reason: clip.reason! };
+  } else if (kept.size > MAX_FILE_BYTES) {
+    return {
+      ok: false,
+      reason: `That file is ${readable(kept.size)}. Keeping something that large on the phone risks pushing your drafts out of storage — upload it from a computer instead.`,
     };
   }
 
   const report = await storageReport();
-  if (report && report.quota > 0 && report.usage + file.size > report.quota * QUOTA_CEILING) {
+  if (report && report.quota > 0 && report.usage + kept.size > report.quota * QUOTA_CEILING) {
     return {
       ok: false,
       reason: `This phone is nearly out of space for the studio (${readable(report.usage)} of ${readable(report.quota)} used). Send what's already waiting before adding another.`,
     };
   }
 
+  onProgress?.({ phase: "storing" });
+
   const ref = `${PENDING_PREFIX}${newMutationId()}`;
   const stored = await dbPut<PendingMedia>("media", {
     ref,
     kind,
-    blob: file,
-    name: file.name || (kind === "loop-clip" ? "clip.mp4" : "photo"),
-    type: file.type || "application/octet-stream",
-    size: file.size,
+    blob: kept,
+    name: kept.name || (kind === "loop-clip" ? "clip.mp4" : "photo"),
+    type: kept.type || "application/octet-stream",
+    size: kept.size,
     folder: folder.trim() || "hilman",
     capturedAt: new Date().toISOString(),
     attempts: 0,
@@ -149,7 +219,7 @@ export async function stashMedia(
     };
   }
 
-  return { ok: true, ref };
+  return { ok: true, ref, report: optimization };
 }
 
 export async function listPendingMedia(): Promise<PendingMedia[]> {

@@ -5,6 +5,8 @@ import { MobileSheet } from "../mobile-sheet";
 import { createPublicClient } from "@/lib/supabase/public";
 import { mediaSrc } from "@/lib/cloudinary";
 import { stashMedia } from "@/lib/studio-local/media";
+import { ingestLabel } from "@/lib/studio-local/ingest-status";
+import type { IngestProgress } from "@/lib/studio-local/media-optimize";
 import { flushOutbox } from "../studio-runtime";
 import { cn } from "@/lib/utils";
 import type { MediaRow } from "@/lib/types";
@@ -54,7 +56,11 @@ export function MediaPickerSheet({
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<MediaRow[]>([]);
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+    phase: IngestProgress | null;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const cameraInput = useRef<HTMLInputElement>(null);
@@ -133,14 +139,19 @@ export function MediaPickerSheet({
 
     setBusy(true);
     setError(null);
-    setProgress({ done: 0, total: chosen.length });
+    setProgress({ done: 0, total: chosen.length, phase: null });
 
     const refs: { ref: string }[] = [];
     const failures: string[] = [];
 
+    // Strictly one at a time. Decoding several phone photographs at once is
+    // how a Safari tab runs out of memory, and the sequential version is only
+    // slower in the case where nothing needed optimizing anyway.
     for (const [index, file] of chosen.entries()) {
-      setProgress({ done: index, total: chosen.length });
-      const result = await stashMedia(file);
+      setProgress({ done: index, total: chosen.length, phase: null });
+      const result = await stashMedia(file, undefined, "image", (phase) =>
+        setProgress({ done: index, total: chosen.length, phase })
+      );
       if (result.ok) refs.push({ ref: result.ref });
       else failures.push(result.reason);
       if (!multiple) break;
@@ -276,7 +287,7 @@ export function MediaPickerSheet({
 
         {progress && (
           <p role="status" className="rounded border border-hl bg-hl-soft px-3 py-2 text-sm text-soft">
-            Keeping photos… {progress.done + 1} of {progress.total}
+            {ingestLabel(progress.phase, "image")} {progress.done + 1} of {progress.total}
           </p>
         )}
 
