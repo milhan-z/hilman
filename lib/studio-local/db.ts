@@ -201,3 +201,61 @@ export async function dbClearAll(): Promise<void> {
     return true;
   });
 }
+
+/**
+ * Read a whole store, decide, and write — without anything getting in between.
+ *
+ * Every write to the outbox used to be `listQueue()`, a decision in JS, then a
+ * `dbPut` — two or three separate transactions with the store unlocked
+ * throughout. That is a lost update waiting for a second actor, and this
+ * studio has several of them: a save made while a flush is applying an answer,
+ * a photo upload rewriting references, a retry timer, a second tab.
+ *
+ * `decide` must be synchronous. An IndexedDB transaction commits as soon as
+ * the microtask queue drains with no request outstanding, so awaiting anything
+ * inside it would close the transaction underneath the caller — which is the
+ * same hole in a more surprising shape.
+ *
+ * Returns `null` when storage refused, exactly like the other verbs here, so a
+ * caller can tell "it did not happen" from "it happened and the answer was no".
+ */
+export async function dbReadModifyWrite<T, R>(
+  store: StoreName,
+  decide: (all: T[]) => { result: R; put?: T[]; remove?: string[] }
+): Promise<{ stored: boolean; result: R | null }> {
+  const outcome = await transact([store], "readwrite", async (tx) => {
+    const objectStore = tx.objectStore(store);
+    const all = await wrap<T[]>(objectStore.getAll() as IDBRequest<T[]>);
+    const plan = decide(all);
+    for (const key of plan.remove ?? []) await wrap(objectStore.delete(key));
+    for (const value of plan.put ?? []) await wrap(objectStore.put(value));
+    return plan.result;
+  });
+  return outcome === null
+    ? { stored: false, result: null }
+    : { stored: true, result: outcome };
+}
+
+/**
+ * Moves a record between two stores in one transaction.
+ *
+ * The studio does this twice — a refused save becomes a stored conflict, and a
+ * kept conflict becomes a queued save — and both were written as two
+ * independent steps with the *source removed first*. If the second step failed,
+ * and IndexedDB fails by returning rather than throwing, the only copy of that
+ * writing was gone.
+ *
+ * One transaction means the source cannot be removed unless the destination
+ * was written, because neither happens unless both do.
+ */
+export async function dbMove<T>(
+  from: { store: StoreName; key: string },
+  to: { store: StoreName; value: T }
+): Promise<boolean> {
+  const done = await transact([from.store, to.store], "readwrite", async (tx) => {
+    await wrap(tx.objectStore(to.store).put(to.value));
+    await wrap(tx.objectStore(from.store).delete(from.key));
+    return true;
+  });
+  return done !== null;
+}

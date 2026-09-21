@@ -4,14 +4,21 @@ import test, { beforeEach } from "node:test";
 
 import { dbClearAll } from "../lib/studio-local/db";
 import {
+  claimForSending,
   enqueue,
   listQueue,
-  markSending,
   oneSavePerRow,
   recordAttempt,
   releaseStaleSends,
   type QueuedMutation,
 } from "../lib/studio-local/outbox";
+
+/**
+ * Sending is now a *claim* with an owner rather than an ownerless boolean, so
+ * these tests name the tab doing it. What they assert is unchanged: taking an
+ * entry to send is what makes its payload permanent.
+ */
+const THIS_TAB = "tab-under-test";
 import { rebaseQueued } from "../lib/studio-sync-contract";
 
 /**
@@ -67,7 +74,7 @@ const title = (entry: QueuedMutation) => String(entry.payload.fields.title);
 
 test("a save made after a lost acknowledgement gets its own mutation id", async () => {
   await enqueue({ mutationId: M, ...row, payload: A });
-  await markSending(M, true);
+  await claimForSending(M, THIS_TAB);
   await recordAttempt(M); // the answer never came back
 
   const { mutation } = await enqueue({ mutationId: N, ...row, payload: B });
@@ -82,7 +89,7 @@ test("a save made after a lost acknowledgement gets its own mutation id", async 
 
 test("an attempted mutation's payload is never rewritten", async () => {
   await enqueue({ mutationId: M, ...row, payload: A });
-  await markSending(M, true);
+  await claimForSending(M, THIS_TAB);
   await recordAttempt(M);
 
   await enqueue({ mutationId: N, ...row, payload: B });
@@ -102,9 +109,9 @@ test("a reload does not make an attempted mutation collapsible again", async () 
   // clearing it re-opened the whole failure — with `attempts` still at zero,
   // because an answer is what increments it and no answer ever came.
   await enqueue({ mutationId: M, ...row, payload: A });
-  await markSending(M, true);
+  await claimForSending(M, THIS_TAB);
 
-  await releaseStaleSends(); // the app restarts
+  await releaseStaleSends(THIS_TAB); // the app restarts
 
   const { mutation } = await enqueue({ mutationId: N, ...row, payload: B });
   assert.equal(mutation.mutationId, N, "it was attempted, so it is frozen");
@@ -149,7 +156,7 @@ test("a blocked mutation is not collapsed into either", async () => {
   // It has been to the server and come back refused. Its payload is the thing
   // the author is being asked to fix, so it must still be the thing they see.
   await enqueue({ mutationId: M, ...row, payload: A });
-  await markSending(M, true);
+  await claimForSending(M, THIS_TAB);
   await recordAttempt(M);
 
   const { mutation } = await enqueue({ mutationId: N, ...row, payload: B });
@@ -160,7 +167,7 @@ test("a blocked mutation is not collapsed into either", async () => {
 
 test("a retry carries the original payload, byte for byte", async () => {
   await enqueue({ mutationId: M, ...row, payload: A });
-  await markSending(M, true);
+  await claimForSending(M, THIS_TAB);
   await recordAttempt(M, "The studio server answered 503.");
 
   const retried = (await listQueue()).find((entry) => entry.mutationId === M)!;
@@ -180,7 +187,7 @@ test("only one save per row goes in a request", async () => {
   // with the author's own writing. A goes, the rest are rebased onto it, and
   // B goes in the next round.
   await enqueue({ mutationId: M, ...row, payload: A });
-  await markSending(M, true);
+  await claimForSending(M, THIS_TAB);
   await recordAttempt(M);
   await enqueue({ mutationId: N, ...row, payload: B });
   await enqueue({
@@ -205,7 +212,7 @@ test("only one save per row goes in a request", async () => {
 
 test("the held-back save is rebased onto what the first one produced", async () => {
   await enqueue({ mutationId: M, ...row, payload: A });
-  await markSending(M, true);
+  await claimForSending(M, THIS_TAB);
   await recordAttempt(M);
   await enqueue({ mutationId: N, ...row, payload: B });
 
@@ -233,7 +240,7 @@ test("an edit made before the create was acknowledged targets the new row", asyn
     baseUpdatedAt: null,
   };
   await enqueue({ mutationId: M, ...create, payload: A });
-  await markSending(M, true);
+  await claimForSending(M, THIS_TAB);
   await recordAttempt(M);
   await enqueue({ mutationId: N, ...create, payload: B });
 
@@ -255,7 +262,7 @@ test("a document can be saved three times over without losing the middle one", a
 
   for (let i = 0; i < 3; i++) {
     await enqueue({ mutationId: ids[i], ...row, payload: payloads[i] });
-    await markSending(ids[i], true);
+    await claimForSending(ids[i], THIS_TAB);
     await recordAttempt(ids[i]);
   }
 

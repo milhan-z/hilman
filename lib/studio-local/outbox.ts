@@ -1,7 +1,7 @@
 "use client";
 
-import { dbDelete, dbGetAll, dbPut, dbReplaceAll } from "./db";
-import type { SyncEntity, SyncMutation, SyncPayload } from "../studio-sync-contract";
+import { dbDelete, dbGetAll, dbPut, dbReadModifyWrite, dbReplaceAll } from "./db";
+import { rebaseQueued, type SyncEntity, type SyncMutation, type SyncPayload } from "../studio-sync-contract";
 
 /**
  * Saves that are waiting for a network.
@@ -43,6 +43,22 @@ export interface QueuedMutation extends SyncMutation {
   /** Set while a request carrying this entry is in flight. */
   sending?: boolean;
   /**
+   * Which sender is currently carrying this entry, and since when.
+   *
+   * `sending` alone was a boolean with nobody's name on it, and
+   * releaseStaleSends() ran at startup in every tab and cleared all of them —
+   * so opening a second tab while the first was mid-request took the first
+   * tab's in-flight work and sent it again. Pass 1's `attemptedAt` stops that
+   * corrupting a payload; it does not stop two tabs sending the same thing,
+   * and it does not help a tab that dies holding work nobody picks up.
+   *
+   * A claim answers both: an entry is takeable when nobody holds it, when the
+   * holder is us, or when the claim is old enough that its holder is plainly
+   * gone. See claimForSending().
+   */
+  claimedBy?: string;
+  claimedAt?: string;
+  /**
    * When this entry first left the device. Never cleared.
    *
    * Once it exists the payload is frozen: the server may already have applied
@@ -65,18 +81,16 @@ export async function listQueue(): Promise<QueuedMutation[]> {
 }
 
 /**
- * Clears `sending` flags left behind by a tab that was closed mid-request.
+ * Clears sending state left behind by a tab that was closed mid-request.
  *
- * Without this they are permanent and the entry is never sent again. It makes
- * the entry *sendable*, not *rewritable*: `attemptedAt` is deliberately left
- * in place, because the request may well have reached the server before the
- * tab died. Safe to run at startup — nothing is in flight before the app has
- * started.
+ * Kept as the name the app has always called at startup; the behaviour now
+ * lives in releaseExpiredClaims(), which takes back only what belongs to this
+ * sender or to a holder whose lease has expired. It makes an entry *sendable*,
+ * not *rewritable*: `attemptedAt` is deliberately left in place, because the
+ * request may well have reached the server before the tab died.
  */
-export async function releaseStaleSends(): Promise<void> {
-  const queue = await listQueue();
-  const stuck = queue.filter((entry) => entry.sending);
-  for (const entry of stuck) await dbPut("outbox", { ...entry, sending: false });
+export async function releaseStaleSends(sender: string, now = Date.now()): Promise<void> {
+  await releaseExpiredClaims(sender, now);
 }
 
 export async function queueSize(): Promise<number> {
@@ -130,40 +144,157 @@ const neverAttempted = (entry: QueuedMutation) =>
  * means two different things.
  */
 export async function enqueue(input: EnqueueInput): Promise<EnqueueResult> {
-  const queue = await listQueue();
-  const previous = queue.find(
-    (entry) =>
-      neverAttempted(entry) &&
-      entry.entity === input.entity &&
-      (entry.localId === input.localId ||
-        (entry.entityId != null && entry.entityId === input.entityId))
+  // Read, decide and write in one transaction. Doing it as listQueue() then
+  // dbPut() left the store open in between, so two saves landing together
+  // could both pick the same entry to collapse into and one of them would be
+  // overwritten — a save the author had been told was safe, gone.
+  const { stored, result } = await dbReadModifyWrite<QueuedMutation, QueuedMutation>(
+    "outbox",
+    (queue) => {
+      const previous = queue.find(
+        (entry) =>
+          neverAttempted(entry) &&
+          entry.entity === input.entity &&
+          (entry.localId === input.localId ||
+            (entry.entityId != null && entry.entityId === input.entityId))
+      );
+
+      const mutation: QueuedMutation = {
+        mutationId: previous?.mutationId ?? input.mutationId,
+        entity: input.entity,
+        entityId: input.entityId ?? previous?.entityId ?? null,
+        localId: previous?.localId ?? input.localId,
+        baseUpdatedAt: previous ? previous.baseUpdatedAt : input.baseUpdatedAt,
+        payload: input.payload,
+        queuedAt: previous?.queuedAt ?? new Date().toISOString(),
+        attempts: previous?.attempts ?? 0,
+      };
+
+      return { result: mutation, put: [mutation] };
+    }
   );
 
-  const mutation: QueuedMutation = {
-    mutationId: previous?.mutationId ?? input.mutationId,
+  // The record is still worth returning when storage refused it: the caller
+  // falls back to sending it directly, and needs its identity to do that.
+  const mutation: QueuedMutation = result ?? {
+    mutationId: input.mutationId,
     entity: input.entity,
-    entityId: input.entityId ?? previous?.entityId ?? null,
-    localId: previous?.localId ?? input.localId,
-    baseUpdatedAt: previous ? previous.baseUpdatedAt : input.baseUpdatedAt,
+    entityId: input.entityId,
+    localId: input.localId,
+    baseUpdatedAt: input.baseUpdatedAt,
     payload: input.payload,
-    queuedAt: previous?.queuedAt ?? new Date().toISOString(),
-    attempts: previous?.attempts ?? 0,
+    queuedAt: new Date().toISOString(),
+    attempts: 0,
   };
 
-  const stored = await dbPut("outbox", mutation);
   return { mutation, stored };
 }
 
-export async function markSending(mutationId: string, sending: boolean): Promise<void> {
-  const queue = await listQueue();
-  const entry = queue.find((item) => item.mutationId === mutationId);
-  if (!entry) return;
-  await dbPut("outbox", {
-    ...entry,
-    sending,
-    // Stamped as the request goes out, and never removed. From here on this
-    // id means one payload, whatever the network does next.
-    ...(sending && !entry.attemptedAt ? { attemptedAt: new Date().toISOString() } : {}),
+/**
+ * How long a sender may hold an entry before another may take it over.
+ *
+ * Long enough that an ordinary slow upload on a phone is never stolen
+ * mid-flight, short enough that a tab closed in a tunnel does not strand its
+ * work for the rest of the day. The sync request itself times out well inside
+ * this, so in practice a live sender always releases its own claim.
+ */
+export const SEND_LEASE_MS = 90_000;
+
+const claimIsStale = (entry: QueuedMutation, now: number) =>
+  !entry.claimedAt || now - Date.parse(entry.claimedAt) > SEND_LEASE_MS;
+
+/**
+ * Takes an entry for sending, if it is ours to take.
+ *
+ * Returns whether we got it. Claimable when nobody holds it, when we already
+ * do — a tab keeps its identity across a reload, so its own interrupted send
+ * is available again at once — or when the holder's lease has run out.
+ *
+ * Read and write happen in one transaction, so two tabs asking at the same
+ * moment cannot both be told yes.
+ */
+export async function claimForSending(
+  mutationId: string,
+  sender: string,
+  now = Date.now()
+): Promise<boolean> {
+  const { result } = await dbReadModifyWrite<QueuedMutation, boolean>("outbox", (queue) => {
+    const entry = queue.find((item) => item.mutationId === mutationId);
+    if (!entry) return { result: false };
+
+    const mine = entry.claimedBy === sender;
+    const free = !entry.claimedBy || claimIsStale(entry, now);
+    if (!mine && !free) return { result: false };
+
+    return {
+      result: true,
+      put: [
+        {
+          ...entry,
+          sending: true,
+          claimedBy: sender,
+          claimedAt: new Date(now).toISOString(),
+          // Stamped as the request goes out, and never removed. From here on
+          // this id means one payload, whatever the network does next.
+          ...(entry.attemptedAt ? {} : { attemptedAt: new Date(now).toISOString() }),
+        },
+      ],
+    };
+  });
+  return result === true;
+}
+
+/** Hands an entry back. Only the holder may — a tab does not release another's. */
+export async function releaseClaim(mutationId: string, sender: string): Promise<void> {
+  await dbReadModifyWrite<QueuedMutation, null>("outbox", (queue) => {
+    const entry = queue.find((item) => item.mutationId === mutationId);
+    if (!entry || entry.claimedBy !== sender) return { result: null };
+    const { claimedBy: _who, claimedAt: _when, ...rest } = entry;
+    return { result: null, put: [{ ...rest, sending: false }] };
+  });
+}
+
+/**
+ * At startup: take back what was ours, and anything whose holder is long gone.
+ *
+ * This replaces releaseStaleSends(), which cleared *every* `sending` flag in
+ * the database including another live tab's. Ours come back immediately;
+ * somebody else's only once their lease has expired.
+ */
+export async function releaseExpiredClaims(sender: string, now = Date.now()): Promise<void> {
+  await dbReadModifyWrite<QueuedMutation, null>("outbox", (queue) => {
+    const put = queue
+      .filter((entry) => entry.claimedBy === sender || (entry.claimedBy && claimIsStale(entry, now)) || (entry.sending && !entry.claimedBy))
+      .map((entry) => {
+        const { claimedBy: _who, claimedAt: _when, ...rest } = entry;
+        return { ...rest, sending: false };
+      });
+    return { result: null, put };
+  });
+}
+
+/**
+ * Removes an applied mutation and moves whatever is still queued for that row
+ * onto the version it produced — in one transaction.
+ *
+ * This was `listQueue()`, then `rebaseQueued()`, then `replaceQueue()`, and
+ * `replaceQueue` clears the whole store before writing back the list it read.
+ * A save enqueued in that window was written to storage, reported to the
+ * author as safe, and then deleted with nothing left to recover it from.
+ */
+export async function rebaseAfterApplied(
+  mutationId: string,
+  applied: { localId: string; entity: SyncEntity; id: string; updatedAt: string }
+): Promise<void> {
+  await dbReadModifyWrite<QueuedMutation, null>("outbox", (queue) => {
+    const rest = queue.filter((entry) => entry.mutationId !== mutationId);
+    const rebased = rebaseQueued(rest, applied);
+    // Only the entries that actually moved are written back; anything that
+    // arrived during this transaction is not in `queue` and is not touched.
+    const changed = rebased.filter(
+      (entry, index) => JSON.stringify(entry) !== JSON.stringify(rest[index])
+    );
+    return { result: null, put: changed, remove: [mutationId] };
   });
 }
 
@@ -191,38 +322,48 @@ export function oneSavePerRow(queue: QueuedMutation[]): QueuedMutation[] {
   return batch;
 }
 
+/** One entry, changed in place, inside a single transaction. */
+async function amend(
+  mutationId: string,
+  change: (entry: QueuedMutation) => QueuedMutation
+): Promise<void> {
+  await dbReadModifyWrite<QueuedMutation, null>("outbox", (queue) => {
+    const entry = queue.find((item) => item.mutationId === mutationId);
+    return entry ? { result: null, put: [change(entry)] } : { result: null };
+  });
+}
+
 export async function recordAttempt(mutationId: string, error?: string): Promise<void> {
-  const queue = await listQueue();
-  const entry = queue.find((item) => item.mutationId === mutationId);
-  if (!entry) return;
-  await dbPut("outbox", {
-    ...entry,
-    sending: false,
-    attempts: entry.attempts + 1,
-    ...(error ? { lastError: error } : {}),
+  await amend(mutationId, (entry) => {
+    const { claimedBy: _who, claimedAt: _when, ...rest } = entry;
+    return {
+      ...rest,
+      sending: false,
+      attempts: entry.attempts + 1,
+      ...(error ? { lastError: error } : {}),
+    };
   });
 }
 
 export async function blockEntry(mutationId: string, reason: string): Promise<void> {
-  const queue = await listQueue();
-  const entry = queue.find((item) => item.mutationId === mutationId);
-  if (!entry) return;
-  await dbPut("outbox", {
-    ...entry,
-    sending: false,
-    blocked: true,
-    attempts: entry.attempts + 1,
-    lastError: reason,
+  await amend(mutationId, (entry) => {
+    const { claimedBy: _who, claimedAt: _when, ...rest } = entry;
+    return {
+      ...rest,
+      sending: false,
+      blocked: true,
+      attempts: entry.attempts + 1,
+      lastError: reason,
+    };
   });
 }
 
 /** "I fixed it, try again" — clears the block without touching the payload. */
 export async function unblockEntry(mutationId: string): Promise<void> {
-  const queue = await listQueue();
-  const entry = queue.find((item) => item.mutationId === mutationId);
-  if (!entry) return;
-  const { lastError: _dropped, ...rest } = entry;
-  await dbPut("outbox", { ...rest, blocked: false, sending: false });
+  await amend(mutationId, (entry) => {
+    const { lastError: _dropped, ...rest } = entry;
+    return { ...rest, blocked: false, sending: false };
+  });
 }
 
 export async function dequeue(mutationId: string): Promise<void> {
@@ -231,4 +372,37 @@ export async function dequeue(mutationId: string): Promise<void> {
 
 export async function replaceQueue(queue: QueuedMutation[]): Promise<void> {
   await dbReplaceAll("outbox", queue);
+}
+
+/**
+ * Who this tab is, for as long as it is this tab.
+ *
+ * Held in `sessionStorage` on purpose. That is per-tab and survives a reload,
+ * which is exactly the identity a send claim wants: a tab that reloads gets
+ * its own interrupted work back at once, while a *different* tab has to wait
+ * out the lease before it may take it. `localStorage` would make every tab the
+ * same sender and claim nothing; a fresh id each load would make a reload
+ * queue behind its own lease for a minute and a half.
+ *
+ * Falls back to a per-realm value when storage is unavailable — private mode,
+ * site data blocked — which still distinguishes two tabs within one session.
+ */
+let cachedSender: string | null = null;
+
+export function senderId(): string {
+  if (cachedSender) return cachedSender;
+
+  const fresh = `sender-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+  try {
+    const existing = sessionStorage.getItem("hilman-studio-sender");
+    if (existing) {
+      cachedSender = existing;
+      return existing;
+    }
+    sessionStorage.setItem("hilman-studio-sender", fresh);
+  } catch {
+    /* no session storage — the in-memory value below is still per-realm */
+  }
+  cachedSender = fresh;
+  return fresh;
 }

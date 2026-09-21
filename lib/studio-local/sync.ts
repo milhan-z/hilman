@@ -10,13 +10,16 @@ import {
 import { conflictKey, listConflicts, recordConflict } from "./conflicts";
 import {
   blockEntry,
+  claimForSending,
   dequeue,
   listQueue,
-  markSending,
   oneSavePerRow,
+  rebaseAfterApplied,
   recordAttempt,
+  releaseClaim,
   releaseStaleSends,
   replaceQueue,
+  senderId,
   type QueuedMutation,
 } from "./outbox";
 import { touchSnapshot } from "./snapshots";
@@ -42,6 +45,15 @@ import type { UploadNoun } from "../studio-editor-state";
 
 const ENDPOINT = "/api/studio/sync";
 const BATCH = 25;
+
+/**
+ * This tab, for claiming work.
+ *
+ * Read lazily rather than at module load: on the server there is no
+ * sessionStorage, and this module is imported by components that render there.
+ */
+let cachedRealm: string | null = null;
+const realm = () => (cachedRealm ??= senderId());
 
 /** Stepped, capped. A phone in a lift should not hammer the origin. */
 const BACKOFF_MS = [5_000, 15_000, 30_000, 60_000];
@@ -253,9 +265,25 @@ async function runFlush(): Promise<SyncState> {
 
   // One save per row: two mutations for the same document cannot go in one
   // request without the second conflicting with the first. See oneSavePerRow().
-  const batch = oneSavePerRow(sendable).slice(0, BATCH);
+  const candidates = oneSavePerRow(sendable).slice(0, BATCH);
+
+  // Claim each one before it goes anywhere. Another tab may be carrying it
+  // already, in which case this one leaves it alone rather than sending the
+  // same save down a second connection. See claimForSending().
+  const claimed = await Promise.all(
+    candidates.map(async (entry) => ((await claimForSending(entry.mutationId, realm())) ? entry : null))
+  );
+  const batch = claimed.filter((entry): entry is QueuedMutation => entry !== null);
+
+  if (batch.length === 0) {
+    // Everything sendable belongs to another tab right now. Not an error and
+    // not offline — just somebody else's turn.
+    setState({ syncing: false });
+    scheduleRetry();
+    return state;
+  }
+
   setState({ syncing: true, lastError: null });
-  await Promise.all(batch.map((entry) => markSending(entry.mutationId, true)));
 
   let response: Response;
   try {
@@ -364,18 +392,16 @@ async function applyOutcome(outcome: SyncOutcome, batch: QueuedMutation[]) {
   const entry = batch.find((item) => item.mutationId === outcome.mutationId);
 
   if (outcome.status === "saved") {
-    await dequeue(outcome.mutationId);
-
-    // Everything still queued for this row was written on top of what we just
-    // saved, so it is rebased rather than left to conflict with our own work.
-    const rest = (await listQueue()).filter((item) => item.mutationId !== outcome.mutationId);
-    const rebased = rebaseQueued(rest, {
+    // Removing the applied entry and rebasing everything still queued for that
+    // row happen together, in one transaction. As two steps — dequeue, read
+    // the queue, write the whole queue back — a save made in between was
+    // written, reported safe, and then erased by the write-back.
+    await rebaseAfterApplied(outcome.mutationId, {
       localId: outcome.localId,
       entity: entry?.entity ?? "journal",
       id: outcome.id,
       updatedAt: outcome.updatedAt,
     });
-    if (JSON.stringify(rest) !== JSON.stringify(rebased)) await replaceQueue(rebased);
 
     await touchSnapshot(entry?.entity ?? "journal", outcome.id, outcome.updatedAt, {
       title: String(entry?.payload.fields.title ?? ""),
@@ -550,7 +576,7 @@ export function installSyncTriggers(): () => void {
 
   // A tab closed mid-request leaves entries marked as sending; clear them
   // before the first flush so they can be collapsed and sent normally again.
-  void releaseStaleSends()
+  void releaseStaleSends(realm())
     .then(refreshSyncState)
     .then(() => void flushOutbox());
 
