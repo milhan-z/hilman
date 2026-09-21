@@ -1,20 +1,47 @@
 import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceSupabase, serviceRoleConfigured } from "@/lib/supabase/admin";
-import { NO_ATTEMPTS, type PinAttempts } from "./studio-pin";
 
 /**
- * Where PIN failures are counted.
+ * Where PIN failures are counted, and why it is not here.
  *
- * They used to live in a module-level variable. That reads as a rate limiter
+ * ── the two versions this replaces ──
+ *
+ * First they lived in a module-level variable. That reads as a rate limiter
  * and is not one: every serverless instance keeps its own copy and a cold
  * start wipes it, so "five tries" really meant "five tries per warm instance,
- * until the next deploy". The count now lives in `studio_pin_attempts`, which
- * only the service-role key can touch — a limiter the guesser can reset is
- * not a limiter.
+ * until the next deploy".
  *
- * Without a service-role key configured the module falls back to the old
- * in-process counter and says so, so a missing key degrades loudly in the
- * logs instead of silently unlocking the door.
+ * Then they lived in `studio_pin_attempts`, which fixed durability and left
+ * the arithmetic in JavaScript:
+ *
+ *     read the counts  →  decide  →  write them back
+ *
+ * Three steps, two round trips, nothing holding anything in between. Two
+ * attempts arriving together both read N, both decide N+1, and both write
+ * N+1 — two guesses for the price of one. That is the protection on a
+ * six-digit secret, which is a million combinations and not many.
+ *
+ * And when the table could not be read it fell back to the in-process counter
+ * and carried on. A limiter that quietly becomes per-instance when the
+ * database has a bad minute is a limiter that fails open at exactly the moment
+ * it matters.
+ *
+ * ── what happens now ──
+ *
+ * One RPC, `studio_pin_attempt`, does the whole thing in one statement: it
+ * takes each bucket's row with `for update`, counts, decides, and writes. A
+ * second caller waits and then reads the first one's result.
+ *
+ * It *reserves* rather than reports — the attempt is counted before the PIN is
+ * compared, and a correct PIN clears the counters afterwards. Counting first
+ * is what makes it atomic at all; the alternative is holding a database lock
+ * across the comparison.
+ *
+ * And it fails closed. If the limiter cannot be reached, PIN sign-in is
+ * unavailable and says so. Email and password still work, so the owner is
+ * never locked out of their own site — they just cannot use the shortcut that
+ * depends on a working counter.
  */
 
 export const GLOBAL_KEY = "global";
@@ -40,73 +67,87 @@ export function addressFromHeaders(headers: Headers): string | null {
   return headers.get("x-real-ip");
 }
 
-const memory = new Map<string, PinAttempts>();
-
-const fromRow = (row: { failures: number | null; locked_until: string | null }): PinAttempts => ({
-  failures: row.failures ?? 0,
-  lockedUntil: row.locked_until ? new Date(row.locked_until).getTime() : 0,
-});
-
-export interface PinAttemptsRead {
-  attempts: Record<string, PinAttempts>;
-  /** False when the count only exists in this process — see the note above. */
-  durable: boolean;
+export interface PinBucketRequest {
+  key: string;
+  /** Failures allowed before this bucket shuts. */
+  max: number;
+  lockoutMs: number;
 }
 
-export async function readPinAttempts(keys: string[]): Promise<PinAttemptsRead> {
-  const blank = Object.fromEntries(keys.map((key) => [key, NO_ATTEMPTS]));
-  const supabase = serviceRoleConfigured ? createServiceSupabase() : null;
+export type PinReservation =
+  /** Counted. The guess may be compared. */
+  | { status: "allowed"; remaining: number }
+  /** Not compared, not counted — this door is already shut. */
+  | { status: "locked"; lockedUntil: number }
+  /**
+   * The counter could not be reached, so nothing can be promised about how
+   * many guesses have been made. PIN sign-in is refused rather than allowed
+   * on trust — see the note above about failing open.
+   */
+  | { status: "unavailable"; message: string };
 
-  if (!supabase) {
-    return {
-      durable: false,
-      attempts: Object.fromEntries(keys.map((key) => [key, memory.get(key) ?? NO_ATTEMPTS])),
-    };
-  }
+const UNAVAILABLE_MESSAGE =
+  "PIN sign-in is unavailable right now because the attempt counter can't be reached. " +
+  "Sign in with your email and password instead.";
 
-  const { data, error } = await supabase
-    .from("studio_pin_attempts")
-    .select("key, failures, locked_until")
-    .in("key", keys);
+/**
+ * Counts one attempt against every bucket, atomically, before it is compared.
+ *
+ * `client` is injected only by tests, which need a limiter that refuses.
+ */
+export async function reservePinAttempt(
+  buckets: PinBucketRequest[],
+  client?: SupabaseClient | null
+): Promise<PinReservation> {
+  const supabase =
+    client !== undefined ? client : serviceRoleConfigured ? createServiceSupabase() : null;
+
+  // No service-role key means no durable counter. Previously this fell back to
+  // a per-process Map and carried on, which is the failure this whole module
+  // exists to end.
+  if (!supabase) return { status: "unavailable", message: UNAVAILABLE_MESSAGE };
+
+  const { data, error } = await supabase.rpc("studio_pin_attempt", {
+    p_buckets: buckets.map((bucket) => ({
+      key: bucket.key,
+      max: bucket.max,
+      lockoutSeconds: Math.max(1, Math.round(bucket.lockoutMs / 1000)),
+    })),
+  });
 
   if (error) {
-    console.error("[studio] could not read PIN attempts:", error.message);
-    // Fail closed enough to stay useful: fall back to the in-process count
-    // rather than treating an unreachable table as "no failures recorded".
-    return {
-      durable: false,
-      attempts: Object.fromEntries(keys.map((key) => [key, memory.get(key) ?? NO_ATTEMPTS])),
-    };
+    // Deliberately not logged with the attempt's details — the message the
+    // owner sees says what to do instead, and the server log says what broke.
+    console.error("[studio] PIN attempt could not be counted:", error.message);
+    return { status: "unavailable", message: UNAVAILABLE_MESSAGE };
   }
 
-  const attempts = { ...blank };
-  for (const row of data ?? []) attempts[row.key] = fromRow(row);
-  return { durable: true, attempts };
+  const answer = data as { allowed?: boolean; remaining?: number; lockedUntil?: string } | null;
+  if (!answer || typeof answer.allowed !== "boolean") {
+    return { status: "unavailable", message: UNAVAILABLE_MESSAGE };
+  }
+
+  if (!answer.allowed) {
+    const until = answer.lockedUntil ? Date.parse(answer.lockedUntil) : Date.now();
+    return { status: "locked", lockedUntil: Number.isNaN(until) ? Date.now() : until };
+  }
+  return { status: "allowed", remaining: Math.max(0, answer.remaining ?? 0) };
 }
 
-export async function writePinAttempts(
-  entries: { key: string; attempts: PinAttempts }[]
+/**
+ * Forgets the wrong guesses, because the right one arrived.
+ *
+ * Failing to clear is not worth refusing a correct PIN over: the counters
+ * expire on their own, and the owner is already through the door.
+ */
+export async function clearPinAttempts(
+  keys: string[],
+  client?: SupabaseClient | null
 ): Promise<void> {
-  for (const entry of entries) memory.set(entry.key, entry.attempts);
+  const supabase =
+    client !== undefined ? client : serviceRoleConfigured ? createServiceSupabase() : null;
+  if (!supabase || keys.length === 0) return;
 
-  const supabase = serviceRoleConfigured ? createServiceSupabase() : null;
-  if (!supabase || entries.length === 0) return;
-
-  const { error } = await supabase.from("studio_pin_attempts").upsert(
-    entries.map((entry) => ({
-      key: entry.key,
-      failures: entry.attempts.failures,
-      locked_until:
-        entry.attempts.lockedUntil > 0 ? new Date(entry.attempts.lockedUntil).toISOString() : null,
-      updated_at: new Date().toISOString(),
-    })),
-    { onConflict: "key" }
-  );
-
-  if (error) console.error("[studio] could not record a PIN attempt:", error.message);
-}
-
-/** Test seam — the in-process fallback is module state. */
-export function __resetPinMemory() {
-  memory.clear();
+  const { error } = await supabase.rpc("studio_pin_clear", { p_keys: keys });
+  if (error) console.error("[studio] could not clear PIN attempts:", error.message);
 }

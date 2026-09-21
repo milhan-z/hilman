@@ -122,97 +122,19 @@ export function checkPin(input: {
   return { attempts: NO_ATTEMPTS, gate: { ok: true } };
 }
 
-/* ── counting the same guess in more than one place ───────── */
+/*
+   Counting a guess against several buckets used to live here, as
+   checkPinBuckets(). It is the database's job now — see
+   supabase/migrations/0011_atomic_pin_throttle.sql and
+   lib/studio-pin-store.ts.
 
-export interface PinBucket {
-  /** Row key in the durable store — a hashed address, or "global". */
-  key: string;
-  attempts: PinAttempts;
-  maxAttempts: number;
-  lockoutMs: number;
-}
+   Not a tidy-up: reading a count, deciding in JavaScript and writing it back
+   is three steps with nothing holding anything in between, so two attempts
+   arriving together both read N and both wrote N+1. Two guesses for the price
+   of one, against a six-digit secret. The arithmetic had to move somewhere it
+   could take a row lock, and this file cannot.
 
-export interface PinBucketDecision {
-  gate: PinGate;
-  /** Store every one of these back; unchanged buckets are included too. */
-  buckets: PinBucket[];
-}
-
-const remaining = (bucket: PinBucket) => bucket.maxAttempts - bucket.attempts.failures;
-
-/**
- * One guess, counted against several limits at once — this device, and the
- * site as a whole.
- *
- * A locked bucket stops the guess before the PIN is compared, so a locked-out
- * attacker learns nothing from timing, and a correct PIN clears every bucket.
- * Nothing is counted for a malformed entry or an unconfigured PIN: neither one
- * is a guess.
- */
-export function checkPinBuckets(input: {
-  entered: string;
-  expected: string | undefined;
-  buckets: PinBucket[];
-  now?: number;
-}): PinBucketDecision {
-  const now = input.now ?? Date.now();
-  const unchanged = input.buckets;
-
-  const probe = checkPin({
-    entered: input.entered,
-    expected: input.expected,
-    attempts: NO_ATTEMPTS,
-    now,
-  });
-
-  // Unconfigured and malformed are decided before any bucket is consulted:
-  // there is nothing to count and nothing to lock.
-  if (!probe.gate.ok && (probe.gate.reason === "unconfigured" || probe.gate.reason === "malformed")) {
-    return { gate: probe.gate, buckets: unchanged };
-  }
-
-  const locked = input.buckets
-    .filter((b) => b.attempts.lockedUntil > now)
-    .sort((a, b) => b.attempts.lockedUntil - a.attempts.lockedUntil)[0];
-
-  if (locked) {
-    const minutes = Math.max(1, Math.ceil((locked.attempts.lockedUntil - now) / 60_000));
-    return {
-      gate: {
-        ok: false,
-        reason: "locked",
-        message: `Too many wrong PINs. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}, or sign in with your email and password.`,
-      },
-      buckets: unchanged,
-    };
-  }
-
-  if (probe.gate.ok) {
-    return {
-      gate: probe.gate,
-      buckets: input.buckets.map((b) => ({ ...b, attempts: NO_ATTEMPTS })),
-    };
-  }
-
-  // A wrong guess: count it everywhere, and report the limit closest to the edge.
-  const decided = input.buckets.map((bucket) => {
-    const decision = checkPin({
-      entered: input.entered,
-      expected: input.expected,
-      attempts: bucket.attempts,
-      maxAttempts: bucket.maxAttempts,
-      lockoutMs: bucket.lockoutMs,
-      now,
-    });
-    return { bucket: { ...bucket, attempts: decision.attempts }, gate: decision.gate };
-  });
-
-  const strictest =
-    decided.find((d) => !d.gate.ok && d.gate.reason === "locked") ??
-    [...decided].sort((a, b) => remaining(a.bucket) - remaining(b.bucket))[0];
-
-  return {
-    gate: strictest?.gate ?? probe.gate,
-    buckets: decided.map((d) => d.bucket),
-  };
-}
+   What stays here is what the database has no business knowing: whether a PIN
+   is configured at all, whether an entry is even shaped like a guess, and the
+   comparison itself. The secret never leaves the application.
+*/

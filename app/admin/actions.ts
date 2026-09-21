@@ -10,7 +10,7 @@ import { slugify } from "@/lib/utils";
 import type { Block } from "@/lib/types";
 import { getJournalQualityIssues, getProjectQualityIssues, type ContentQualityInput } from "@/lib/content-quality";
 import {
-  checkPinBuckets,
+  checkPin,
   GLOBAL_MAX_ATTEMPTS,
   LOCKOUT_MS,
   MAX_ATTEMPTS,
@@ -20,8 +20,8 @@ import {
   addressFromHeaders,
   attemptKeyForAddress,
   GLOBAL_KEY,
-  readPinAttempts,
-  writePinAttempts,
+  reservePinAttempt,
+  clearPinAttempts,
 } from "@/lib/studio-pin-store";
 
 /**
@@ -124,36 +124,46 @@ export async function signIn(_prev: ActionState, formData: FormData): Promise<Ac
 export async function signInWithPin(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const requestHeaders = await headers();
   const addressKey = attemptKeyForAddress(addressFromHeaders(requestHeaders));
-  const stored = await readPinAttempts([addressKey, GLOBAL_KEY]);
+  const entered = String(formData.get("pin") ?? "");
 
-  const decision = checkPinBuckets({
-    entered: String(formData.get("pin") ?? ""),
-    expected: process.env.STUDIO_PIN,
-    buckets: [
-      {
-        key: addressKey,
-        attempts: stored.attempts[addressKey] ?? NO_ATTEMPTS,
-        maxAttempts: MAX_ATTEMPTS,
-        lockoutMs: LOCKOUT_MS,
-      },
-      {
-        key: GLOBAL_KEY,
-        attempts: stored.attempts[GLOBAL_KEY] ?? NO_ATTEMPTS,
-        maxAttempts: GLOBAL_MAX_ATTEMPTS,
-        lockoutMs: LOCKOUT_MS,
-      },
-    ],
-  });
+  // Decided before the counter is touched. A missing STUDIO_PIN and a typo of
+  // the wrong length are both "not a guess": there is nothing to count and
+  // nothing to lock, and counting them would let a fat finger spend the
+  // owner's own allowance.
+  const probe = checkPin({ entered, expected: process.env.STUDIO_PIN, attempts: NO_ATTEMPTS });
+  if (!probe.gate.ok && (probe.gate.reason === "unconfigured" || probe.gate.reason === "malformed")) {
+    return fail(probe.gate.message);
+  }
 
-  await writePinAttempts(decision.buckets);
+  // Counted atomically, and counted *before* the comparison. Reading a count,
+  // deciding in JavaScript and writing it back is how two simultaneous guesses
+  // used to cost one — see lib/studio-pin-store.ts.
+  const reservation = await reservePinAttempt([
+    { key: addressKey, max: MAX_ATTEMPTS, lockoutMs: LOCKOUT_MS },
+    { key: GLOBAL_KEY, max: GLOBAL_MAX_ATTEMPTS, lockoutMs: LOCKOUT_MS },
+  ]);
 
-  if (!stored.durable) {
-    console.warn(
-      "[studio] PIN attempts are being counted in memory only — set SUPABASE_SERVICE_ROLE_KEY so the lockout survives a cold start."
+  // The limiter is unreachable, so nothing can be promised about how many
+  // guesses have already been made. Refuse the shortcut rather than open it on
+  // trust; the email form below is unaffected and is the way in.
+  if (reservation.status === "unavailable") return fail(reservation.message);
+
+  if (reservation.status === "locked") {
+    const minutes = Math.max(1, Math.ceil((reservation.lockedUntil - Date.now()) / 60_000));
+    return fail(
+      `Too many wrong PINs. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}, or sign in with your email and password.`
     );
   }
 
-  if (!decision.gate.ok) return fail(decision.gate.message);
+  if (!probe.gate.ok) {
+    const left = reservation.remaining;
+    return fail(`That PIN doesn't open this door. ${left} ${left === 1 ? "try" : "tries"} left.`);
+  }
+
+  // The right PIN forgives the wrong ones, on this address and on the door as
+  // a whole. Not awaited for its answer: the owner is already through, and a
+  // counter that failed to clear expires on its own.
+  await clearPinAttempts([addressKey, GLOBAL_KEY]);
 
   // The PIN only decides whether to attempt the real sign-in. The credentials
   // stay on the server and the browser still receives an ordinary Supabase

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   checkPin,
-  checkPinBuckets,
   GLOBAL_MAX_ATTEMPTS,
   LOCKOUT_MS,
   MAX_ATTEMPTS,
@@ -65,106 +64,27 @@ test("a locked door refuses even the correct PIN until the lockout expires", () 
 
 /* ── counting the same guess in more than one place ───────── */
 
-const bucket = (key: string, max: number, attempts = NO_ATTEMPTS) => ({
-  key,
-  attempts,
-  maxAttempts: max,
-  lockoutMs: LOCKOUT_MS,
-});
+/*
+   The bucket tests that were here moved with the code they covered.
 
-test("a wrong PIN is counted against every bucket at once", () => {
-  const decision = checkPinBuckets({
-    entered: "000000",
-    expected: PIN,
-    buckets: [bucket("ip:abc", MAX_ATTEMPTS), bucket("global", GLOBAL_MAX_ATTEMPTS)],
-    now: NOW,
-  });
+   Counting one guess against an address and against the whole door is now
+   studio_pin_attempt() — tests/pin-throttle.test.ts exercises it against a
+   real PostgreSQL, including the concurrency that broke the JavaScript
+   version. What the studio does when that counter cannot be reached is
+   tests/pin-store.test.ts.
 
-  assert.equal(decision.gate.ok, false);
-  assert.deepEqual(
-    decision.buckets.map((b) => [b.key, b.attempts.failures]),
-    [["ip:abc", 1], ["global", 1]]
-  );
-});
+   The behaviours those tests pinned are all still pinned:
 
-test("the message reports whichever limit is closest to the edge", () => {
-  const decision = checkPinBuckets({
-    entered: "000000",
-    expected: PIN,
-    buckets: [
-      bucket("ip:abc", MAX_ATTEMPTS, { failures: 3, lockedUntil: 0 }),
-      bucket("global", GLOBAL_MAX_ATTEMPTS, { failures: 3, lockedUntil: 0 }),
-    ],
-    now: NOW,
-  });
-
-  // The per-address bucket has one try left; the global one has sixteen.
-  assert.match(decision.gate.ok === false ? decision.gate.message : "", /1 try left/);
-});
-
-test("spreading guesses across addresses still trips the whole-door limit", () => {
-  // Each guess arrives from a fresh address, so the per-address bucket is
-  // always empty — the reason the global one exists.
-  let global = NO_ATTEMPTS;
-  for (let attempt = 1; attempt < GLOBAL_MAX_ATTEMPTS; attempt += 1) {
-    const decision = checkPinBuckets({
-      entered: "000000",
-      expected: PIN,
-      buckets: [bucket(`ip:${attempt}`, MAX_ATTEMPTS), bucket("global", GLOBAL_MAX_ATTEMPTS, global)],
-      now: NOW,
-    });
-    assert.equal(decision.gate.ok === false && decision.gate.reason, "wrong");
-    global = decision.buckets.find((b) => b.key === "global")!.attempts;
-  }
-
-  const final = checkPinBuckets({
-    entered: "000000",
-    expected: PIN,
-    buckets: [bucket("ip:fresh", MAX_ATTEMPTS), bucket("global", GLOBAL_MAX_ATTEMPTS, global)],
-    now: NOW,
-  });
-  assert.equal(final.gate.ok === false && final.gate.reason, "locked");
-});
-
-test("any locked bucket stops the guess before the PIN is compared", () => {
-  const decision = checkPinBuckets({
-    entered: PIN,
-    expected: PIN,
-    buckets: [
-      bucket("ip:abc", MAX_ATTEMPTS),
-      bucket("global", GLOBAL_MAX_ATTEMPTS, { failures: 0, lockedUntil: NOW + LOCKOUT_MS }),
-    ],
-    now: NOW,
-  });
-
-  assert.equal(decision.gate.ok, false, "the right PIN must not shortcut a lockout anywhere");
-  assert.equal(decision.gate.ok === false && decision.gate.reason, "locked");
-  assert.deepEqual(decision.buckets.map((b) => b.attempts.failures), [0, 0]);
-});
-
-test("the right PIN clears every bucket", () => {
-  const decision = checkPinBuckets({
-    entered: PIN,
-    expected: PIN,
-    buckets: [
-      bucket("ip:abc", MAX_ATTEMPTS, { failures: 4, lockedUntil: 0 }),
-      bucket("global", GLOBAL_MAX_ATTEMPTS, { failures: 11, lockedUntil: 0 }),
-    ],
-    now: NOW,
-  });
-
-  assert.equal(decision.gate.ok, true);
-  assert.deepEqual(decision.buckets.map((b) => b.attempts), [NO_ATTEMPTS, NO_ATTEMPTS]);
-});
-
-test("a typo of the wrong length is not counted anywhere", () => {
-  const decision = checkPinBuckets({
-    entered: "12",
-    expected: PIN,
-    buckets: [bucket("ip:abc", MAX_ATTEMPTS), bucket("global", GLOBAL_MAX_ATTEMPTS)],
-    now: NOW,
-  });
-
-  assert.equal(decision.gate.ok === false && decision.gate.reason, "malformed");
-  assert.deepEqual(decision.buckets.map((b) => b.attempts.failures), [0, 0]);
-});
+     counted against every bucket at once  -> pin-throttle "a guess is counted
+                                              against the address and the whole door"
+     strictest limit is reported           -> pin-throttle "the strictest bucket
+                                              is the one that shuts the door"
+     spreading across addresses trips the  -> pin-throttle "spreading guesses
+     whole-door limit                         across addresses still trips it"
+     a locked bucket stops the guess       -> pin-throttle "attempts against a
+                                              locked bucket are refused without counting"
+     the right PIN clears every bucket     -> pin-throttle "clearing resets only
+                                              the buckets it was given"
+     a typo is not counted anywhere        -> the malformed test above, which is
+                                              decided before the counter is touched
+*/
