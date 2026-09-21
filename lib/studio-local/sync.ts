@@ -31,6 +31,8 @@ import {
 import { hasPendingRefs } from "../studio-media-refs";
 import type { RejectionReason } from "../studio-sync-contract";
 import type { UploadNoun } from "../studio-editor-state";
+import { SYNC_TIMEOUT_MS, fetchWithTimeout } from "./net";
+import { classifyFailure, nextAttempt, type RoundTrip } from "./retry-policy";
 
 /**
  * Getting the queue to the server.
@@ -58,8 +60,6 @@ const BATCH = 25;
 let cachedRealm: string | null = null;
 const realm = () => (cachedRealm ??= senderId());
 
-/** Stepped, capped. A phone in a lift should not hammer the origin. */
-const BACKOFF_MS = [5_000, 15_000, 30_000, 60_000];
 
 export interface SyncState {
   /** Our best evidence, not navigator.onLine — see above. */
@@ -92,6 +92,24 @@ export interface SyncState {
    */
   uploads: { pending: number; failed: number; noun: UploadNoun };
   /**
+   * When the next automatic attempt is due, if one is scheduled.
+   *
+   * Here so the studio can say "trying again shortly" honestly rather than
+   * implying it is working right now, and so a test can assert that a busy
+   * server is given room instead of being hammered.
+   */
+  nextRetryAt: string | null;
+  /** Consecutive round trips that did not finish the work. */
+  attempt: number;
+  /**
+   * The session lapsed and nothing will go out until it is renewed.
+   *
+   * Distinct from `lastFailure: "AUTH_ERROR"`, which describes one refusal.
+   * This is the standing condition, and it is what stops "couldn't sync" being
+   * shown for something a sign-in would fix.
+   */
+  authRequired: boolean;
+  /**
    * Files the provider accepted but the media library did not record.
    *
    * A real, separate state: the reference is correct and the page will render,
@@ -115,6 +133,9 @@ const initialState: SyncState = {
   blockedPrompts: 0,
   uploads: { pending: 0, failed: 0, noun: "photo" },
   unrecordedMedia: 0,
+  nextRetryAt: null,
+  attempt: 0,
+  authRequired: false,
 };
 
 let state: SyncState = initialState;
@@ -140,7 +161,10 @@ function setState(patch: Partial<SyncState>) {
     next.media === state.media &&
     next.lastSyncedAt === state.lastSyncedAt &&
     next.lastError === state.lastError &&
-    next.unrecordedMedia === state.unrecordedMedia
+    next.unrecordedMedia === state.unrecordedMedia &&
+    next.nextRetryAt === state.nextRetryAt &&
+    next.attempt === state.attempt &&
+    next.authRequired === state.authRequired
   ) {
     return;
   }
@@ -301,18 +325,35 @@ async function runFlush(): Promise<SyncState> {
 
   let response: Response;
   try {
-    response = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ mutations: batch.map(stripLocalFields) }),
+    response = await fetchWithTimeout(
+      ENDPOINT,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ mutations: batch.map(stripLocalFields) }),
+      },
+      SYNC_TIMEOUT_MS
+    );
+  } catch (error) {
+    // Nothing came back, or nothing came back in time. Either way the work is
+    // still here: hand the claims back so this tab is not the only one that
+    // could ever carry them, and let the idempotency ledger make the retry
+    // safe if the request did in fact arrive.
+    const failure = classifyFailure(error);
+    await Promise.all(
+      batch.map(async (entry) => {
+        await recordAttempt(entry.mutationId, failure.kind === "timeout" ? failure.message : undefined);
+        await releaseClaim(entry.mutationId, realm());
+      })
+    );
+    setState({
+      syncing: false,
+      reachable: !failure.offline,
+      lastError: failure.kind === "timeout" ? failure.message : null,
     });
-  } catch {
-    // A rejected fetch is the one signal that really means "no network".
-    await Promise.all(batch.map((entry) => recordAttempt(entry.mutationId)));
-    setState({ syncing: false, reachable: false, lastError: null });
     await refreshSyncState();
-    scheduleRetry();
+    scheduleFrom({ kind: "transport", failure }, true);
     return state;
   }
 
@@ -323,29 +364,42 @@ async function runFlush(): Promise<SyncState> {
     // 403 means the session went away and the next sign-in fixes it; a 5xx
     // means the server had a bad moment. Blocking the queue on either of
     // those would strand work behind an error the editor cannot act on.
-    const worthRetrying =
-      response.status === 401 || response.status === 403 || response.status >= 500;
+    const needsAuth = response.status === 401 || response.status === 403;
+    const worthRetrying = needsAuth || response.status === 429 || response.status >= 500;
 
     await Promise.all(
-      batch.map((entry) =>
-        worthRetrying
-          ? recordAttempt(entry.mutationId, message)
-          : blockEntry(entry.mutationId, message)
-      )
+      batch.map(async (entry) => {
+        if (worthRetrying) await recordAttempt(entry.mutationId, message);
+        else await blockEntry(entry.mutationId, message);
+        // Either way this tab is done carrying it.
+        await releaseClaim(entry.mutationId, realm());
+      })
     );
-    setState({ syncing: false, reachable: true, lastError: message });
+    setState({
+      syncing: false,
+      reachable: true,
+      lastError: message,
+      authRequired: needsAuth,
+    });
     await refreshSyncState();
-    if (worthRetrying) scheduleRetry();
+    if (worthRetrying) {
+      scheduleFrom({ kind: "retry-outcome" }, true);
+    } else {
+      scheduleFrom({ kind: "settled" }, false);
+    }
     return state;
   }
-
-  consecutiveFailures = 0;
-  cancelRetry();
 
   const payload = (await response.json().catch(() => null)) as SyncResponse | null;
   const results = payload?.results ?? [];
 
   for (const outcome of results) await applyOutcome(outcome, batch);
+
+  // Anything from this batch still in the queue is no longer ours to carry.
+  // Without this a mutation the server asked us to retry stays claimed by a
+  // tab that has finished with it, and no other tab may pick it up until the
+  // lease expires.
+  await Promise.all(batch.map((entry) => releaseClaim(entry.mutationId, realm())));
 
   // "Last synced" has to mean something actually reached the site. A round
   // trip where every entry came back refused is contact with the server, not a
@@ -356,6 +410,7 @@ async function runFlush(): Promise<SyncState> {
   setState({
     syncing: false,
     reachable: true,
+    authRequired: false,
     ...(savedSomething ? { lastSyncedAt: new Date().toISOString() } : {}),
     lastError: rejected?.message ?? null,
     lastFailure: rejected?.reason ?? (rejected ? "SERVER_ERROR" : null),
@@ -363,12 +418,19 @@ async function runFlush(): Promise<SyncState> {
   });
   await refreshSyncState();
 
-  // More was waiting than fitted in one batch, or something is still waiting
-  // on a photo — either way, come back for it.
-  // A row held back above is now rebased onto what just landed, so come
-  // straight back for it rather than waiting out a backoff.
+  // A row held back above is now rebased onto what just landed, so it may go
+  // straight away. A mutation the *server* asked us to retry may not: an HTTP
+  // 200 carrying a `retry` verdict is the server saying "not now", and reading
+  // it as success is what produced a zero-delay re-send loop.
   const remaining = (await listQueue()).filter((entry) => !entry.blocked);
-  if (remaining.length > 0) scheduleRetry(waitingOnPhotos > 0 ? undefined : 0);
+  const askedToRetry = results.some((result) => result.status === "retry");
+  const trip: RoundTrip = askedToRetry
+    ? { kind: "retry-outcome" }
+    : savedSomething
+      ? { kind: "applied" }
+      : { kind: "settled" };
+
+  scheduleFrom(trip, remaining.length > 0 || waitingOnPhotos > 0);
 
   return state;
 }
@@ -583,16 +645,55 @@ function cancelRetry() {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
   consecutiveFailures = 0;
+  setState({ nextRetryAt: null, attempt: 0 });
 }
 
-function scheduleRetry(delay?: number) {
+/**
+ * Decides when to come back, from what the round trip actually achieved.
+ *
+ * The rule this replaces read the *transport*: any HTTP 200 reset the failure
+ * count, and then, because something was still queued, scheduled the next
+ * attempt with a delay of zero. But a 200 from /api/studio/sync only means the
+ * request arrived — every mutation inside carries its own verdict, and `retry`
+ * is one of them. A server having a bad minute therefore received requests as
+ * fast as the phone could produce them.
+ *
+ * See nextAttempt() in retry-policy.ts for the arithmetic; this is only the
+ * timer and the state it reports.
+ */
+function scheduleFrom(trip: RoundTrip, moreWaiting: boolean) {
+  const next = nextAttempt({ failures: consecutiveFailures }, trip, { moreWaiting });
+  consecutiveFailures = next.failures;
+
   if (retryTimer) clearTimeout(retryTimer);
-  const wait =
-    delay ?? BACKOFF_MS[Math.min(consecutiveFailures++, BACKOFF_MS.length - 1)];
+  retryTimer = null;
+
+  if (next.delayMs === null) {
+    setState({ nextRetryAt: null, attempt: next.failures });
+    return;
+  }
+
+  setState({
+    nextRetryAt: new Date(Date.now() + next.delayMs).toISOString(),
+    attempt: next.failures,
+  });
   retryTimer = setTimeout(() => {
     retryTimer = null;
     void flushOutbox();
-  }, wait);
+  }, next.delayMs);
+  // A pending retry is not a reason to stay alive. Browsers have no unref, so
+  // this is a no-op there; under Node it stops a scheduled retry holding the
+  // test runner open for two minutes.
+  (retryTimer as { unref?: () => void }).unref?.();
+}
+
+/** Kept for the callers that only mean "come back when you can". */
+function scheduleRetry(delay?: number) {
+  if (delay === 0) {
+    scheduleFrom({ kind: "applied" }, true);
+    return;
+  }
+  scheduleFrom({ kind: "retry-outcome" }, true);
 }
 
 /**

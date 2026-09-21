@@ -15,6 +15,7 @@ import {
   resolutionMap,
   unfinishedResolutions,
 } from "./media-resolution";
+import { UPLOAD_TIMEOUT_MS, fetchWithTimeout } from "./net";
 import { classifyUploadFailure, UploadError } from "./retry-policy";
 import { newMutationId } from "./save";
 
@@ -312,9 +313,13 @@ export async function uploadAsset(
   // creating a second copy of the same photograph.
   if (publicId) fd.append("public_id", publicId);
 
-  const res = await fetch(
+  // A transfer that never answers must not hold the flush open for the life of
+  // the tab: the bytes are still on the device and the retry is safe, so
+  // giving up costs one round trip and getting stuck costs everything after it.
+  const res = await fetchWithTimeout(
     `https://api.cloudinary.com/v1_1/${cloudName}/${isImage ? "image" : "raw"}/upload`,
-    { method: "POST", body: fd }
+    { method: "POST", body: fd },
+    UPLOAD_TIMEOUT_MS
   );
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -382,11 +387,11 @@ async function uploadClip(
   }
   const { uploadUrl, publicUrl } = await signRes.json();
 
-  const res = await fetch(uploadUrl, {
-    method: "PUT",
-    body: file,
-    headers: { "Content-Type": "video/mp4" },
-  });
+  const res = await fetchWithTimeout(
+    uploadUrl,
+    { method: "PUT", body: file, headers: { "Content-Type": "video/mp4" } },
+    UPLOAD_TIMEOUT_MS
+  );
   if (!res.ok) {
     throw new UploadError(`Upload to R2 failed (${res.status}).`, res.status, "transfer");
   }
