@@ -871,7 +871,19 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
             tone: "danger" as const,
             confirm: `Delete “${doc.title || `this ${kind}`}” for good? This can't be undone.`,
             onSelect: () => {
-              void (isProject ? deleteProject(entityId) : deleteJournal(entityId));
+              // The result is read now that a delete can be refused. It
+              // succeeds by redirecting and only ever returns when something
+              // went wrong — a lost connection, or the database declining —
+              // and discarding that left the author looking at a page that
+              // had quietly not deleted anything.
+              void (async () => {
+                const outcome = isProject
+                  ? await deleteProject(entityId)
+                  : await deleteJournal(entityId);
+                if (outcome?.status === "error") {
+                  setError(outcome.message ?? "That couldn't be deleted.");
+                }
+              })();
             },
           } as ActionItem,
         ]
