@@ -137,10 +137,14 @@ export const NO_POSTGRES =
 export interface ConcurrentHarness {
   /** Opens another independent connection, signed in as the site owner. */
   connect(): Promise<Client>;
+  /** Opens one with only the anon role, so RLS actually applies. */
+  connectAsAnon(): Promise<Client>;
   /** The owner's id, for anything that needs to name it. */
   ownerId: string;
   /** The exact `updated_at` of a row, as text — microseconds intact. */
   versionOf(table: string, id: string): Promise<string>;
+  /** Applies one further migration, for testing an upgrade in place. */
+  apply(step: number): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -178,6 +182,16 @@ export async function concurrentDatabase(
   await setup.query(SUPABASE_SHIM);
   for (let step = 1; step <= through; step++) await setup.query(migrationFile(step));
 
+  // Supabase's own bootstrap grants table privileges to anon and authenticated
+  // and relies on RLS to decide what they may actually do. The migrations
+  // assume that arrangement — their policies are written `to anon` — so a
+  // harness that omitted it would test a database anon cannot reach at all,
+  // and would report the public insert path as safe because it was unreachable.
+  await setup.query(`
+    grant usage on schema public to anon, authenticated;
+    grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+  `);
+
   const {
     rows: [owner],
   } = await setup.query<{ id: string }>(
@@ -196,6 +210,27 @@ export async function concurrentDatabase(
       await client.query("select set_config('test.user_id', $1, false)", [owner.id]);
       opened.push(client);
       return client;
+    },
+    /**
+     * A connection with no more authority than a visitor's.
+     *
+     * `set role anon` is what makes RLS apply: the harness otherwise connects
+     * as the superuser, which bypasses every policy, so a test of the public
+     * insert path would be testing nothing.
+     */
+    async connectAsAnon() {
+      const client = await open();
+      await client.query("set role anon");
+      opened.push(client);
+      return client;
+    },
+    async apply(step) {
+      const client = await open();
+      try {
+        await client.query(migrationFile(step));
+      } finally {
+        await client.end();
+      }
     },
     async versionOf(table, id) {
       const client = await open();
