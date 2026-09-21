@@ -29,7 +29,15 @@ import { deleteJournal, deleteProject } from "@/app/admin/actions";
 import { handOffSave } from "@/lib/studio-local/save";
 import { intentFor } from "@/lib/studio-save-intent";
 import { subscribeSyncEvents, type SyncState } from "@/lib/studio-local/sync";
-import { deleteDraft, readDraft, writeDraft } from "@/lib/studio-local/drafts";
+import { deleteDraft, writeDraft } from "@/lib/studio-local/drafts";
+import {
+  carryRecoveryOver,
+  findRecovery,
+  keepRecovery,
+  markRecoveryHandled,
+  recoveryWriter,
+  restoreBase,
+} from "@/lib/studio-local/recovery";
 import { hasPendingRefs, replacePendingRefs } from "@/lib/studio-media-refs";
 import { clearStarterMark, findStarterPrompts, stripStarterPrompts } from "@/lib/starter-prompts";
 import {
@@ -84,22 +92,6 @@ const PERSIST_DEBOUNCE_MS = 400;
  * just given focus. Everything else has nowhere to type without the panel.
  */
 const EDITS_INLINE: BlockType[] = ["paragraph", "heading", "quote", "button", "divider"];
-
-/**
- * Moves an unsaved draft from "project:new" to "project:<id>".
- *
- * Creating something changes the key its local draft is filed under, and the
- * route replaces itself the moment the server answers. Anything typed during
- * that round trip is filed under the old key; without this it would sit there
- * as an orphan, invisible to the editor it belongs to and offered instead to
- * the *next* new project someone starts.
- */
-async function carryDraftOver(from: string, to: string) {
-  if (from === to) return;
-  const stored = await readDraft<{ snapshot: string; savedAt: string }>(from);
-  if (stored) await writeDraft({ ...stored, key: to, localId: to });
-  await deleteDraft(from);
-}
 
 /**
  * The queue's word for a refusal, in the status machine's vocabulary.
@@ -162,7 +154,11 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [addBlockAt, setAddBlockAt] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [recovered, setRecovered] = useState<{ snapshot: string; savedAt: string } | null>(null);
+  const [recovered, setRecovered] = useState<{
+    snapshot: string;
+    savedAt: string;
+    baseUpdatedAt: string | null;
+  } | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
@@ -244,9 +240,29 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
      Anything the site does not have is written down after a pause in typing.
      This is the safety net under "you can just leave": there is no
      beforeunload prompt any more, because there is nothing to lose. */
-  const persistRecovery = useCallback(async () => {
-    setRecovery("writing");
-    const stored = await writeDraft({
+  /**
+   * The copy on this device, and the one thing allowed to remove it.
+   *
+   * The writer owns the debounce so that leaving the editor *flushes* rather
+   * than cancels — internal navigation unmounts without firing `pagehide` or
+   * `visibilitychange`, so the timer used to be cleared with the last thing
+   * typed still in it. See lib/studio-local/recovery.ts.
+   */
+  const writer = useRef(recoveryWriter());
+
+  /**
+   * Whether the recovery lookup has finished.
+   *
+   * Nothing may delete a recovery copy before this is true. `kept` and
+   * `synced` both start as the server document, so `snapshot === synced` is
+   * true on the very first commit — and the cleanup that used to run there
+   * deleted the previous session's writing before the effect that looks for
+   * it had read a byte.
+   */
+  const [lookedForRecovery, setLookedForRecovery] = useState(false);
+
+  const draftRecord = useCallback(
+    () => ({
       key: draftKey,
       entity: kind,
       entityId: initial?.id ?? null,
@@ -255,20 +271,37 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       baseUpdatedAt: initial?.updated_at ?? null,
       editedAt: new Date().toISOString(),
       label: doc.title.trim() || `Untitled ${kind}`,
-    });
-    // The answer is used, not discarded. This is the whole point of the change.
-    setRecovery(stored ? "safe" : "failed");
-  }, [draftKey, kind, initial?.id, initial?.updated_at, snapshot, doc.title]);
+    }),
+    [draftKey, kind, initial?.id, initial?.updated_at, snapshot, doc.title]
+  );
 
   useEffect(() => {
-    if (snapshot === synced) {
-      void deleteDraft(draftKey);
-      setRecovery("idle");
+    if (snapshot !== synced) {
+      setRecovery("writing");
+      writer.current.schedule(draftRecord(), PERSIST_DEBOUNCE_MS, (stored) =>
+        setRecovery(stored ? "safe" : "failed")
+      );
       return;
     }
-    const timer = setTimeout(() => void persistRecovery(), PERSIST_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [snapshot, synced, draftKey, persistRecovery]);
+    // Identical to what the site has, so there is nothing here to keep — but
+    // only once we know there was nothing here to offer either.
+    if (!lookedForRecovery) return;
+    // Flush first: an edit typed and undone inside the debounce still has a
+    // write waiting, and letting it land *after* the cleanup would leave a
+    // stale copy behind that nothing would come back for.
+    void writer.current
+      .flush()
+      .then(() => keepRecovery(draftKey, snapshot))
+      .then(() => setRecovery("idle"));
+  }, [snapshot, synced, draftKey, draftRecord, lookedForRecovery]);
+
+  /* ── going away mid-pause is not a reason to lose the pause's contents ── */
+  useEffect(() => {
+    const pending = writer.current;
+    return () => {
+      void pending.stop();
+    };
+  }, []);
 
   /* ── the moment the app might not come back ──
      Being switched away from is the likeliest way this editor stops existing,
@@ -277,7 +310,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   useEffect(() => {
     if (snapshot === synced) return;
     const flush = () => {
-      if (document.visibilityState === "hidden") void persistRecovery();
+      if (document.visibilityState === "hidden") void writer.current.flush();
     };
     document.addEventListener("visibilitychange", flush);
     window.addEventListener("pagehide", flush);
@@ -285,7 +318,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       document.removeEventListener("visibilitychange", flush);
       window.removeEventListener("pagehide", flush);
     };
-  }, [snapshot, synced, persistRecovery]);
+  }, [snapshot, synced]);
 
   /* ── the only case worth interrupting someone over ──
      Not "you have unsaved changes" — that is normal here and the recovery copy
@@ -301,13 +334,11 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   /* ── a draft left here last time is offered, never applied ── */
   useEffect(() => {
     let cancelled = false;
-    void readDraft<{ snapshot: string; savedAt: string }>(draftKey).then((stored) => {
-      if (cancelled || !stored?.value?.snapshot) return;
-      if (stored.value.snapshot === snapshot) {
-        void deleteDraft(draftKey);
-        return;
-      }
-      setRecovered(stored.value);
+    void findRecovery(draftKey, snapshot).then((decision) => {
+      if (cancelled) return;
+      if (decision.kind === "offer") setRecovered(decision);
+      // Only now may anything tidy a copy away. Nothing deletes before this.
+      setLookedForRecovery(true);
     });
     return () => {
       cancelled = true;
@@ -356,7 +387,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
           }
           if (isNew) {
             const next = `${kind}:${event.save.id}`;
-            void carryDraftOver(draftKey, next).then(() => {
+            void carryRecoveryOver(draftKey, next).then(() => {
               router.replace(`/admin/${isProject ? "projects" : "journal"}/${event.save.id}`);
             });
           }
@@ -464,7 +495,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         setQueued(false);
         if (isNew) {
           const next = `${kind}:${result.id}`;
-          void carryDraftOver(draftKey, next).then(() => {
+          void carryRecoveryOver(draftKey, next).then(() => {
             router.replace(`/admin/${isProject ? "projects" : "journal"}/${result.id}`);
           });
         }
@@ -488,24 +519,22 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
    * gets the published one, and the bar keeps saying so until you update live.
    */
   const keepHere = useCallback(async () => {
-    const stored = await writeDraft({
-      key: draftKey,
-      entity: kind,
-      entityId: initial?.id ?? null,
-      localId: draftKey,
-      value: { snapshot, savedAt: new Date().toISOString() },
-      baseUpdatedAt: initial?.updated_at ?? null,
-      editedAt: new Date().toISOString(),
-      label: doc.title.trim() || `Untitled ${kind}`,
-    });
+    // Settle the pending automatic write first rather than racing it: an
+    // explicit save and a debounced one are the same record, and the one that
+    // landed last would otherwise decide what is stored.
+    await writer.current.flush();
+    // The answer is used, not discarded: writeDraft() returns false when the
+    // browser stored nothing, and "Saved on this iPhone" must not be said then.
+    const stored = await writeDraft(draftRecord());
 
     if (!stored) {
       setError("This browser isn't letting Studio keep a copy here.");
       return;
     }
     setError(null);
+    setRecovery("safe");
     setKept(snapshot);
-  }, [draftKey, kind, initial?.id, initial?.updated_at, snapshot, doc.title]);
+  }, [draftRecord, snapshot]);
 
   const runAction = useCallback(
     (action: EditorAction) => {
@@ -939,6 +968,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                 type="button"
                 onClick={() => {
                   void deleteDraft(draftKey);
+                  markRecoveryHandled(draftKey);
                   setRecovered(null);
                 }}
                 className="min-h-12 rounded-md border border-line bg-surface text-sm font-semibold text-soft"
@@ -951,9 +981,15 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                   try {
                     const restored = JSON.parse(recovered.snapshot) as EditorDoc;
                     setDoc(restored);
+                    // And the version it was written against, not the one this
+                    // page happened to be served with. Adopting today's would
+                    // tell the server this writing had seen a change it never
+                    // saw, and the conflict screen would never open.
+                    setBaseUpdatedAt(restoreBase(recovered, initial?.updated_at ?? null));
                   } catch {
                     /* nothing usable in the stored draft */
                   }
+                  markRecoveryHandled(draftKey);
                   setRecovered(null);
                 }}
                 className="min-h-12 rounded-md bg-hl text-sm font-semibold text-hl-ink"
