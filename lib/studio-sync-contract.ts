@@ -1,3 +1,4 @@
+import { firstBlockProblem } from "./block-contract";
 import type { Block } from "./types";
 
 /**
@@ -133,6 +134,11 @@ export function describeMalformedMutation(value: unknown): string | null {
   if (!payload.fields || typeof payload.fields !== "object" || Array.isArray(payload.fields))
     return "The payload has no fields.";
   if (!Array.isArray(payload.blocks)) return "The content payload isn't a list of blocks.";
+  // The same contract the importer uses. A block of a known type can still
+  // carry a payload the renderer cannot draw, and a server component that
+  // throws is a 500 on the whole article rather than one missing block.
+  const badBlock = firstBlockProblem(payload.blocks);
+  if (badBlock) return badBlock;
   if (!Array.isArray(payload.tagIds) || !payload.tagIds.every(isUuid))
     return "The tag list contains an invalid id.";
 

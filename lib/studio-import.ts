@@ -1,5 +1,6 @@
 import { sanitizeStudioHtml } from "./studio-html";
 import { convertHtmlToBlocks } from "./studio-import-html";
+import { firstBlockProblem } from "./block-contract";
 import { BLOCK_HINTS, type Block, type BlockType } from "./types";
 
 /**
@@ -160,6 +161,14 @@ export function parseStudioJson(raw: string, kind: "project" | "journal"): Impor
   if (entries.length === 0) {
     return { ok: false, error: "There were no blocks Studio could use in that document." };
   }
+
+  // A block that is the right *kind* can still be the wrong *shape*, and until
+  // now nothing looked. `{ type: "heading", data: { text: { bad: "shape" } } }`
+  // imported cleanly and then took the published article down with "Objects
+  // are not valid as a React child". The contract is shared with the sync
+  // endpoint so the two doors cannot drift — see lib/block-contract.ts.
+  const problem = firstBlockProblem(entries);
+  if (problem) return { ok: false, error: problem };
 
   return {
     ok: true,

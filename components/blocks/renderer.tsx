@@ -8,6 +8,7 @@ import { fileSrc } from "@/lib/cloudinary";
 import { parseEmbed } from "@/lib/embed";
 import { sanitizeStudioHtml } from "@/lib/studio-html";
 import { blockLayoutClasses, pixelDimension } from "@/lib/block-layout";
+import { safeBlocks } from "@/lib/block-contract";
 import {
   LEGACY_GALLERY_LAYOUT,
   resolveGalleryLayout,
@@ -264,11 +265,26 @@ export const renderers: Record<BlockType, BlockFC> = {
    nothing read.
 */
 
+/**
+ * Draws the blocks a page can actually draw.
+ *
+ * `safeBlocks` is the read side of lib/block-contract.ts, and it takes the
+ * opposite posture from the write side deliberately. New content is refused
+ * precisely, naming the block and the field, so the author can fix it. Content
+ * that is *already stored* is filtered instead: a row written before that
+ * contract existed, or by a route nobody anticipated, loses its own block and
+ * nothing else.
+ *
+ * The difference matters because these are server components. A block whose
+ * `text` is an object throws "Objects are not valid as a React child" with no
+ * error boundary above it, which is not a broken block — it is a 500 on the
+ * whole article, including every paragraph that was perfectly fine.
+ */
 export function BlockRenderer({ blocks }: { blocks: Block[] }) {
   if (!blocks?.length) return null;
   return (
     <div className="flex flex-col w-full">
-      {blocks
+      {safeBlocks(blocks)
         .slice()
         .sort((a, b) => a.position - b.position)
         .map((block) => {
