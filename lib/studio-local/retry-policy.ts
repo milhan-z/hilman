@@ -138,6 +138,9 @@ export const BACKOFF_STEPS_MS = [5_000, 15_000, 30_000, 60_000, 120_000];
 /** The most a retry will ever be delayed by. */
 export const MAX_BACKOFF_MS = BACKOFF_STEPS_MS[BACKOFF_STEPS_MS.length - 1];
 
+/** How soon to look again when the hold-up is not a failure. */
+export const DEFERRED_DELAY_MS = 5_000;
+
 /**
  * What a round trip means for how soon to try again.
  *
@@ -155,7 +158,15 @@ export type RoundTrip =
   /** Nothing arrived, or the transport itself failed. */
   | { kind: "transport"; failure: Failure }
   /** Answered, and the answer will not change. Nothing to schedule. */
-  | { kind: "settled" };
+  | { kind: "settled" }
+  /**
+   * Nothing went out, for a reason that is not a failure: a save waiting on a
+   * photograph that has not uploaded yet, or one another tab is already
+   * carrying. Come back shortly, but do not call it an attempt — the count is
+   * what the studio shows the author, and "attempt 6" is a lie when nothing
+   * has gone wrong.
+   */
+  | { kind: "deferred" };
 
 export interface BackoffState {
   /** How many times in a row we have come back without finishing the work. */
@@ -190,6 +201,16 @@ export function nextAttempt(
 
   if (trip.kind === "settled") {
     return { failures: 0, delayMs: options.moreWaiting ? 0 : null };
+  }
+
+  if (trip.kind === "deferred") {
+    // The failure count is left exactly as it was, so an unrelated backoff
+    // already in progress is neither reset nor advanced.
+    const step =
+      state.failures > 0
+        ? BACKOFF_STEPS_MS[Math.min(state.failures - 1, BACKOFF_STEPS_MS.length - 1)]
+        : DEFERRED_DELAY_MS;
+    return { failures: state.failures, delayMs: Math.max(DEFERRED_DELAY_MS, step) };
   }
 
   const failures = state.failures + 1;

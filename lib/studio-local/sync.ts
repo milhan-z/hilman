@@ -297,7 +297,9 @@ async function runFlush(): Promise<SyncState> {
       ...(media.offline ? { reachable: false } : {}),
       lastError: null,
     });
-    scheduleRetry();
+    // Held back by a photograph that has not uploaded yet. Not a failure, so
+    // it does not advance the backoff or the attempt count.
+    scheduleFrom({ kind: "deferred" }, true);
     return state;
   }
 
@@ -317,7 +319,7 @@ async function runFlush(): Promise<SyncState> {
     // Everything sendable belongs to another tab right now. Not an error and
     // not offline — just somebody else's turn.
     setState({ syncing: false });
-    scheduleRetry();
+    scheduleFrom({ kind: "deferred" }, true);
     return state;
   }
 
@@ -568,14 +570,22 @@ async function applyOutcome(outcome: SyncOutcome, batch: QueuedMutation[]) {
 export async function sendDirect(mutation: SyncMutation): Promise<SyncOutcome | null> {
   let response: Response;
   try {
-    response = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ mutations: [mutation] }),
-    });
-  } catch {
-    setState({ reachable: false });
+    response = await fetchWithTimeout(
+      ENDPOINT,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ mutations: [mutation] }),
+      },
+      SYNC_TIMEOUT_MS
+    );
+  } catch (error) {
+    // This is the browser that stores nothing, so there is no queue to fall
+    // back on — but a request that hangs for ever still has to end, or the
+    // editor waits on it indefinitely with no way to say so.
+    const failure = classifyFailure(error);
+    setState({ reachable: !failure.offline });
     return null;
   }
 

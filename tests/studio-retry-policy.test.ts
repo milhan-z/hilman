@@ -8,6 +8,7 @@ import { flushOutbox, getSyncState } from "../lib/studio-local/sync";
 import { fetchWithTimeout } from "../lib/studio-local/net";
 import {
   BACKOFF_STEPS_MS,
+  DEFERRED_DELAY_MS,
   MAX_BACKOFF_MS,
   TimeoutError,
   UploadError,
@@ -300,4 +301,41 @@ test("everything landing clears the failure count", async () => {
   assert.equal(state.authRequired, false);
   assert.equal(state.nextRetryAt, null, "nothing waiting, nothing scheduled");
   assert.equal((await listQueue()).length, 0);
+});
+
+/* ══ 5. waiting for something that is not a failure ════════ */
+
+test("work another tab is carrying is not counted as an attempt", async () => {
+  // Nothing has gone wrong: somebody else has it, or a photograph is still
+  // going up. Counting those as failures would climb the backoff and show the
+  // author an attempt count for a studio that is working perfectly.
+  const next = nextAttempt({ failures: 0 }, { kind: "deferred" }, { moreWaiting: true });
+  assert.equal(next.failures, 0, "no attempt was made, so none is recorded");
+  assert.equal(next.delayMs, DEFERRED_DELAY_MS, "it just looks again shortly");
+});
+
+test("a deferred check does not undo a backoff already in progress", async () => {
+  const next = nextAttempt({ failures: 3 }, { kind: "deferred" }, { moreWaiting: true });
+  assert.equal(next.failures, 3, "the failure count is left exactly as it was");
+  assert.ok(next.delayMs! >= DEFERRED_DELAY_MS);
+  assert.equal(next.delayMs, BACKOFF_STEPS_MS[2], "and it keeps the longer wait");
+});
+
+test("a second tab finding everything claimed waits rather than spinning", async () => {
+  let requests = 0;
+  (globalThis as { fetch: unknown }).fetch = (async () => {
+    requests += 1;
+    return { ok: true, status: 200, json: async () => ({ results: [] }) };
+  }) as unknown as typeof fetch;
+
+  await enqueue({ mutationId: M, ...row, payload });
+  await claimForSending(M, "the-other-tab"); // somebody else is carrying it
+
+  await flushOutbox();
+
+  assert.equal(requests, 0, "it did not send a second copy");
+  assert.equal(getSyncState().attempt, 0, "and nothing was recorded as a failure");
+  const wait = Date.parse(getSyncState().nextRetryAt ?? "") - Date.now();
+  assert.ok(wait > 1_000, "it comes back later instead of looping");
+  assert.equal((await listQueue()).length, 1, "the work is untouched");
 });
