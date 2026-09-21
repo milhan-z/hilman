@@ -2,7 +2,6 @@
 
 import {
   describeConflict,
-  rebaseQueued,
   type SyncMutation,
   type SyncOutcome,
   type SyncResponse,
@@ -19,14 +18,17 @@ import {
   recordAttempt,
   releaseClaim,
   releaseStaleSends,
-  replaceQueue,
   senderId,
   type QueuedMutation,
 } from "./outbox";
 import { touchSnapshot } from "./snapshots";
 import { flushPendingMedia, listPendingMedia, type PendingMedia } from "./media";
-import { listDrafts, writeDraft } from "./drafts";
-import { hasPendingRefs, replacePendingRefs } from "../studio-media-refs";
+import {
+  applyResolutions,
+  listResolutions,
+  unfinishedResolutions,
+} from "./media-resolution";
+import { hasPendingRefs } from "../studio-media-refs";
 import type { RejectionReason } from "../studio-sync-contract";
 import type { UploadNoun } from "../studio-editor-state";
 
@@ -89,6 +91,15 @@ export interface SyncState {
    * says out loud. See UploadNoun in lib/studio-editor-state.ts.
    */
   uploads: { pending: number; failed: number; noun: UploadNoun };
+  /**
+   * Files the provider accepted but the media library did not record.
+   *
+   * A real, separate state: the reference is correct and the page will render,
+   * but the asset will not appear in the library until the bookkeeping is
+   * retried. Reporting it as finished was how a file could exist remotely and
+   * nowhere in the CMS with nothing saying so.
+   */
+  unrecordedMedia: number;
 }
 
 const initialState: SyncState = {
@@ -103,6 +114,7 @@ const initialState: SyncState = {
   lastFailure: null,
   blockedPrompts: 0,
   uploads: { pending: 0, failed: 0, noun: "photo" },
+  unrecordedMedia: 0,
 };
 
 let state: SyncState = initialState;
@@ -127,7 +139,8 @@ function setState(patch: Partial<SyncState>) {
     next.conflicts === state.conflicts &&
     next.media === state.media &&
     next.lastSyncedAt === state.lastSyncedAt &&
-    next.lastError === state.lastError
+    next.lastError === state.lastError &&
+    next.unrecordedMedia === state.unrecordedMedia
   ) {
     return;
   }
@@ -370,20 +383,31 @@ async function runFlush(): Promise<SyncState> {
  */
 async function sendStashedPhotos(): Promise<{ offline: boolean }> {
   const stashed = await listPendingMedia();
-  if (stashed.filter((item) => !item.blocked).length === 0) return { offline: false };
+  const carried = await unfinishedResolutions();
+
+  // Uploads waiting, or paperwork from a previous run that never finished.
+  // The second is the case the old code could not even represent: the mapping
+  // from placeholder to remote id lived in a local variable, so being killed
+  // after the bytes were released left a reference nothing could resolve.
+  if (stashed.filter((item) => !item.blocked).length === 0 && carried.length === 0) {
+    return { offline: false };
+  }
 
   setState({ syncing: true });
-  const { resolved, offline } = await flushPendingMedia();
+  const { resolved, offline, unrecorded } = await flushPendingMedia();
   if (Object.keys(resolved).length === 0) return { offline };
 
-  const queue = await listQueue();
-  const rewritten = queue.map((entry) => replacePendingRefs(entry, resolved));
-  if (JSON.stringify(queue) !== JSON.stringify(rewritten)) await replaceQueue(rewritten);
+  // Rewrites the queue, the recovery drafts *and* the stored conflicts, then
+  // verifies by reading them back before forgetting the mapping. See
+  // lib/studio-local/media-resolution.ts.
+  await applyResolutions(await listResolutions());
 
-  for (const draft of await listDrafts()) {
-    const next = replacePendingRefs(draft, resolved);
-    if (JSON.stringify(next) !== JSON.stringify(draft)) await writeDraft(next);
-  }
+  setState({
+    // Files the provider took but the media library did not record. The
+    // reference is correct and the asset is usable; only the bookkeeping is
+    // missing, and saying nothing would make that look like a clean finish.
+    unrecordedMedia: Object.keys(unrecorded).length,
+  });
 
   emit({ type: "media", resolved });
   return { offline };

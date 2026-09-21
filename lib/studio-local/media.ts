@@ -10,6 +10,12 @@ import {
   type MediaReport,
   type ProgressFn,
 } from "./media-optimize";
+import {
+  rememberResolution,
+  resolutionMap,
+  unfinishedResolutions,
+} from "./media-resolution";
+import { classifyUploadFailure, UploadError } from "./retry-policy";
 import { newMutationId } from "./save";
 
 /**
@@ -268,17 +274,31 @@ export interface UploadedAsset {
  * Step 3 has its own outcome. It used to be awaited and discarded, so a failed
  * insert produced a file that existed in Cloudinary but nowhere in the CMS.
  */
-export async function uploadAsset(file: Blob, name: string, folder = "hilman"): Promise<UploadedAsset> {
+export async function uploadAsset(
+  file: Blob,
+  name: string,
+  folder = "hilman",
+  assetId?: string
+): Promise<UploadedAsset> {
   const signRes = await fetch("/api/cloudinary/sign", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ folder }),
+    body: JSON.stringify({ folder, ...(assetId ? { assetId } : {}) }),
   });
   if (!signRes.ok) {
     const err = await signRes.json().catch(() => ({}));
-    throw new Error(err.error ?? "Could not sign upload");
+    // The status travels. Thrown as a bare Error, a 429 and a 415 became the
+    // same untyped string and every one of them was treated as permanent.
+    throw new UploadError(err.error ?? "Could not sign upload", signRes.status, "sign");
   }
-  const { cloudName, apiKey, timestamp, signature, folder: signedFolder } = await signRes.json();
+  const {
+    cloudName,
+    apiKey,
+    timestamp,
+    signature,
+    folder: signedFolder,
+    publicId,
+  } = await signRes.json();
 
   const isImage = file.type.startsWith("image/");
   const fd = new FormData();
@@ -287,6 +307,10 @@ export async function uploadAsset(file: Blob, name: string, folder = "hilman"): 
   fd.append("timestamp", String(timestamp));
   fd.append("signature", signature);
   fd.append("folder", signedFolder);
+  // Signed above, so this is the id the route agreed to and not one the
+  // browser picked. Sending the same one again overwrites rather than
+  // creating a second copy of the same photograph.
+  if (publicId) fd.append("public_id", publicId);
 
   const res = await fetch(
     `https://api.cloudinary.com/v1_1/${cloudName}/${isImage ? "image" : "raw"}/upload`,
@@ -294,7 +318,11 @@ export async function uploadAsset(file: Blob, name: string, folder = "hilman"): 
   );
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`Cloudinary upload failed${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+    throw new UploadError(
+      `Cloudinary upload failed${detail ? `: ${detail.slice(0, 200)}` : ""}`,
+      res.status,
+      "transfer"
+    );
   }
   const asset = await res.json();
 
@@ -331,15 +359,26 @@ export async function uploadAsset(file: Blob, name: string, folder = "hilman"): 
  * URL, not an id a display-time helper still has to resolve: unlike a
  * Cloudinary `public_id`, this is already the value `<video src>` will use.
  */
-async function uploadClip(file: Blob, name: string, folder = "clips"): Promise<{ url: string }> {
+async function uploadClip(
+  file: Blob,
+  name: string,
+  folder = "clips",
+  assetId?: string
+): Promise<{ url: string }> {
   const signRes = await fetch("/api/r2/sign", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ folder, filename: name, contentType: "video/mp4", size: file.size }),
+    body: JSON.stringify({
+      folder,
+      filename: name,
+      contentType: "video/mp4",
+      size: file.size,
+      ...(assetId ? { assetId } : {}),
+    }),
   });
   if (!signRes.ok) {
     const err = await signRes.json().catch(() => ({}));
-    throw new Error(err.error ?? "Could not sign upload");
+    throw new UploadError(err.error ?? "Could not sign upload", signRes.status, "sign");
   }
   const { uploadUrl, publicUrl } = await signRes.json();
 
@@ -349,7 +388,7 @@ async function uploadClip(file: Blob, name: string, folder = "clips"): Promise<{
     headers: { "Content-Type": "video/mp4" },
   });
   if (!res.ok) {
-    throw new Error(`Upload to R2 failed (${res.status}).`);
+    throw new UploadError(`Upload to R2 failed (${res.status}).`, res.status, "transfer");
   }
 
   return { url: publicUrl };
@@ -365,6 +404,43 @@ export interface MediaFlushReport {
   resolved: Record<string, string>;
   /** True when at least one upload failed for a reason worth retrying. */
   offline: boolean;
+  /**
+   * placeholder → why it is not in the media library, for files the provider
+   * accepted but the library row did not record. The reference is correct and
+   * the asset is usable; only the bookkeeping is missing.
+   */
+  unrecorded: Record<string, string>;
+}
+
+/**
+ * Where the bytes actually go.
+ *
+ * An interface rather than two direct calls so the lifecycle around them can
+ * be tested without a network: what matters here is the *order* of the local
+ * writes, and that order is the thing that used to be wrong.
+ */
+export interface MediaUploader {
+  image(file: Blob, name: string, folder: string, assetId?: string): Promise<UploadedAsset>;
+  clip(file: Blob, name: string, folder: string, assetId?: string): Promise<{ url: string }>;
+}
+
+const liveUploader: MediaUploader = {
+  image: (file, name, folder, assetId) => uploadAsset(file, name, folder, assetId),
+  clip: (file, name, folder, assetId) => uploadClip(file, name, folder, assetId),
+};
+
+/**
+ * The stable remote name for a stashed file: the placeholder's own uuid.
+ *
+ * `pending:<uuid>` is assigned once, when the file is stored on the device,
+ * and never changes. Using it as the upload identity means a retry after a
+ * lost acknowledgement lands on the same object rather than making another.
+ */
+const assetIdOf = (ref: string) => ref.slice(PENDING_PREFIX.length).toLowerCase();
+
+/** Test seam for the one write whose refusal must not cost the bytes. */
+export interface FlushIo {
+  remember?: typeof rememberResolution;
 }
 
 /**
@@ -373,39 +449,103 @@ export interface MediaFlushReport {
  * Sequentially rather than in parallel: these are photographs on a phone
  * connection, and eight simultaneous uploads on a weak signal is how all eight
  * time out instead of the first three succeeding.
+ *
+ * ── the order, which is the whole point ──
+ *
+ *   1. upload the bytes
+ *   2. write down where they went   <- durable, survives the app being killed
+ *   3. release the local copy
+ *
+ * It used to be 1, then 3, with the mapping held in a local variable and the
+ * documents rewritten by the caller afterwards. Interrupted in between, the
+ * bytes were gone and nothing knew the remote id — leaving a placeholder that
+ * could never resolve and a queued save held behind it for ever.
+ *
+ * Step 2 failing is survivable and step 3 is skipped when it does: the local
+ * copy is then the only route back to that photograph, so it stays.
  */
-export async function flushPendingMedia(): Promise<MediaFlushReport> {
+export async function flushPendingMedia(
+  uploader: MediaUploader = liveUploader,
+  io: FlushIo = {}
+): Promise<MediaFlushReport> {
+  const remember = io.remember ?? rememberResolution;
+
+  // Anything uploaded on a previous run whose paperwork never finished. Its
+  // bytes may or may not still be here; either way it does not go up again.
+  const carried = await unfinishedResolutions();
+  const resolved: Record<string, string> = resolutionMap(carried);
+  const unrecorded: Record<string, string> = {};
+  for (const item of carried) {
+    if (item.unrecorded) unrecorded[item.ref.toLowerCase()] = item.unrecorded;
+  }
+
   const pending = (await listPendingMedia()).filter((item) => !item.blocked);
-  const resolved: Record<string, string> = {};
   let offline = false;
 
   for (const item of pending) {
-    try {
-      if (item.kind === "loop-clip") {
-        const clip = await uploadClip(item.blob, item.name, item.folder);
-        resolved[item.ref.toLowerCase()] = clip.url;
-      } else {
-        const asset = await uploadAsset(item.blob, item.name, item.folder);
-        resolved[item.ref.toLowerCase()] = asset.public_id;
-      }
+    const key = item.ref.toLowerCase();
+
+    // Already uploaded, and we know where to. The interruption was after the
+    // upload, so all that is left is to let the bytes go.
+    if (resolved[key]) {
       await discardPendingMedia(item.ref);
-    } catch (error: any) {
-      const message = String(error?.message ?? error);
+      continue;
+    }
 
-      // A rejected fetch means no network; anything Cloudinary or our own
-      // signing endpoint *answered* is a decision, and repeating it will get
-      // the same answer.
-      const networkFailure = error instanceof TypeError || /Failed to fetch|NetworkError/i.test(message);
-      offline ||= networkFailure;
+    try {
+      const outcome =
+        item.kind === "loop-clip"
+          ? { reference: (await uploader.clip(item.blob, item.name, item.folder, assetIdOf(item.ref))).url }
+          : await (async () => {
+              const asset = await uploader.image(item.blob, item.name, item.folder, assetIdOf(item.ref));
+              return { reference: asset.public_id, unrecorded: asset.unrecorded };
+            })();
 
-      if (networkFailure) {
-        await update(item.ref, { attempts: item.attempts + 1 });
-        // No point trying the rest down a wire that is not there.
-        break;
+      const stored = await remember({
+        ref: item.ref,
+        resolved: outcome.reference,
+        kind: item.kind,
+        uploadedAt: new Date().toISOString(),
+        ...("unrecorded" in outcome && outcome.unrecorded
+          ? { unrecorded: outcome.unrecorded }
+          : {}),
+      });
+
+      if (!stored) {
+        // The file has a remote home and nothing here can remember where.
+        // Keeping the bytes is the only way this is recoverable, so they stay
+        // and the entry is left retryable rather than blocked.
+        await update(item.ref, {
+          attempts: item.attempts + 1,
+          lastError:
+            "Uploaded, but this browser would not record where it went. It is still here and will be sent again.",
+        });
+        continue;
       }
-      await update(item.ref, { attempts: item.attempts + 1, lastError: message, blocked: true });
+
+      resolved[key] = outcome.reference;
+      if ("unrecorded" in outcome && outcome.unrecorded) unrecorded[key] = outcome.unrecorded;
+      await discardPendingMedia(item.ref);
+    } catch (error: unknown) {
+      const failure = classifyUploadFailure(error);
+      offline ||= failure.offline;
+
+      if (failure.retryable) {
+        await update(item.ref, {
+          attempts: item.attempts + 1,
+          ...(failure.message ? { lastError: failure.message } : {}),
+        });
+        // No point trying the rest down a wire that is not there.
+        if (failure.offline) break;
+        continue;
+      }
+      await update(item.ref, {
+        attempts: item.attempts + 1,
+        lastError: failure.message,
+        blocked: true,
+      });
     }
   }
 
-  return { resolved, offline };
+  return { resolved, offline, unrecorded };
 }

@@ -26,6 +26,21 @@ import { checkOwner } from "@/lib/owner";
 const FOLDER_PATTERN = /^[a-z0-9][a-z0-9/_-]{0,63}$/i;
 
 /**
+ * A name the same file gets every time it is uploaded.
+ *
+ * Without one, every attempt asks for a fresh identity, so an upload whose
+ * acknowledgement was lost — a phone losing signal at exactly the wrong
+ * moment — leaves one object behind for every attempt, and only the last is
+ * ever referenced. Deriving it from the placeholder the studio already
+ * assigned makes a repeat upload land on the same object instead.
+ *
+ * Only a UUID is accepted, which is the shape of the placeholder's own id.
+ * Anything else could be talked into writing outside the folder.
+ */
+const ASSET_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+
+/**
  * Mirrors MAX_LOOP_CLIP_BYTES in lib/studio-local/media.ts.
  * Kept as a second constant, not an import: this file must not import
  * anything from a "use client" module, and the two are cheap to keep in step
@@ -67,7 +82,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const key = `${folder}/${randomUUID()}.mp4`;
+  const assetId = body.assetId;
+  const stableId = typeof assetId === "string" && ASSET_ID.test(assetId) ? assetId : null;
+  if (assetId !== undefined && !stableId) {
+    return NextResponse.json({ error: "That asset id isn't allowed." }, { status: 400 });
+  }
+
+  // The same clip PUTs to the same key however many times it is retried, so a
+  // lost acknowledgement overwrites rather than accumulating orphans.
+  const key = `${folder}/${stableId ?? randomUUID()}.mp4`;
   const command = new PutObjectCommand({
     Bucket: R2.bucket,
     Key: key,

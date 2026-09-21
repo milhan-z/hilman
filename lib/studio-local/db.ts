@@ -21,9 +21,12 @@
 
 export const DB_NAME = "hilman-studio";
 // 2 added `media`, where a photo taken with no signal waits as a Blob.
+// 3 added `resolutions`: where a photo *went* once it was uploaded, written
+//   down before the local bytes are released so the two can never both be
+//   missing. See lib/studio-local/media-resolution.ts.
 // The upgrade handler creates whatever stores are missing, so a bump is all an
 // existing database needs.
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const STORE = {
   drafts: "drafts",
@@ -31,6 +34,7 @@ export const STORE = {
   snapshots: "snapshots",
   conflicts: "conflicts",
   media: "media",
+  resolutions: "resolutions",
 } as const;
 
 export type StoreName = (typeof STORE)[keyof typeof STORE];
@@ -41,6 +45,7 @@ const KEY_PATHS: Record<StoreName, string> = {
   snapshots: "key",
   conflicts: "key",
   media: "ref",
+  resolutions: "ref",
 };
 
 let connecting: Promise<IDBDatabase | null> | null = null;
