@@ -61,3 +61,5 @@ export async function fetchWithTimeout(
  */
 export const SYNC_TIMEOUT_MS = 30_000;
 export const UPLOAD_TIMEOUT_MS = 120_000;
+/** Signing is a small round trip to our own origin, so it may be impatient. */
+export const SIGN_TIMEOUT_MS = 15_000;

@@ -395,13 +395,16 @@ async function runFlush(): Promise<SyncState> {
   const payload = (await response.json().catch(() => null)) as SyncResponse | null;
   const results = payload?.results ?? [];
 
-  for (const outcome of results) await applyOutcome(outcome, batch);
-
-  // Anything from this batch still in the queue is no longer ours to carry.
-  // Without this a mutation the server asked us to retry stays claimed by a
-  // tab that has finished with it, and no other tab may pick it up until the
-  // lease expires.
-  await Promise.all(batch.map((entry) => releaseClaim(entry.mutationId, realm())));
+  try {
+    for (const outcome of results) await applyOutcome(outcome, batch);
+  } finally {
+    // Anything from this batch still in the queue is no longer ours to carry.
+    // Without this a mutation the server asked us to retry stays claimed by a
+    // tab that has finished with it, and no other tab may pick it up until the
+    // lease expires. In a `finally` because an outcome that throws would
+    // otherwise strand the whole batch under a claim nobody is acting on.
+    await Promise.all(batch.map((entry) => releaseClaim(entry.mutationId, realm())));
+  }
 
   // "Last synced" has to mean something actually reached the site. A round
   // trip where every entry came back refused is contact with the server, not a

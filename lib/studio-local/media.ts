@@ -15,7 +15,7 @@ import {
   resolutionMap,
   unfinishedResolutions,
 } from "./media-resolution";
-import { UPLOAD_TIMEOUT_MS, fetchWithTimeout } from "./net";
+import { SIGN_TIMEOUT_MS, UPLOAD_TIMEOUT_MS, fetchWithTimeout } from "./net";
 import { classifyUploadFailure, UploadError } from "./retry-policy";
 import { newMutationId } from "./save";
 
@@ -281,11 +281,19 @@ export async function uploadAsset(
   folder = "hilman",
   assetId?: string
 ): Promise<UploadedAsset> {
-  const signRes = await fetch("/api/cloudinary/sign", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ folder, ...(assetId ? { assetId } : {}) }),
-  });
+  // Signing has a deadline too. It is awaited inside the media flush, which is
+  // awaited inside the outbox flush, which shares one promise across the whole
+  // app — so a signing request that never answers stops everything, not just
+  // this photograph.
+  const signRes = await fetchWithTimeout(
+    "/api/cloudinary/sign",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder, ...(assetId ? { assetId } : {}) }),
+    },
+    SIGN_TIMEOUT_MS
+  );
   if (!signRes.ok) {
     const err = await signRes.json().catch(() => ({}));
     // The status travels. Thrown as a bare Error, a 429 and a 415 became the
@@ -370,17 +378,21 @@ async function uploadClip(
   folder = "clips",
   assetId?: string
 ): Promise<{ url: string }> {
-  const signRes = await fetch("/api/r2/sign", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      folder,
-      filename: name,
-      contentType: "video/mp4",
-      size: file.size,
-      ...(assetId ? { assetId } : {}),
-    }),
-  });
+  const signRes = await fetchWithTimeout(
+    "/api/r2/sign",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        folder,
+        filename: name,
+        contentType: "video/mp4",
+        size: file.size,
+        ...(assetId ? { assetId } : {}),
+      }),
+    },
+    SIGN_TIMEOUT_MS
+  );
   if (!signRes.ok) {
     const err = await signRes.json().catch(() => ({}));
     throw new UploadError(err.error ?? "Could not sign upload", signRes.status, "sign");
