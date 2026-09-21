@@ -7,7 +7,8 @@ import {
   type SyncOutcome,
   type SyncResponse,
 } from "../studio-sync-contract";
-import { conflictKey, listConflicts, recordConflict } from "./conflicts";
+import { conflictKey, listConflicts } from "./conflicts";
+import { moveQueuedToConflict } from "./transitions";
 import {
   blockEntry,
   claimForSending,
@@ -422,19 +423,40 @@ async function applyOutcome(outcome: SyncOutcome, batch: QueuedMutation[]) {
   }
 
   if (outcome.status === "conflict") {
-    await dequeue(outcome.mutationId);
-    if (entry) {
-      await recordConflict({
-        key: conflictKey(entry.entity, outcome.id),
-        entity: entry.entity,
-        id: outcome.id,
-        mine: entry.payload,
-        server: outcome.server,
-        differences: describeConflict(entry.payload, outcome.server),
-        noticedAt: new Date().toISOString(),
-      });
-      emit({ type: "conflict", entity: entry.entity, id: outcome.id, localId: outcome.localId });
+    // Nothing in this batch matches the answer, so there is no payload to
+    // describe the conflict with. Leaving it queued is the only safe move:
+    // dequeuing it — which is what this used to do — would discard writing
+    // without recording it anywhere.
+    if (!entry) {
+      await recordAttempt(outcome.mutationId, "The server answered about a save we no longer hold.");
+      return;
     }
+
+    // Out of the queue and into the conflicts in one transaction. As two
+    // steps, with the dequeue first, a conflict that could not be written --
+    // a full quota, site data switched off -- left the writing nowhere at all,
+    // silently, because IndexedDB refuses by returning rather than raising.
+    const moved = await moveQueuedToConflict(outcome.mutationId, {
+      key: conflictKey(entry.entity, outcome.id),
+      entity: entry.entity,
+      id: outcome.id,
+      mine: entry.payload,
+      server: outcome.server,
+      differences: describeConflict(entry.payload, outcome.server),
+      noticedAt: new Date().toISOString(),
+    });
+
+    if (!moved) {
+      // The save is still queued, which is where it should be. Say so rather
+      // than reporting a conflict the author cannot open.
+      await recordAttempt(
+        outcome.mutationId,
+        "This browser would not store the conflicting versions, so the save is still waiting here."
+      );
+      return;
+    }
+
+    emit({ type: "conflict", entity: entry.entity, id: outcome.id, localId: outcome.localId });
     return;
   }
 

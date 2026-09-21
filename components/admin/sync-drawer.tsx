@@ -9,7 +9,8 @@ import { flushOutbox, refreshSyncState, useSyncState } from "./studio-runtime";
 import { uploadNoun } from "@/lib/studio-local/sync";
 import { listQueue, dequeue, unblockEntry, type QueuedMutation } from "@/lib/studio-local/outbox";
 import { listConflicts, resolveConflict, type StoredConflict } from "@/lib/studio-local/conflicts";
-import { enqueue } from "@/lib/studio-local/outbox";
+import { newQueuedMutation } from "@/lib/studio-local/outbox";
+import { moveConflictToQueue } from "@/lib/studio-local/transitions";
 import { newMutationId } from "@/lib/studio-local/save";
 import {
   discardPendingMedia,
@@ -54,6 +55,8 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   const [conflicts, setConflicts] = useState<StoredConflict[]>([]);
   const [photos, setPhotos] = useState<PendingMedia[]>([]);
   const [space, setSpace] = useState<{ usage: number; quota: number } | null>(null);
+  /** Set when a local move could not be written down — see keepMine(). */
+  const [storageRefused, setStorageRefused] = useState<string | null>(null);
   const summary = connectivityFrom(state);
   const mediaNoun = uploadNoun(photos);
   /** Work actually addressed to the site: saves queued, plus photos going up. */
@@ -110,17 +113,32 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
    * Keep ours: re-queue the same payload, now based on the version we were
    * shown. That is an explicit overwrite of something we have just read, which
    * is the only kind of overwrite this studio performs.
+   *
+   * The queueing and the removal of the conflict happen together. The ordering
+   * was already right, but `enqueue`'s answer was discarded — and IndexedDB
+   * refuses by returning rather than raising, so a queue write that never
+   * happened still removed the conflict holding the same writing.
    */
   async function keepMine(conflict: StoredConflict) {
-    await enqueue({
-      mutationId: newMutationId(),
-      entity: conflict.entity,
-      entityId: conflict.id,
-      localId: `${conflict.entity}:${conflict.id}`,
-      baseUpdatedAt: conflict.server.updatedAt,
-      payload: conflict.mine,
-    });
-    await resolveConflict(conflict.key);
+    const moved = await moveConflictToQueue(
+      conflict.key,
+      newQueuedMutation({
+        mutationId: newMutationId(),
+        entity: conflict.entity,
+        entityId: conflict.id,
+        localId: `${conflict.entity}:${conflict.id}`,
+        baseUpdatedAt: conflict.server.updatedAt,
+        payload: conflict.mine,
+      })
+    );
+
+    if (!moved) {
+      setStorageRefused(
+        "This browser wouldn't store the save, so both versions are still here. Free some space and try again."
+      );
+      return;
+    }
+    setStorageRefused(null);
     await reload();
     await flushOutbox();
   }
@@ -180,6 +198,14 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             <h3 id="sync-conflicts" className="mb-2 text-sm font-semibold text-ink">
               Two versions
             </h3>
+            {/* Only when a local move was refused. Both versions are still
+                here in that case, and saying nothing would leave the author
+                pressing a button that appears to do nothing. */}
+            {storageRefused && (
+              <p role="alert" className="mb-2 rounded border border-red bg-red-soft px-3 py-2 text-sm text-red">
+                {storageRefused}
+              </p>
+            )}
             <ul className="space-y-3">
               {conflicts.map((conflict) => (
                 <li key={conflict.key} className="rounded-md border border-red bg-red-soft p-3.5">

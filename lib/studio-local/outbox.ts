@@ -143,6 +143,26 @@ const neverAttempted = (entry: QueuedMutation) =>
  * sending one of them at a time; the benefit is that no mutation id ever
  * means two different things.
  */
+/**
+ * The record a queued save is, without putting it anywhere.
+ *
+ * Used where the write has to happen inside somebody else's transaction — see
+ * moveConflictToQueue() in transitions.ts, where queueing the save and
+ * removing the conflict it came from must succeed or fail together.
+ */
+export function newQueuedMutation(input: EnqueueInput): QueuedMutation {
+  return {
+    mutationId: input.mutationId,
+    entity: input.entity,
+    entityId: input.entityId,
+    localId: input.localId,
+    baseUpdatedAt: input.baseUpdatedAt,
+    payload: input.payload,
+    queuedAt: new Date().toISOString(),
+    attempts: 0,
+  };
+}
+
 export async function enqueue(input: EnqueueInput): Promise<EnqueueResult> {
   // Read, decide and write in one transaction. Doing it as listQueue() then
   // dbPut() left the store open in between, so two saves landing together
