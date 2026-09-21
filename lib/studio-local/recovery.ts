@@ -104,16 +104,36 @@ export async function findRecovery(
  * worth offering; and when what is stored is no longer identical to what the
  * site has, which means somebody typed since.
  */
-export async function keepRecovery(key: string, syncedSnapshot: string): Promise<boolean> {
+export async function keepRecovery(
+  key: string,
+  syncedSnapshot: string,
+  sender?: string
+): Promise<boolean> {
   const decision = seen.get(key);
   if (!decision) return false;
   if (decision.kind === "offer") return false;
 
-  // Re-read rather than trusting the decision: between the lookup and now, a
-  // debounce may have written a newer copy down, and that one is not stale.
+  // Re-read rather than trusting the decision: between the lookup and now a
+  // debounce may have written a newer copy down.
   const stored = await readDraft<DraftValue>(key);
   if (!stored) return false;
-  if (stored.value?.snapshot !== syncedSnapshot) return false;
+
+  // Identical to what the site has: nothing is lost by removing it, whoever
+  // wrote it.
+  const identical = stored.value?.snapshot === syncedSnapshot;
+
+  // Otherwise it is an *intermediate* — something typed and then moved away
+  // from, because the editor asking to clean up is by definition back at the
+  // synced state. Ours to drop; somebody else's to leave alone, because that
+  // tab may be in the middle of writing it.
+  //
+  // Without this, changing a field and pressing Reset left the undone version
+  // on the device, and reopening the entry offered to restore it. A draft with
+  // no owner recorded predates this and is treated as ours, which is what it
+  // almost always is.
+  const ours = !stored.writtenBy || stored.writtenBy === sender;
+
+  if (!identical && !ours) return false;
 
   await deleteDraft(key);
   return true;
@@ -237,6 +257,22 @@ export function recoveryWriter() {
       if (!pending) return null;
       return write();
     },
+    /**
+     * Throws away whatever is waiting, without writing it.
+     *
+     * Safe in exactly one situation, and the caller has to be in it: the
+     * document is identical to what the site has. What is pending is then an
+     * older intermediate the author has moved away from, and keeping it means
+     * offering back an edit they undid. Everywhere else, leaving flushes.
+     */
+    async discard(): Promise<boolean> {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      const had = pending !== null;
+      pending = null;
+      return had;
+    },
+
     /** What the editor calls on its way out. */
     async stop(): Promise<boolean | null> {
       return this.flush();

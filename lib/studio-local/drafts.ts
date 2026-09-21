@@ -23,6 +23,14 @@ export interface LocalDraft<T = unknown> {
   editedAt: string;
   /** A human-readable name for the resume list on the dashboard. */
   label?: string;
+  /**
+   * Which tab last wrote this copy — see senderId() in outbox.ts.
+   *
+   * Only cleanup reads it. A tab may tidy away its *own* stale copy once the
+   * document is back to what the site has; another tab's copy is never touched,
+   * because that tab may be in the middle of writing something.
+   */
+  writtenBy?: string;
 }
 
 export const draftKey = (entity: string, localId: string) => `${entity}:${localId}`;

@@ -30,6 +30,7 @@ import { handOffSave } from "@/lib/studio-local/save";
 import { intentFor } from "@/lib/studio-save-intent";
 import { subscribeSyncEvents, type SyncState } from "@/lib/studio-local/sync";
 import { deleteDraft, writeDraft } from "@/lib/studio-local/drafts";
+import { senderId } from "@/lib/studio-local/outbox";
 import {
   carryRecoveryOver,
   findRecovery,
@@ -282,6 +283,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       baseUpdatedAt: initial?.updated_at ?? null,
       editedAt: new Date().toISOString(),
       label: doc.title.trim() || `Untitled ${kind}`,
+      writtenBy: senderId(),
     }),
     [draftKey, kind, initial?.id, initial?.updated_at, snapshot, doc.title]
   );
@@ -297,12 +299,13 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     // Identical to what the site has, so there is nothing here to keep — but
     // only once we know there was nothing here to offer either.
     if (!lookedForRecovery) return;
-    // Flush first: an edit typed and undone inside the debounce still has a
-    // write waiting, and letting it land *after* the cleanup would leave a
-    // stale copy behind that nothing would come back for.
+    // Drop the pending write rather than flushing it. We are here because the
+    // document is identical to what the site has, so anything still waiting is
+    // an older intermediate the author has moved away from — and writing it
+    // would leave the undone version on the device to be offered back later.
     void writer.current
-      .flush()
-      .then(() => keepRecovery(draftKey, snapshot))
+      .discard()
+      .then(() => keepRecovery(draftKey, snapshot, senderId()))
       .then(() => setRecovery("idle"));
   }, [snapshot, synced, draftKey, draftRecord, lookedForRecovery]);
 

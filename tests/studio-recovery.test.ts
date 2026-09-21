@@ -37,6 +37,8 @@ import { enqueue } from "../lib/studio-local/outbox";
  */
 
 const KEY = "journal:abc";
+/** The tab these tests are run by — see senderId() in outbox.ts. */
+const TAB = "tab-under-test";
 const SERVER = JSON.stringify({ title: "What the site has", blocks: [] });
 const LOCAL = JSON.stringify({ title: "What the site has", blocks: ["and a paragraph more"] });
 
@@ -319,9 +321,71 @@ test("once an offer is acted on, ordinary cleanup resumes", async () => {
 test("acting on an offer never deletes anything by itself", async () => {
   await seedRecovery();
   await findRecovery(KEY, SERVER);
-  markRecoveryHandled(KEY);
 
-  // The stored copy still differs from the site, so it stays.
-  assert.equal(await keepRecovery(KEY, SERVER), false);
+  markRecoveryHandled(KEY);
+  assert.notEqual(await readDraft(KEY), null, "handling an offer writes nothing and removes nothing");
+
+  // And a copy belonging to another tab is still off limits afterwards.
+  await seedRecovery({ writtenBy: "a-different-tab" });
+  assert.equal(await keepRecovery(KEY, SERVER, TAB), false);
   assert.notEqual(await readDraft(KEY), null);
+});
+
+/* ── 8. an edit the author undid is not offered back ──────── */
+
+test("an edit typed and undone is not kept as a recovery copy", async () => {
+  // Found in the real Studio: change the publication date, press Reset, reopen
+  // the entry — and it offers to restore the date you just undid.
+  //
+  // The editor opens with nothing stored, so the lookup finds nothing. Then
+  // typing writes a copy, and undoing brings the document back to exactly what
+  // the site has. What is on the device is now an intermediate the author has
+  // moved away from.
+  assert.equal((await findRecovery(KEY, SERVER)).kind, "none");
+  await seedRecovery({
+    value: { snapshot: "a half-finished thought", savedAt: "earlier" },
+    writtenBy: TAB,
+  });
+
+  const removed = await keepRecovery(KEY, SERVER, TAB);
+
+  assert.equal(removed, true, "our own intermediate goes");
+  assert.equal(await readDraft(KEY), null, "so reopening offers nothing to restore");
+});
+
+test("another tab's unsaved writing is never tidied away", async () => {
+  // The same rule must not reach across tabs: a second editor open on this
+  // document may be holding writing that exists nowhere else.
+  assert.equal((await findRecovery(KEY, SERVER)).kind, "none");
+  await seedRecovery({
+    value: { snapshot: "what the other tab is in the middle of", savedAt: "now" },
+    writtenBy: "a-different-tab",
+  });
+
+  assert.equal(await keepRecovery(KEY, SERVER, TAB), false, "not ours to delete");
+  assert.notEqual(await readDraft(KEY), null);
+});
+
+test("a copy identical to the site is tidied whoever wrote it", async () => {
+  // Nothing is lost by removing it, so ownership does not need to be proved.
+  await seedRecovery({ value: { snapshot: SERVER, savedAt: "x" }, writtenBy: "a-different-tab" });
+  await findRecovery(KEY, SERVER);
+
+
+  assert.equal(await keepRecovery(KEY, SERVER, TAB), true);
+  assert.equal(await readDraft(KEY), null);
+});
+
+test("a pending write is dropped when the document returns to the synced state", async () => {
+  const writer = recoveryWriter();
+  writer.schedule({ ...pending(), value: { snapshot: "typed then undone", savedAt: "x" } }, 400);
+
+  const dropped = await writer.discard();
+
+  assert.equal(dropped, true, "there was something waiting, and it is not written");
+  assert.equal(await readDraft(KEY), null, "nothing reached the device");
+});
+
+test("discarding with nothing pending is not an error", async () => {
+  assert.equal(await recoveryWriter().discard(), false);
 });
