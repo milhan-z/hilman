@@ -69,8 +69,11 @@ export async function saveThroughQueue(request: SaveRequest): Promise<SaveResult
     conflicted?: { id: string };
   } = {};
 
+  // Matched on the mutation id, not the document: a flush can carry an older
+  // save of this same row, and reporting its result as this call's answer is
+  // how B gets told it landed when A did.
   const unsubscribe = subscribeSyncEvents((event) => {
-    if (event.type === "applied" && event.save.localId === queued.localId) {
+    if (event.type === "applied" && event.save.mutationId === queued.mutationId) {
       heard.applied = { id: event.save.id, updatedAt: event.save.updatedAt };
     }
     if (event.type === "conflict" && event.localId === queued.localId) {

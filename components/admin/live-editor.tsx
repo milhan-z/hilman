@@ -145,7 +145,18 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   const [publishQueued, setPublishQueued] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
-  const submitted = useRef<{ snapshot: string; published: boolean } | null>(null);
+  /**
+   * Which document state each save in flight is carrying.
+   *
+   * A single ref held only the *latest* submission, so when the server
+   * acknowledged an older save — the ordinary outcome of a lost response
+   * followed by more writing — the editor marked whatever was on screen as
+   * synced. That is a false "saved": B was still nowhere but this phone.
+   *
+   * Keyed by mutation id, which now names exactly one immutable payload, so
+   * an acknowledgement can only ever move the snapshot it actually belongs to.
+   */
+  const submitted = useRef(new Map<string, { snapshot: string; published: boolean }>());
   const lastAction = useRef<EditorAction | null>(null);
 
   /* ── editor chrome ── */
@@ -372,18 +383,25 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         }
         if (event.type === "applied") {
           if (event.save.localId !== localId) return;
+
+          // The row's identity is true whoever saved it — a queue flushed from
+          // a previous session included.
           setEntityId(event.save.id);
           setBaseUpdatedAt(event.save.updatedAt);
-          setQueued(false);
-          setPublishQueued(false);
-          setInFlight("none");
-          setError(null);
-          if (submitted.current) {
-            // Only `synced` moves. `kept` was set to this same snapshot when
-            // the save was handed over, and if anything has been written down
-            // since then it is newer than what the server just took.
-            setSynced(submitted.current.snapshot);
-            setPublished(submitted.current.published);
+
+          const mine = submitted.current.get(event.save.mutationId);
+          if (mine) {
+            submitted.current.delete(event.save.mutationId);
+            setQueued(false);
+            setPublishQueued(false);
+            setInFlight("none");
+            setError(null);
+            // Only `synced` moves, and only to the snapshot *this* save
+            // carried. `kept` was set to it when the save was handed over, and
+            // anything written down since is newer than what the server took —
+            // so a later edit stays unsynced until it is acknowledged itself.
+            setSynced(mine.snapshot);
+            setPublished(mine.published);
           }
           if (isNew) {
             const next = `${kind}:${event.save.id}`;
@@ -461,7 +479,6 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       setConflict(false);
       setPublishQueued(false);
       setInFlight(nextStatus === "published" ? "publishing" : "saving");
-      submitted.current = { snapshot: sourceSnapshot, published: nextStatus === "published" };
 
       const result = await handOffSave({
         entity: kind,
@@ -480,6 +497,13 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       setKept(sourceSnapshot);
 
       if (result.status === "stored") {
+        // Recorded against the id the queue actually gave it, which is not
+        // always the one we asked for: an unsent save of the same row is still
+        // collapsed into, and then it is that id the server will answer about.
+        submitted.current.set(result.mutationId, {
+          snapshot: sourceSnapshot,
+          published: nextStatus === "published",
+        });
         setQueued(true);
         // A draft is safe the moment it is in the queue, so say so now. A
         // publish is not: it is only live once the site has accepted it.

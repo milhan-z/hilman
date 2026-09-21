@@ -13,6 +13,7 @@ import {
   dequeue,
   listQueue,
   markSending,
+  oneSavePerRow,
   recordAttempt,
   releaseStaleSends,
   replaceQueue,
@@ -124,6 +125,17 @@ function setState(patch: Partial<SyncState>) {
 /* ── what the editor hears back ───────────────────────────── */
 
 export interface AppliedSave {
+  /**
+   * Which exact save the server accepted.
+   *
+   * The event used to carry only `localId`, which names the *document*, not
+   * the save. An editor hearing "your journal:abc save landed" had no way to
+   * tell whether that was the version currently on screen or one from two
+   * edits ago, so it marked whatever it was holding as synced. With one id per
+   * immutable payload — see lib/studio-local/outbox.ts — this answers the
+   * question exactly.
+   */
+  mutationId: string;
   localId: string;
   entity: "project" | "journal";
   id: string;
@@ -239,7 +251,9 @@ async function runFlush(): Promise<SyncState> {
     return state;
   }
 
-  const batch = sendable.slice(0, BATCH);
+  // One save per row: two mutations for the same document cannot go in one
+  // request without the second conflicting with the first. See oneSavePerRow().
+  const batch = oneSavePerRow(sendable).slice(0, BATCH);
   setState({ syncing: true, lastError: null });
   await Promise.all(batch.map((entry) => markSending(entry.mutationId, true)));
 
@@ -309,6 +323,8 @@ async function runFlush(): Promise<SyncState> {
 
   // More was waiting than fitted in one batch, or something is still waiting
   // on a photo — either way, come back for it.
+  // A row held back above is now rebased onto what just landed, so come
+  // straight back for it rather than waiting out a backoff.
   const remaining = (await listQueue()).filter((entry) => !entry.blocked);
   if (remaining.length > 0) scheduleRetry(waitingOnPhotos > 0 ? undefined : 0);
 
@@ -369,6 +385,7 @@ async function applyOutcome(outcome: SyncOutcome, batch: QueuedMutation[]) {
     emit({
       type: "applied",
       save: {
+        mutationId: outcome.mutationId,
         localId: outcome.localId,
         entity: entry?.entity ?? "journal",
         id: outcome.id,
@@ -452,6 +469,7 @@ export async function sendDirect(mutation: SyncMutation): Promise<SyncOutcome | 
     emit({
       type: "applied",
       save: {
+        mutationId: outcome.mutationId,
         localId: outcome.localId,
         entity: mutation.entity,
         id: outcome.id,
@@ -467,7 +485,13 @@ export async function sendDirect(mutation: SyncMutation): Promise<SyncOutcome | 
 
 /** Only the fields the server's contract knows about. */
 function stripLocalFields(entry: QueuedMutation) {
-  const { sending: _sending, blocked: _blocked, lastError: _lastError, ...mutation } = entry;
+  const {
+    sending: _sending,
+    blocked: _blocked,
+    attemptedAt: _attemptedAt,
+    lastError: _lastError,
+    ...mutation
+  } = entry;
   return mutation;
 }
 
