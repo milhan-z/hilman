@@ -28,7 +28,7 @@ const MIGRATIONS = new URL("../../supabase/migrations/", import.meta.url);
  * session setting instead, so a test can say who is signed in. The three roles
  * exist because the migrations grant and revoke against them by name.
  */
-const SUPABASE_SHIM = `
+export const SUPABASE_SHIM = `
 create schema if not exists auth;
 
 create table if not exists auth.users (
@@ -67,7 +67,7 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-function migrationFile(step: number): string {
+export function migrationFile(step: number): string {
   const prefix = String(step).padStart(4, "0");
   const name = readdirSync(MIGRATIONS).find((file) => file.startsWith(`${prefix}_`));
   if (!name) throw new Error(`No migration numbered ${prefix} in supabase/migrations/`);
