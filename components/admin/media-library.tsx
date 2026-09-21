@@ -165,8 +165,16 @@ function MediaCard({ item }: { item: MediaRow }) {
    */
   async function startDelete() {
     setStage({ step: "checking" });
-    const refs = await getMediaReferences(item.public_id);
-    setStage({ step: "confirm", refs });
+    const usage = await getMediaReferences(item.public_id);
+
+    // A lookup that failed is not an empty list. It used to come back as one,
+    // and this panel would then offer a clean "nothing uses it" delete for an
+    // asset whose usage nobody had actually managed to check.
+    if (usage.status === "unknown") {
+      setStage({ step: "error", message: usage.reason });
+      return;
+    }
+    setStage({ step: "confirm", refs: usage.references });
   }
 
   async function confirmDelete(force: boolean) {

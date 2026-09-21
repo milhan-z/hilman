@@ -216,23 +216,45 @@ function saveError(error: { code?: string; message: string }): string {
  * the mutations that only make sense with a server in reach: deletes, quick
  * status changes, taxonomy, media and the inbox.
  */
-export async function deleteProject(id: string) {
+/**
+ * Deletes an article and its body together, or neither.
+ *
+ * This was two statements in two round trips with neither result looked at.
+ * If the blocks went and the row did not -- a constraint, a dropped connection
+ * -- the article stayed on the site with its entire body removed, and this
+ * function redirected as though it had worked. Reproduced with twenty blocks
+ * against a real PostgreSQL.
+ *
+ * `delete_content` does both inside one transaction and checks ownership
+ * itself, so the database enforces the rule rather than trusting that the
+ * caller already did. `redirect()` throws by design in Next, so it stays
+ * outside the part that can fail.
+ */
+async function deleteContent(entity: "project" | "journal", id: string): Promise<string | null> {
   await guardOrThrow();
   const supabase = await createServerSupabase();
-  await supabase.from("content_blocks").delete().eq("owner_type", "project").eq("owner_id", id);
-  await supabase.from("projects").delete().eq("id", id);
+  const { error } = await supabase.rpc("delete_content", { p_entity: entity, p_id: id });
+  if (error) {
+    if (error.code === "PGRST202") {
+      return "The delete function is missing from the database. Apply supabase/migrations/0012_atomic_content_delete.sql.";
+    }
+    return saveError(error);
+  }
   revalidateSite();
+  return null;
+}
+
+export async function deleteProject(id: string): Promise<ActionState | void> {
+  const problem = await deleteContent("project", id);
+  if (problem) return fail(problem);
   redirect("/admin/projects");
 }
 
 /* ── journal ───────────────────────────────────────────── */
 
-export async function deleteJournal(id: string) {
-  await guardOrThrow();
-  const supabase = await createServerSupabase();
-  await supabase.from("content_blocks").delete().eq("owner_type", "journal").eq("owner_id", id);
-  await supabase.from("journal_posts").delete().eq("id", id);
-  revalidateSite();
+export async function deleteJournal(id: string): Promise<ActionState | void> {
+  const problem = await deleteContent("journal", id);
+  if (problem) return fail(problem);
   redirect("/admin/journal");
 }
 
@@ -471,19 +493,56 @@ export interface MediaReference {
   label: string;
 }
 
-/** Where an asset is still used. Empty list means it is safe to delete. */
-export async function getMediaReferences(publicId: string): Promise<MediaReference[]> {
+/**
+ * Where an asset is still used, or an admission that we could not find out.
+ *
+ * The distinction is the entire point. This used to return `MediaReference[]`
+ * and answer `[]` both when the asset was genuinely unused *and* when the
+ * lookup failed -- a database error, or a caller who turned out not to be the
+ * owner. The one caller read an empty list as "safe to delete", so an outage
+ * in the check became permission to destroy the thing it was checking.
+ *
+ * Not being able to establish that something is unreferenced is not evidence
+ * that it is.
+ */
+export type MediaUsage =
+  | { status: "known"; references: MediaReference[] }
+  | { status: "unknown"; reason: string };
+
+export async function getMediaReferences(publicId: string): Promise<MediaUsage> {
   const check = await checkOwner();
-  if (!check.ok) return [];
+  if (!check.ok) return { status: "unknown", reason: check.message };
+
   const supabase = await createServerSupabase();
   const { data, error } = await supabase.rpc("media_references", { p_public_id: publicId });
   if (error) {
     console.error("[media] reference lookup failed:", error.message);
-    return [];
+    return {
+      status: "unknown",
+      reason: "Studio couldn't check where this file is used, so it wasn't deleted.",
+    };
   }
-  return (data as MediaReference[]) ?? [];
+  return { status: "known", references: (data as MediaReference[]) ?? [] };
 }
 
+/**
+ * Removes a file from the provider and then from the library -- in that order,
+ * and only in that order.
+ *
+ * Two failures used to be indistinguishable from success. `destroyAsset`
+ * returned nothing whether it had deleted anything or not, and a reference
+ * lookup that errored came back as an empty list. So an unconfigured
+ * environment, or a Cloudinary outage, or a database hiccup during the usage
+ * check, all ended with the media row deleted -- and that row was the only
+ * record that the remote object existed.
+ *
+ * Deleting across a provider and a database cannot be one transaction, so the
+ * order is chosen for what survives a failure in the middle: the provider
+ * first, and the row only once the file is confirmed gone. A failure the other
+ * way round leaves an object nothing knows about; this way round leaves a row
+ * pointing at a file that is already gone, which is visible, harmless and
+ * retryable.
+ */
 export async function deleteMedia(
   id: string,
   publicId: string,
@@ -494,28 +553,45 @@ export async function deleteMedia(
   if (denied) return denied;
 
   if (!options?.force) {
-    const refs = await getMediaReferences(publicId);
-    if (refs.length) {
+    const usage = await getMediaReferences(publicId);
+
+    // Uncertainty is not permission. "Force" is the author saying they know
+    // something the check does not; an error is the check saying it does not
+    // know anything at all.
+    if (usage.status === "unknown") return fail(usage.reason);
+
+    if (usage.references.length) {
+      const refs = usage.references;
       return fail(
         `Still used by ${refs.length} item${refs.length > 1 ? "s" : ""}: ` +
           refs
             .slice(0, 3)
             .map((r) => r.label)
             .join(", ") +
-          (refs.length > 3 ? "…" : "") +
+          (refs.length > 3 ? "\u2026" : "") +
           ". Remove it there first, or confirm to delete anyway."
       );
     }
   }
 
-  const supabase = await createServerSupabase();
-  try {
-    await destroyAsset(publicId, kind === "file" ? "raw" : "image");
-  } catch (e: any) {
-    return fail(`Cloudinary refused the delete: ${e.message ?? e}`);
+  const removal = await destroyAsset(publicId, kind === "file" ? "raw" : "image");
+  if (removal.status === "failed") {
+    // The library row stays. It is the only thing that knows this file is out
+    // there, and without it the file is unreachable and unaccountable.
+    return fail(`${removal.reason} The file is still in your library, so you can try again.`);
   }
+
+  const supabase = await createServerSupabase();
   const { error } = await supabase.from("media").delete().eq("id", id);
-  if (error) return fail(error.message);
+  if (error) {
+    // The provider copy is gone and the row is not. Say so plainly rather than
+    // reporting a clean delete: the row is now the recoverable half, and
+    // deleting it again is safe because "not found" counts as deleted.
+    return fail(
+      `The file was removed from Cloudinary, but its library entry could not be deleted (${error.message}). Try again to clear it.`
+    );
+  }
+
   revalidatePath("/admin/media");
   revalidateSite();
   return ok();

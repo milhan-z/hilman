@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { MessageCard, type InboxMessage } from "@/components/admin/message-card";
 import { checkOwner } from "@/lib/owner";
-import { cloudinaryServerConfigured } from "@/lib/cloudinary-server";
+import { cloudinaryConfigured } from "@/lib/cloudinary-server";
 import { siteUrl, siteUrlIsPlaceholder } from "@/lib/site";
 import { findHiddenPublished } from "@/lib/studio-visibility";
 import { InstallHelp } from "@/components/admin/install-help";
@@ -199,7 +199,7 @@ async function SiteState() {
           <dl className="mt-5 space-y-3 text-sm">
             <HealthRow label="Database" ok={!dbError} okText="Connected" failText="Error" />
             <HealthRow label="Owner enforcement" ok={owner.ok} okText="Database-enforced" failText="Unknown" />
-            <HealthRow label="Media uploads" ok={cloudinaryServerConfigured} okText="Configured" failText="Unconfigured" />
+            <HealthRow label="Media uploads" ok={cloudinaryConfigured()} okText="Configured" failText="Unconfigured" />
             <div className="flex items-baseline justify-between gap-3">
               <dt className="font-medium text-soft">Public address</dt>
               <dd className={`truncate font-mono text-xs ${siteUrlIsPlaceholder ? "text-red" : "text-soft"}`}>

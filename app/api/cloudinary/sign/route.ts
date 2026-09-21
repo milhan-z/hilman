@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CLOUDINARY, cloudinaryServerConfigured, signParams } from "@/lib/cloudinary-server";
+import { CLOUDINARY, cloudinaryConfigured, signParams } from "@/lib/cloudinary-server";
 import { checkOwner } from "@/lib/owner";
 
 /**
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const status = owner.reason === "unconfigured" ? 503 : owner.reason === "unauthenticated" ? 401 : 403;
     return NextResponse.json({ error: owner.message }, { status });
   }
-  if (!cloudinaryServerConfigured) {
+  if (!cloudinaryConfigured()) {
     return NextResponse.json({ error: "Cloudinary not configured" }, { status: 503 });
   }
 
