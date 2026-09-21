@@ -1,3 +1,4 @@
+import { isRealCalendarDay } from "./dates";
 import { slugify } from "./utils";
 
 /**
@@ -44,6 +45,17 @@ const status = (value: unknown): "published" | "draft" =>
 function publishedAt(value: unknown): { published_at?: string } {
   const raw = text(value);
   if (!raw) return {};
+
+  // `new Date("2026-02-31")` does not fail; it overflows into the 3rd of
+  // March. So the calendar components are checked before the string is parsed
+  // at all, and a day that does not exist is dropped rather than quietly
+  // becoming a different one. The RPC casts this with ::timestamptz, which
+  // would happily have stored the wrong date.
+  const parts = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]|$)/.exec(raw);
+  if (!parts || !isRealCalendarDay(Number(parts[1]), Number(parts[2]), Number(parts[3]))) {
+    return {};
+  }
+
   const date = new Date(raw);
   return Number.isNaN(date.getTime()) ? {} : { published_at: date.toISOString() };
 }

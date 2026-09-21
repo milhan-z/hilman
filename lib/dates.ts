@@ -139,11 +139,52 @@ export function isoFromAuthorDate(day: string): string | null {
   if (!match) return null;
 
   const [, y, m, d] = match;
+  if (!isRealCalendarDay(Number(y), Number(m), Number(d))) return null;
+
   // Asia/Jakarta is a fixed +07:00 with no daylight saving, so this offset is
   // correct year-round and needs no zone database at write time.
   const iso = `${y}-${m}-${d}T12:00:00+07:00`;
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/**
+ * Whether these three numbers name a day that exists.
+ *
+ * `new Date()` does not answer this. Given "2026-02-31" it does not fail — it
+ * *overflows*, and hands back the 3rd of March. So a typo in a date picker
+ * became a real publication date three days out, silently, with nothing
+ * anywhere reporting a problem.
+ *
+ * Building the date and reading the components back is the check: a day that
+ * comes out as a different day was never that day.
+ */
+export function isRealCalendarDay(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return (
+    probe.getUTCFullYear() === year &&
+    probe.getUTCMonth() === month - 1 &&
+    probe.getUTCDate() === day
+  );
+}
+
+/**
+ * Whether two instants fall on the same calendar day for the author.
+ *
+ * The question the editor actually needs to ask before sending a publication
+ * date: has the author changed the day, or is this just the stored instant
+ * making a round trip through a date input? See publishedAtField() in
+ * components/admin/editor-doc.ts.
+ */
+export function sameAuthorDay(
+  iso: string | null | undefined,
+  day: string | null | undefined
+): boolean {
+  const stored = authorDateInput(iso);
+  return stored !== "" && stored === (day ?? "").trim();
 }
 
 /** The author-zone calendar day of an instant, as `yyyy-mm-dd` for a date input. */

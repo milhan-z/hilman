@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PublicationDateField } from "./publication-date-field";
 import { readTimeLabel, readTimeMinutes } from "@/lib/read-time";
 import { CheckRow, Field, Select, TextArea, TextInput } from "./fields";
 import { MediaField } from "./block-editors";
@@ -179,6 +180,14 @@ export function MetaBar({ kind, doc, patch, allTags, published }: MetaBarProps) 
               <p className="mt-0.5 text-xs text-faint">Calculated from your story.</p>
             </Field>
           )}
+
+          {/* Publishing is the action bar's decision; *when* it says it was
+              published is an editorial fact, and one the desktop had no way to
+              state. Same component as the phone's metadata sheet — one place
+              knows what an untouched field means. */}
+          <div className="sm:col-span-2">
+            <PublicationDateField doc={doc} patch={patch} />
+          </div>
 
           <fieldset className="rounded border border-line bg-raise p-3.5 sm:col-span-2">
             <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-faint">

@@ -1,6 +1,6 @@
 import type { Block, JournalPost, Project } from "@/lib/types";
 import { readTimeMinutes } from "@/lib/read-time";
-import { authorDateInput, isoFromAuthorDate } from "@/lib/dates";
+import { authorDateInput, isoFromAuthorDate, sameAuthorDay } from "@/lib/dates";
 
 /**
  * Everything one project or journal entry is, while it is being edited.
@@ -51,6 +51,20 @@ export interface EditorDoc {
    * isoFromAuthorDate() in lib/dates.ts for why it anchors at midday.
    */
   publishedOn: string;
+  /**
+   * The instant already stored on the row, exactly as the database has it.
+   *
+   * Carried through the editor untouched and never shown. It is here to answer
+   * one question at save time: is the day in the picker a *decision*, or just
+   * the stored instant making a round trip through a date input?
+   *
+   * Without it there was no way to tell, and every save re-sent the picker's
+   * day as a fresh midday instant. An entry stored at 2026-09-17T18:30:00Z
+   * became 2026-09-18T05:00:00Z the next time anybody fixed a typo in it —
+   * same calendar day, so nothing on the site looked different, and the exact
+   * moment it was published was quietly gone.
+   */
+  publishedAt: string | null;
   tagIds: string[];
   blocks: Block[];
 }
@@ -72,6 +86,7 @@ export function docFromInitial(initial: (Project & JournalPost) | null): EditorD
     status: initial?.status === "published" ? "published" : "draft",
     featured: initial?.featured ?? false,
     publishedOn: authorDateInput(initial?.published_at),
+    publishedAt: initial?.published_at ?? null,
     tagIds: (initial?.tags ?? []).map((tag) => tag.id),
     blocks: initial?.blocks ?? [],
   };
@@ -139,16 +154,49 @@ export function fieldsFor(
 }
 
 /**
- * The publication date, only when the author actually chose one.
+ * The publication date, only when the author actually changed it.
  *
- * Absent rather than null when the field is empty, so the database keeps its
- * existing behaviour — set `now()` on first publish, preserve it after. An
- * explicit null would read as "clear the date", which is a different and much
- * more destructive instruction than "I did not touch this".
+ * Three intentions, and they are not the same thing:
+ *
+ *   untouched  the picker shows the day the stored instant falls on, because
+ *              that is what it was loaded with. Send nothing. The database
+ *              keeps the exact timestamp it already has, to the second.
+ *
+ *   chosen     the day in the picker is a different day from the stored one.
+ *              Send it, anchored at midday in the author's zone.
+ *
+ *   empty      nothing is set. Send nothing, and the database does what it has
+ *              always done: stamp `now()` on first publish and keep it after.
+ *
+ * The field is *absent* rather than null in the two "send nothing" cases. A
+ * null would read as "clear the date" — a genuinely destructive instruction,
+ * and never something an untouched form field should be able to express.
+ *
+ * Distinguishing untouched from chosen is the point. Both look identical in
+ * the input, and conflating them meant every save re-anchored the stored
+ * instant to midday: 18:30 on the 17th became 05:00 on the 18th, which is the
+ * same day in Jakarta and so passed every check the site had.
  */
 function publishedAtField(doc: EditorDoc): { published_at?: string } {
-  const iso = isoFromAuthorDate(doc.publishedOn ?? "");
+  const chosen = (doc.publishedOn ?? "").trim();
+  if (!chosen) return {};
+  // The stored instant already falls on this day, so nothing was decided here.
+  if (sameAuthorDay(doc.publishedAt, chosen)) return {};
+
+  const iso = isoFromAuthorDate(chosen);
   return iso ? { published_at: iso } : {};
+}
+
+/**
+ * Whether the picker is showing something other than what is stored.
+ *
+ * The editor uses this for its "Reset" control and its hint, so both describe
+ * what will actually happen rather than what the field looks like.
+ */
+export function publicationDateChanged(doc: EditorDoc): boolean {
+  const chosen = (doc.publishedOn ?? "").trim();
+  if (!chosen) return false;
+  return !sameAuthorDay(doc.publishedAt, chosen);
 }
 
 /** Why this cannot be saved yet, in one sentence, or null. */
