@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSwipeDismiss } from "./mobile/use-swipe-dismiss";
 import { useScrollLock } from "./mobile/use-scroll-lock";
@@ -77,6 +77,14 @@ export function MobileSheet({
   // Holds the page still without shifting the visual viewport. See the hook.
   useScrollLock(open);
 
+  /* Whichever onClose is current when Escape is pressed.
+     It used to be a dependency of the effect below, and callers pass a fresh
+     arrow on every render — the editor re-renders on every keystroke. So each
+     letter typed into a sheet re-ran the effect: focus went back to where it
+     came from, then to the panel, and on a phone the keyboard closed after
+     one character. The effect is about the sheet opening, and nothing else. */
+  const close = useEffectEvent(() => onClose());
+
   useEffect(() => {
     if (!open) return;
 
@@ -86,7 +94,7 @@ export function MobileSheet({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        close();
         return;
       }
       if (event.key !== "Tab" || !panel.current) return;
@@ -118,7 +126,7 @@ export function MobileSheet({
       // by itself the moment a sheet is dismissed.
       restoreFocus.current?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
 
   // Portals need a DOM to render into, and the server has none. Mounting is
   // tracked rather than assumed so the first client render matches the HTML.
