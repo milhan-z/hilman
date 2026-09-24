@@ -33,4 +33,4 @@ jobs:
       - name: Icons match their generator
         run: |
           npx tsx scripts/make-studio-icons.ts
-          git diff --exit-code -- public/icons
+          git diff --exit-code -- public/icons app/favicon.ico app/icon.svg
