@@ -2,6 +2,8 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { ContentDirectory } from "@/components/admin/content-directory";
 import { QueryError } from "@/components/admin/query-error";
 import { findHiddenPublished } from "@/lib/studio-visibility";
+import { readCountsFor } from "@/lib/studio-reads";
+import { formatReaders } from "@/lib/readers";
 import { formatDate } from "@/lib/utils";
 
 export const metadata = {
@@ -18,7 +20,10 @@ export default async function AdminJournalPage() {
     .select("*")
     .order("updated_at", { ascending: false });
 
-  const hidden = await findHiddenPublished("journal", posts ?? []);
+  const [hidden, reads] = await Promise.all([
+    findHiddenPublished("journal", posts ?? []),
+    readCountsFor(supabase, "journal"),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -35,10 +40,14 @@ export default async function AdminJournalPage() {
           slug: post.slug,
           status: post.status,
           featured: post.featured,
-          meta:
+          meta: [
             post.status === "published" && post.published_at
               ? formatDate(post.published_at)
               : `Edited ${formatDate(post.updated_at)}`,
+            formatReaders(reads.get(post.id)),
+          ]
+            .filter(Boolean)
+            .join(" · "),
           hiddenReasons: hidden.get(post.id),
         }))}
       />

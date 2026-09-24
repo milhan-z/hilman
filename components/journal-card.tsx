@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { Stamp, Tag } from "./ui";
 import { formatDateParts } from "@/lib/dates";
+import { formatReaders } from "@/lib/readers";
 import type { JournalPost } from "@/lib/types";
 
 export function JournalCard({ post }: { post: JournalPost }) {
   const { day, month, year } = formatDateParts(post.published_at);
+  const readers = formatReaders(post.reads);
   return (
     <Link
       href={`/journal/${post.slug}`}
@@ -18,8 +20,14 @@ export function JournalCard({ post }: { post: JournalPost }) {
       </div>
 
       <div className="min-w-0">
-        <div className="flex items-center gap-2 font-mono text-2xs uppercase tracking-wider text-faint">
+        <div className="flex items-center gap-2 font-mono text-2xs uppercase tracking-wider text-faint tnum">
           <span>{post.reading_minutes} min read</span>
+          {readers && (
+            <>
+              <span aria-hidden className="text-line-strong">/</span>
+              <span>{readers}</span>
+            </>
+          )}
           {post.featured && (
             <span className="ml-auto">
               <Stamp tone="hl">pinned</Stamp>

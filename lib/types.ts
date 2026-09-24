@@ -111,6 +111,8 @@ export interface Project {
   published_at: string | null;
   tags?: TagRow[];
   blocks?: Block[];
+  /** How many people have read it — public reads only; see lib/readers.ts. */
+  reads?: number;
 }
 
 export interface JournalPost {
@@ -127,6 +129,8 @@ export interface JournalPost {
   updated_at?: string;
   tags?: TagRow[];
   blocks?: Block[];
+  /** How many people have read it — public reads only; see lib/readers.ts. */
+  reads?: number;
 }
 
 export interface PageRow {

@@ -61,6 +61,13 @@ Run the migrations **in order** in the SQL editor (or `supabase db push`):
 | `0004_atomic_saves.sql` | transactional saves, page bootstrap, media reference lookup |
 | `0005_function_hardening.sql` | revokes the RPC surface Postgres grants to PUBLIC by default |
 | `0006_studio_sync.sql` | offline sync: mutation ledger, version guard, durable PIN lockout |
+| `0007_author_publication_date.sql` | lets the author choose a publication date |
+| `0008_fix_author_publication_date.sql` | repairs 0007 and closes the replay hole |
+| `0009_serialize_concurrent_saves.sql` | two saves of one entry can no longer both "win" |
+| `0010_trusted_message_time.sql` | contact-form limit measured against the database clock |
+| `0011_atomic_pin_throttle.sql` | a wrong PIN is counted in one step |
+| `0012_atomic_content_delete.sql` | deleting an entry and its blocks is one transaction |
+| `0013_reader_counts.sql` | reader counts on Works and Journal, kept apart from the content rows |
 
 Note on `0004`: it uses `jsonb_exists(b, 'data')` rather than the `?` operator.
 The Supabase SQL editor reads a bare `?` as a bind parameter and fails to parse

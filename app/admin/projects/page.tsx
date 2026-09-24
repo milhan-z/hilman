@@ -2,6 +2,8 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { ContentDirectory } from "@/components/admin/content-directory";
 import { QueryError } from "@/components/admin/query-error";
 import { findHiddenPublished } from "@/lib/studio-visibility";
+import { readCountsFor } from "@/lib/studio-reads";
+import { formatReaders } from "@/lib/readers";
 import { STREAMS, type Stream } from "@/lib/types";
 
 export const metadata = {
@@ -15,7 +17,10 @@ export default async function AdminProjectsPage() {
   // the client.
   const { data: projects, error } = await supabase.from("projects").select("*").order("sort_order");
 
-  const hidden = await findHiddenPublished("project", projects ?? []);
+  const [hidden, reads] = await Promise.all([
+    findHiddenPublished("project", projects ?? []),
+    readCountsFor(supabase, "project"),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -37,7 +42,11 @@ export default async function AdminProjectsPage() {
           status: project.status,
           featured: project.featured,
           group: project.stream,
-          meta: [STREAMS[project.stream as Stream]?.name ?? project.stream, project.year]
+          meta: [
+            STREAMS[project.stream as Stream]?.name ?? project.stream,
+            project.year,
+            formatReaders(reads.get(project.id)),
+          ]
             .filter(Boolean)
             .join(" · "),
           hiddenReasons: hidden.get(project.id),

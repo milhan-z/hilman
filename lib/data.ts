@@ -92,6 +92,41 @@ async function withBlocks<T extends { id: string }>(ownerType: "project" | "jour
   return rows.map((row) => ({ ...row, blocks: byOwner.get(row.id) ?? [] }));
 }
 
+/* ── Reader counts ─────────────────────────────────────── */
+
+type ReadCounts = Map<string, number>;
+
+const readKey = (kind: string, id: string) => `${kind}:${id}`;
+
+/**
+ * How many people have read each entry — migration 0013.
+ *
+ * The one read in this file that is allowed to fail quietly, and on purpose.
+ * A count is a detail beside the work, not the work: a database that does not
+ * have the table yet, or a hiccup on this one query, costs the numbers and
+ * nothing else. Every other reader here throws instead, because a missing
+ * project is worth an error and a missing "12 readers" is not.
+ */
+const getReadCounts = cache(async (): Promise<ReadCounts> => {
+  const counts: ReadCounts = new Map();
+  if (usingMockContent || !supabaseConfigured) return counts;
+  const res = await createPublicClient().from("content_reads").select("owner_type, owner_id, reads");
+  if (res.error) {
+    console.warn("[data] reader counts unavailable:", res.error.message);
+    return counts;
+  }
+  for (const row of res.data ?? []) counts.set(readKey(row.owner_type, row.owner_id), Number(row.reads) || 0);
+  return counts;
+});
+
+function withReads<T extends { id: string }>(kind: "project" | "journal", rows: T[], counts: ReadCounts): T[] {
+  if (!counts.size) return rows;
+  return rows.map((row) => {
+    const reads = counts.get(readKey(kind, row.id));
+    return reads ? { ...row, reads } : row;
+  });
+}
+
 /** List consumers do not need full body payloads in their client props. */
 function withoutBlocks<T extends { blocks?: Block[] }>(item: T): T {
   const { blocks: _blocks, ...summary } = item;
@@ -127,12 +162,12 @@ const getPublicProjects = cache(async (): Promise<Project[]> => {
   } else {
     assertConfigured("works");
     const sb = createPublicClient();
-    const res = await sb
-      .from("projects")
-      .select(PROJECT_SELECT)
-      .eq("status", "published")
-      .order("sort_order");
-    projects = await withBlocks("project", (unwrap("works", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) })));
+    const [res, reads] = await Promise.all([
+      sb.from("projects").select(PROJECT_SELECT).eq("status", "published").order("sort_order"),
+      getReadCounts(),
+    ]);
+    const rows = (unwrap("works", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) }));
+    projects = withReads("project", await withBlocks("project", rows), reads);
   }
   return projects.filter(isPublicProject);
 });
@@ -165,12 +200,12 @@ const getPublicJournal = cache(async (): Promise<JournalPost[]> => {
   }
   assertConfigured("the journal");
   const sb = createPublicClient();
-  const res = await sb
-    .from("journal_posts")
-    .select(JOURNAL_SELECT)
-    .eq("status", "published")
-    .order("published_at", { ascending: false });
-  const posts: JournalPost[] = await withBlocks("journal", (unwrap("the journal", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) })));
+  const [res, reads] = await Promise.all([
+    sb.from("journal_posts").select(JOURNAL_SELECT).eq("status", "published").order("published_at", { ascending: false }),
+    getReadCounts(),
+  ]);
+  const rows = (unwrap("the journal", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) }));
+  const posts: JournalPost[] = withReads("journal", await withBlocks("journal", rows), reads);
   return posts.filter(isPublicJournalPost);
 });
 

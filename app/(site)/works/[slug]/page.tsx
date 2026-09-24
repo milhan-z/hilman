@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BlockRenderer } from "@/components/blocks/renderer";
 import { Pic } from "@/components/cld-image";
 import { PrevNext } from "@/components/prev-next";
+import { ReaderCount } from "@/components/reader-count";
 import { ArrowLink, Button, EntryMeta, Stamp, Tag } from "@/components/ui";
 import { getProjectBySlug, getProjects, load } from "@/lib/data";
 import { ContentUnavailablePage } from "@/components/content-unavailable";
@@ -95,6 +96,7 @@ export default async function ProjectPage(props: { params: Promise<{ slug: strin
           <div className="flex flex-wrap items-center justify-between gap-3">
             <EntryMeta
               items={[STREAMS[project.stream].name, project.year ? String(project.year) : null]}
+              trailing={<ReaderCount kind="project" id={project.id} initial={project.reads} separator />}
             />
             {project.featured && <Stamp tone="hl">pinned</Stamp>}
           </div>

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BlockRenderer } from "@/components/blocks/renderer";
 import { JournalCard } from "@/components/journal-card";
 import { PrevNext } from "@/components/prev-next";
+import { ReaderCount } from "@/components/reader-count";
 import { ArrowLink, EntryMeta, Tag } from "@/components/ui";
 import { getJournalBySlug, getJournalPosts, getRelatedJournal, load } from "@/lib/data";
 import { ContentUnavailablePage } from "@/components/content-unavailable";
@@ -78,7 +79,10 @@ export default async function JournalEntryPage(props: { params: Promise<{ slug: 
       className="w-full py-14"
     >
       <header className="mx-auto max-w-3xl px-5 sm:px-8">
-        <EntryMeta items={[formatDate(post.published_at), `${post.reading_minutes} min read`]} />
+        <EntryMeta
+          items={[formatDate(post.published_at), `${post.reading_minutes} min read`]}
+          trailing={<ReaderCount kind="journal" id={post.id} initial={post.reads} separator />}
+        />
         <h1 className="mt-4 font-display text-[clamp(2rem,7.2vw,3.815rem)] font-bold leading-[1.14] tracking-tight sm:leading-[1.06]">
           {post.title}
         </h1>

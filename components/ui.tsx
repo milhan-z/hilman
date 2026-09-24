@@ -115,9 +115,15 @@ export function Tag({
 
 export function EntryMeta({
   items,
+  trailing,
   className,
 }: {
   items: (string | null | undefined)[];
+  /**
+   * Something live at the end of the strip — the reader count, which is a
+   * client component and brings its own "/" because it may render nothing.
+   */
+  trailing?: ReactNode;
   className?: string;
 }) {
   const clean = items.filter(Boolean) as string[];
@@ -134,6 +140,7 @@ export function EntryMeta({
           {item}
         </span>
       ))}
+      {trailing}
     </div>
   );
 }
