@@ -7,9 +7,16 @@ import { ArrowLink, EntryMeta, Tag } from "@/components/ui";
 import { getJournalBySlug, getJournalPosts, getRelatedJournal, load } from "@/lib/data";
 import { ContentUnavailablePage } from "@/components/content-unavailable";
 import { mediaSrc } from "@/lib/cloudinary";
+import { DEFAULT_SHARE_IMAGE, SITE_NAME } from "@/lib/site";
 import { formatDate } from "@/lib/utils";
 
 export const revalidate = 60;
+
+/** Rendered ahead of time and kept with ISR — see app/(site)/works/[slug]/page.tsx. */
+export async function generateStaticParams() {
+  const res = await load(getJournalPosts);
+  return res.ok ? res.value.map((post) => ({ slug: post.slug })) : [];
+}
 
 export async function generateMetadata(
   props: {
@@ -21,10 +28,21 @@ export async function generateMetadata(
   const post = res.ok ? res.value : null;
   if (!post) return {};
   const og = mediaSrc(post.cover_public_id, { width: 1200 });
+  const description = post.excerpt ?? undefined;
+  const path = `/journal/${post.slug}`;
   return {
     title: post.title,
-    description: post.excerpt ?? undefined,
-    openGraph: og ? { images: [{ url: og }] } : undefined,
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: "article",
+      siteName: SITE_NAME,
+      url: path,
+      title: post.title,
+      description,
+      publishedTime: post.published_at ?? undefined,
+      images: og ? [{ url: og, alt: post.title }] : [DEFAULT_SHARE_IMAGE],
+    },
   };
 }
 

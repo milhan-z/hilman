@@ -1,14 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { yearOf } from "@/lib/dates";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, LayoutGroup, LazyMotion, m, useReducedMotion } from "framer-motion";
 import { JournalCard } from "./journal-card";
 import { EntryMeta, Stamp } from "./ui";
 import type { JournalPost, TagRow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
+
+/** The animation engine arrives after the list does — see components/motion-features.ts. */
+const loadMotionFeatures = () => import("./motion-features").then((mod) => mod.default);
 
 function groupByYear(posts: JournalPost[]) {
   const map = new Map<string, JournalPost[]>();
@@ -25,6 +28,10 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
   const reduced = useReducedMotion();
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState<string | undefined>(undefined);
+  // False for the render the server sends, true once the list is on screen:
+  // entries a filter brings back animate in, the first ones never do.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => setSettled(true), []);
 
   const tags = useMemo(() => {
     const map = new Map<string, TagRow>();
@@ -148,34 +155,39 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
       )}
 
       {/* chronological spine */}
-      <LayoutGroup>
-        {groups.map(([year, items]) => (
-          <section key={year} className="mt-12" aria-label={`Entries from ${year}`}>
-            <div className="rule-baseline mb-5 flex items-baseline gap-3">
-              <h2 className="font-display text-2xl font-bold tracking-tight tnum">{year}</h2>
-              <span className="font-mono text-2xs uppercase tracking-widest text-faint">
-                {items.length} {items.length === 1 ? "entry" : "entries"}
-              </span>
-            </div>
-            <motion.div layout={!reduced} className="space-y-4">
-              <AnimatePresence mode="popLayout">
-                {items.map((post) => (
-                  <motion.div
-                    key={post.id}
-                    layout={!reduced}
-                    initial={reduced ? false : { opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={reduced ? undefined : { opacity: 0, scale: 0.98 }}
-                    transition={{ duration: 0.35, ease: EASE }}
-                  >
-                    <JournalCard post={post} />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </motion.div>
-          </section>
-        ))}
-      </LayoutGroup>
+      <LazyMotion features={loadMotionFeatures} strict>
+        <LayoutGroup>
+          {groups.map(([year, items]) => (
+            <section key={year} className="mt-12" aria-label={`Entries from ${year}`}>
+              <div className="rule-baseline mb-5 flex items-baseline gap-3">
+                <h2 className="font-display text-2xl font-bold tracking-tight tnum">{year}</h2>
+                <span className="font-mono text-2xs uppercase tracking-widest text-faint">
+                  {items.length} {items.length === 1 ? "entry" : "entries"}
+                </span>
+              </div>
+              <m.div layout={!reduced} className="space-y-4">
+                {/* Not animated on the first render, so the server HTML carries
+                    visible entries rather than a list at opacity 0 waiting for
+                    JavaScript — see works-explorer.tsx. */}
+                <AnimatePresence mode="popLayout" initial={settled}>
+                  {items.map((post) => (
+                    <m.div
+                      key={post.id}
+                      layout={!reduced}
+                      initial={reduced ? false : { opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={reduced ? undefined : { opacity: 0, scale: 0.98 }}
+                      transition={{ duration: 0.35, ease: EASE }}
+                    >
+                      <JournalCard post={post} />
+                    </m.div>
+                  ))}
+                </AnimatePresence>
+              </m.div>
+            </section>
+          ))}
+        </LayoutGroup>
+      </LazyMotion>
     </div>
   );
 }

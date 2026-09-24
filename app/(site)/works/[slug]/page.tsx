@@ -7,9 +7,25 @@ import { ArrowLink, Button, EntryMeta, Stamp, Tag } from "@/components/ui";
 import { getProjectBySlug, getProjects, load } from "@/lib/data";
 import { ContentUnavailablePage } from "@/components/content-unavailable";
 import { mediaSrc } from "@/lib/cloudinary";
+import { DEFAULT_SHARE_IMAGE, SITE_NAME } from "@/lib/site";
 import { STREAMS } from "@/lib/types";
 
 export const revalidate = 60;
+
+/**
+ * Every published project is rendered ahead of time and kept like the other
+ * public pages (ISR). Without this the route was dynamic: each visit to each
+ * project ran its database reads again, on demand, before a byte was sent.
+ *
+ * A project published later is still rendered on its first visit —
+ * `dynamicParams` defaults to true — and cached from then on, and every Studio
+ * save revalidates "/works/[slug]". A failed read here lists nothing instead of
+ * failing the deploy; the pages are then simply rendered on first visit.
+ */
+export async function generateStaticParams() {
+  const res = await load(() => getProjects());
+  return res.ok ? res.value.map((project) => ({ slug: project.slug })) : [];
+}
 
 export async function generateMetadata(
   props: {
@@ -21,10 +37,20 @@ export async function generateMetadata(
   const project = res.ok ? res.value : null;
   if (!project) return {};
   const og = mediaSrc(project.cover_public_id ?? project.thumbnail_public_id, { width: 1200 });
+  const description = project.excerpt ?? project.subtitle ?? undefined;
+  const path = `/works/${project.slug}`;
   return {
     title: project.title,
-    description: project.excerpt ?? project.subtitle ?? undefined,
-    openGraph: og ? { images: [{ url: og }] } : undefined,
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: "article",
+      siteName: SITE_NAME,
+      url: path,
+      title: project.title,
+      description,
+      images: og ? [{ url: og, alt: project.title }] : [DEFAULT_SHARE_IMAGE],
+    },
   };
 }
 

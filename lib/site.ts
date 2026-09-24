@@ -48,3 +48,20 @@ if (siteUrlIsPlaceholder) {
 export function absoluteUrl(path = "/"): string {
   return new URL(path, siteUrl).toString();
 }
+
+export const SITE_NAME = "Hilman.";
+
+/**
+ * The share card every page falls back to — app/opengraph-image.tsx.
+ *
+ * A page that sets its own `openGraph` replaces the layout's whole object
+ * (Next merges metadata shallowly), and with it the image the file
+ * convention attached. So a detail page without a cover names this one
+ * explicitly, rather than going out with no picture at all.
+ */
+export const DEFAULT_SHARE_IMAGE = {
+  url: "/opengraph-image",
+  width: 1200,
+  height: 630,
+  alt: "Hilman — Design, media & code",
+};

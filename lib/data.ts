@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { mockJournal, mockPages, mockProjects, mockSettings, mockTags } from "./mock";
 import { isPublicJournalPost, isPublicProject, sanitizePublicSettings } from "./content-quality";
 import { resolveProfileData } from "./profile";
@@ -26,6 +27,14 @@ import {
  *    from production put invented project slugs into the live sitemap while
  *    the real pages 404'd — so in production a missing Supabase config is an
  *    error, not a silent fallback.
+ *
+ * And one rule about cost: every reader is wrapped in React's `cache()`, so a
+ * render asks the database each question once. A project page used to ask
+ * six — its own row and blocks twice (once for the metadata, once for the
+ * page), then every project and every block again for the previous/next
+ * links — and the site layout asked for the Home page a second time on the
+ * home page. The memo is scoped to one request, so nothing here outlives the
+ * render that asked; ISR decides how long the answer is kept.
  */
 
 const PROJECT_SELECT = "*, project_tags(tag:tags(*))";
@@ -67,17 +76,6 @@ function unwrap<T>(what: string, res: { data: T | null; error: any }): T | null 
   return res.data;
 }
 
-async function fetchBlocks(ownerType: string, ownerId: string): Promise<Block[]> {
-  const sb = createPublicClient();
-  const res = await sb
-    .from("content_blocks")
-    .select("id, type, position, data")
-    .eq("owner_type", ownerType)
-    .eq("owner_id", ownerId)
-    .order("position");
-  return (unwrap(`${ownerType} content`, res) as Block[] | null) ?? [];
-}
-
 /** One batched read keeps list/detail quality checks consistent without N+1 queries. */
 async function withBlocks<T extends { id: string }>(ownerType: "project" | "journal", rows: T[]): Promise<(T & { blocks: Block[] })[]> {
   if (!rows.length) return [];
@@ -102,7 +100,7 @@ function withoutBlocks<T extends { blocks?: Block[] }>(item: T): T {
 
 /* ── Settings ──────────────────────────────────────────── */
 
-export async function getSettings(): Promise<Settings> {
+export const getSettings = cache(async (): Promise<Settings> => {
   if (usingMockContent) return sanitizePublicSettings(mockSettings);
   assertConfigured("site settings");
   const sb = createPublicClient();
@@ -110,11 +108,19 @@ export async function getSettings(): Promise<Settings> {
   const rows = unwrap("site settings", res) ?? [];
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return sanitizePublicSettings({ ...DEFAULT_SETTINGS, ...map } as Settings);
-}
+});
 
 /* ── Projects ──────────────────────────────────────────── */
 
-export async function getProjects(filter?: { stream?: Stream; tag?: string }): Promise<Project[]> {
+/**
+ * Every project a visitor may see, blocks included, in curated order.
+ *
+ * The lists and the detail page all read from this one answer. The detail
+ * page needs the whole list anyway — for previous/next, and because the
+ * public screen has to see a project's blocks to judge it — so reading the
+ * one row again separately only doubled the work.
+ */
+const getPublicProjects = cache(async (): Promise<Project[]> => {
   let projects: Project[];
   if (usingMockContent) {
     projects = mockProjects.filter((p) => p.status === "published");
@@ -128,44 +134,34 @@ export async function getProjects(filter?: { stream?: Stream; tag?: string }): P
       .order("sort_order");
     projects = await withBlocks("project", (unwrap("works", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) })));
   }
-  projects = projects.filter(isPublicProject);
+  return projects.filter(isPublicProject);
+});
+
+export const getProjects = cache(async (filter?: { stream?: Stream; tag?: string }): Promise<Project[]> => {
+  let projects = await getPublicProjects();
   if (filter?.stream) projects = projects.filter((p) => p.stream === filter.stream);
   if (filter?.tag) projects = projects.filter((p) => p.tags?.some((t) => t.slug === filter.tag));
   return projects.map(withoutBlocks);
-}
+});
 
 export async function getFeaturedProjects(limit = 3): Promise<Project[]> {
   const all = await getProjects();
   return all.filter((p) => p.featured).slice(0, limit);
 }
 
-export async function getProjectBySlug(slug: string): Promise<Project | null> {
-  if (usingMockContent) {
-    return mockProjects.find((p) => p.slug === slug && isPublicProject(p)) ?? null;
-  }
-  assertConfigured("this project");
-  const sb = createPublicClient();
-  const res = await sb
-    .from("projects")
-    .select(PROJECT_SELECT)
-    .eq("slug", slug)
-    .eq("status", "published")
-    .maybeSingle();
-  const data = unwrap("this project", res);
-  if (!data) return null;
-  const blocks = await fetchBlocks("project", (data as any).id);
-  const project = { ...(data as any), tags: mapTags(data), blocks } as Project;
-  return isPublicProject(project) ? project : null;
-}
+export const getProjectBySlug = cache(async (slug: string): Promise<Project | null> => {
+  const projects = await getPublicProjects();
+  return projects.find((p) => p.slug === slug) ?? null;
+});
 
 /* ── Journal ───────────────────────────────────────────── */
 
-export async function getJournalPosts(): Promise<JournalPost[]> {
+/** Every entry a visitor may see, blocks included, newest first. See getPublicProjects. */
+const getPublicJournal = cache(async (): Promise<JournalPost[]> => {
   if (usingMockContent) {
     return [...mockJournal]
       .filter(isPublicJournalPost)
-      .sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? ""))
-      .map(withoutBlocks);
+      .sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? ""));
   }
   assertConfigured("the journal");
   const sb = createPublicClient();
@@ -175,27 +171,17 @@ export async function getJournalPosts(): Promise<JournalPost[]> {
     .eq("status", "published")
     .order("published_at", { ascending: false });
   const posts: JournalPost[] = await withBlocks("journal", (unwrap("the journal", res) ?? []).map((row: any) => ({ ...row, tags: mapTags(row) })));
-  return posts.filter(isPublicJournalPost).map(withoutBlocks);
-}
+  return posts.filter(isPublicJournalPost);
+});
 
-export async function getJournalBySlug(slug: string): Promise<JournalPost | null> {
-  if (usingMockContent) {
-    return mockJournal.find((j) => j.slug === slug && isPublicJournalPost(j)) ?? null;
-  }
-  assertConfigured("this entry");
-  const sb = createPublicClient();
-  const res = await sb
-    .from("journal_posts")
-    .select(JOURNAL_SELECT)
-    .eq("slug", slug)
-    .eq("status", "published")
-    .maybeSingle();
-  const data = unwrap("this entry", res);
-  if (!data) return null;
-  const blocks = await fetchBlocks("journal", (data as any).id);
-  const post = { ...(data as any), tags: mapTags(data), blocks } as JournalPost;
-  return isPublicJournalPost(post) ? post : null;
-}
+export const getJournalPosts = cache(async (): Promise<JournalPost[]> => {
+  return (await getPublicJournal()).map(withoutBlocks);
+});
+
+export const getJournalBySlug = cache(async (slug: string): Promise<JournalPost | null> => {
+  const posts = await getPublicJournal();
+  return posts.find((j) => j.slug === slug) ?? null;
+});
 
 export async function getRelatedJournal(post: JournalPost, limit = 2): Promise<JournalPost[]> {
   const all = await getJournalPosts();
@@ -211,7 +197,15 @@ export async function getRelatedJournal(post: JournalPost, limit = 2): Promise<J
 
 /* ── Pages ─────────────────────────────────────────────── */
 
-export async function getPage(slug: string): Promise<PageRow | null> {
+/**
+ * A page's structured data.
+ *
+ * Home, About and Connect are edited as forms and rendered from `data` alone,
+ * so this no longer reads the page's content blocks: nothing public drew
+ * them, and the site layout calls this on every route for the footer, which
+ * made it a second round trip on every render for a list nobody used.
+ */
+export const getPage = cache(async (slug: string): Promise<PageRow | null> => {
   if (usingMockContent) {
     const page = mockPages.find((p) => p.slug === slug);
     return page ? { ...page, data: resolveProfileData(slug, page.data) } : null;
@@ -221,31 +215,40 @@ export async function getPage(slug: string): Promise<PageRow | null> {
   const res = await sb.from("pages").select("*").eq("slug", slug).maybeSingle();
   const data = unwrap(`the ${slug} page`, res);
   if (!data) return null;
-  const blocks = await fetchBlocks("page", (data as any).id);
-  return { ...(data as any), data: resolveProfileData(slug, (data as any).data), blocks };
-}
+  return { ...(data as any), data: resolveProfileData(slug, (data as any).data) };
+});
 
 /* ── Tags ──────────────────────────────────────────────── */
 
-export async function getTags(): Promise<TagRow[]> {
+export const getTags = cache(async (): Promise<TagRow[]> => {
   if (usingMockContent) return mockTags;
   assertConfigured("topics");
   const sb = createPublicClient();
   const res = await sb.from("tags").select("*").order("name");
   return (unwrap("topics", res) as TagRow[] | null) ?? [];
-}
+});
 
 /* ── Sitemap helpers ───────────────────────────────────── */
+
+export interface PublishedEntry {
+  slug: string;
+  /** When the entry last changed, if the row says — for sitemap.xml. */
+  lastModified?: string;
+}
+
+function publishedEntry(row: { slug: string; updated_at?: string; published_at: string | null }): PublishedEntry {
+  return { slug: row.slug, lastModified: row.updated_at ?? row.published_at ?? undefined };
+}
 
 /**
  * Published slugs only. Throws like every other read — the sitemap decides
  * what to do with a failure, rather than shipping a stale or invented list.
  */
-export async function getAllSlugs() {
+export async function getAllSlugs(): Promise<{ projects: PublishedEntry[]; journal: PublishedEntry[] }> {
   const [projects, journal] = await Promise.all([getProjects(), getJournalPosts()]);
   return {
-    projects: projects.map((p) => p.slug),
-    journal: journal.map((j) => j.slug),
+    projects: projects.map(publishedEntry),
+    journal: journal.map(publishedEntry),
   };
 }
 

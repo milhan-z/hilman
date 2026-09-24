@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, LayoutGroup, LazyMotion, m, useReducedMotion } from "framer-motion";
 import { ProjectCard } from "./project-card";
 import { EntryMeta } from "./ui";
 import { STREAMS, type Project, type Stream, type TagRow } from "@/lib/types";
@@ -16,6 +16,12 @@ const STREAM_ACCENT: Record<Stream, string> = {
 const streamKeys = Object.keys(STREAMS) as Stream[];
 const EASE = [0.16, 1, 0.3, 1] as const;
 
+/** The animation engine arrives after the grid does — see components/motion-features.ts. */
+const loadMotionFeatures = () => import("./motion-features").then((mod) => mod.default);
+
+const streamFrom = (value: string | null): Stream | undefined =>
+  streamKeys.includes(value as Stream) ? (value as Stream) : undefined;
+
 type SortKey = "curated" | "newest" | "oldest" | "az";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "curated", label: "Curated" },
@@ -28,31 +34,28 @@ const SORTS: { key: SortKey; label: string }[] = [
  * Client-side Works explorer — search + stream + tag + sort all filter the
  * in-memory list instantly (no navigation, no loading) and animate the grid
  * with shared-layout transitions. Built to stay usable as the archive grows.
+ *
+ * The filter lives in the address (`?stream=`, `?tag=`) and is read from it
+ * here, after hydration, because /works is a static page: the server renders
+ * every project once, and a link to a filtered view narrows that grid in
+ * place. Back and forward restore it the same way.
  */
-export function WorksExplorer({
-  projects,
-  tags,
-  initialStream,
-  initialTag,
-}: {
-  projects: Project[];
-  tags: TagRow[];
-  initialStream?: Stream;
-  initialTag?: string;
-}) {
+export function WorksExplorer({ projects, tags }: { projects: Project[]; tags: TagRow[] }) {
   const reduced = useReducedMotion();
-  const [stream, setStream] = useState<Stream | undefined>(initialStream);
-  const [tag, setTag] = useState<string | undefined>(initialTag);
+  const [stream, setStream] = useState<Stream | undefined>(undefined);
+  const [tag, setTag] = useState<string | undefined>(undefined);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("curated");
-  useEffect(() => { setStream(initialStream); setTag(initialTag); }, [initialStream, initialTag]);
+  // False for the render the server sends, true once the grid is on screen.
+  const [settled, setSettled] = useState(false);
   useEffect(() => {
+    setSettled(true);
     const restore = () => {
       const params = new URLSearchParams(window.location.search);
-      const value = params.get("stream") as Stream;
-      setStream(streamKeys.includes(value) ? value : undefined);
+      setStream(streamFrom(params.get("stream")));
       setTag(params.get("tag") || undefined);
     };
+    restore();
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);
@@ -241,30 +244,37 @@ export function WorksExplorer({
             </button>
           </div>
         ) : (
-          <LayoutGroup>
-            {/* Three columns waited for `xl`, not `lg`. Measured at the old
-                breakpoint: a card was 323px wide at 768 and 289px at 1024 —
-                the third column arrived before the cards could afford it, so
-                a wider screen handed you a smaller project. They now keep
-                growing through the tablet range and go three-up at 1280,
-                where there is genuinely room for three. */}
-            <motion.div layout={!reduced} className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              <AnimatePresence mode="popLayout">
-                {filtered.map((p, i) => (
-                  <motion.div
-                    key={p.id}
-                    layout={!reduced}
-                    initial={reduced ? false : { opacity: 0, scale: 0.96, y: 12 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={reduced ? undefined : { opacity: 0, scale: 0.96 }}
-                    transition={{ duration: 0.4, ease: EASE }}
-                  >
-                    <ProjectCard project={p} index={i} priority={i < 3} />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </motion.div>
-          </LayoutGroup>
+          <LazyMotion features={loadMotionFeatures} strict>
+            <LayoutGroup>
+              {/* Three columns waited for `xl`, not `lg`. Measured at the old
+                  breakpoint: a card was 323px wide at 768 and 289px at 1024 —
+                  the third column arrived before the cards could afford it, so
+                  a wider screen handed you a smaller project. They now keep
+                  growing through the tablet range and go three-up at 1280,
+                  where there is genuinely room for three. */}
+              <m.div layout={!reduced} className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                {/* Not animated on the first render: the cards the server sends
+                    are drawn where they belong. Letting each one animate in
+                    from opacity 0 meant the HTML shipped an invisible grid, and
+                    the archive stayed blank until the JavaScript arrived.
+                    Cards a filter brings back still fade in. */}
+                <AnimatePresence mode="popLayout" initial={settled}>
+                  {filtered.map((p, i) => (
+                    <m.div
+                      key={p.id}
+                      layout={!reduced}
+                      initial={reduced ? false : { opacity: 0, scale: 0.96, y: 12 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={reduced ? undefined : { opacity: 0, scale: 0.96 }}
+                      transition={{ duration: 0.4, ease: EASE }}
+                    >
+                      <ProjectCard project={p} index={i} priority={i < 3} />
+                    </m.div>
+                  ))}
+                </AnimatePresence>
+              </m.div>
+            </LayoutGroup>
+          </LazyMotion>
         )}
       </div>
     </div>

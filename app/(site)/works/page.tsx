@@ -11,25 +11,28 @@ export const revalidate = 60;
 export const metadata: Metadata = {
   title: "Works",
   description: "Design, film, photography, and code by Hilman — with the process and thinking behind each project.",
+  // ?stream= and ?tag= are views of this one page, not pages of their own.
+  alternates: { canonical: "/works" },
 };
 
 const streamKeys = Object.keys(STREAMS) as Stream[];
 
-export default async function WorksPage(
-  props: {
-    searchParams: Promise<{ stream?: string; tag?: string }>;
-  }
-) {
-  const searchParams = await props.searchParams;
-  const initialStream = streamKeys.includes(searchParams.stream as Stream)
-    ? (searchParams.stream as Stream)
-    : undefined;
+/**
+ * Static, like every other index, and it did not used to be.
+ *
+ * Reading `searchParams` here made /works the one public page rendered on
+ * every request: a server round trip and three database reads before the
+ * archive could appear, for a filter the explorer applies in the browser
+ * anyway. The page now renders once (ISR) with every project, and
+ * <WorksExplorer /> picks the stream and tag up from the address itself.
+ */
+export default async function WorksPage() {
   const [projectsRes, tagsRes] = await Promise.all([load(() => getProjects()), load(getTags)]);
   const projects = projectsRes.ok ? projectsRes.value : [];
   const tags = tagsRes.ok ? tagsRes.value : [];
 
   return (
-    <div className="mx-auto max-w-wide px-5 py-14 sm:px-8">
+    <div className="mx-auto max-w-wide px-5 py-14 sm:px-8 lg:px-12">
       <header className="max-w-2xl">
         <Kicker>ideas, made into something</Kicker>
         <div className="relative mt-3 inline-block">
@@ -50,12 +53,7 @@ export default async function WorksPage(
           <div className="border-t border-line pt-6 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">{streamKeys.map((stream) => <div key={stream} className="border-b border-line py-4 first:pt-0 last:border-0"><h3 className="font-display text-xl font-medium">{STREAMS[stream].name}</h3><p className="mt-1 text-sm text-soft">{STREAMS[stream].tagline}</p></div>)}<ArrowLink href="/connect" className="mt-5">Have a project in mind?</ArrowLink></div>
         </section>
       ) : projectsRes.ok ? (
-        <WorksExplorer
-          projects={projects}
-          tags={tags}
-          initialStream={initialStream}
-          initialTag={searchParams.tag}
-        />
+        <WorksExplorer projects={projects} tags={tags} />
       ) : (
         <div className="mt-10">
           <ContentUnavailable what="the archive" detail={projectsRes.error} />

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getAllSlugs } from "@/lib/data";
+import { getAllSlugs, type PublishedEntry } from "@/lib/data";
 import { siteUrl } from "@/lib/site";
 
 /**
@@ -20,8 +20,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: "weekly" as const,
   }));
 
-  let projects: string[] = [];
-  let journal: string[] = [];
+  let projects: PublishedEntry[] = [];
+  let journal: PublishedEntry[] = [];
   try {
     const slugs = await getAllSlugs();
     projects = slugs.projects ?? [];
@@ -34,16 +34,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return statics;
   }
 
+  // An entry's own timestamp, not the time the sitemap happened to be built:
+  // telling crawlers every page changed within the hour teaches them to
+  // ignore the field, and then a real edit is not noticed any sooner.
+  const modified = (entry: PublishedEntry) => {
+    const time = entry.lastModified ? new Date(entry.lastModified) : null;
+    return time && !Number.isNaN(time.getTime()) ? time : now;
+  };
+
   return [
     ...statics,
-    ...projects.map((slug) => ({
-      url: `${siteUrl}/works/${slug}`,
-      lastModified: now,
+    ...projects.map((entry) => ({
+      url: `${siteUrl}/works/${entry.slug}`,
+      lastModified: modified(entry),
       changeFrequency: "monthly" as const,
     })),
-    ...journal.map((slug) => ({
-      url: `${siteUrl}/journal/${slug}`,
-      lastModified: now,
+    ...journal.map((entry) => ({
+      url: `${siteUrl}/journal/${entry.slug}`,
+      lastModified: modified(entry),
       changeFrequency: "monthly" as const,
     })),
   ];
