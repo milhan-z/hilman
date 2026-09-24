@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { motion, useReducedMotion } from "framer-motion";
 import { mediaSrc } from "@/lib/cloudinary";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +35,13 @@ import { cn } from "@/lib/utils";
  * A gallery hands the whole set in, so the arrows and a swipe move through it
  * without closing and reopening. A single image block hands in one item and
  * the controls disappear on their own.
+ *
+ * ── its two small fades are CSS ──
+ *
+ * `.lightbox-in` and `.lightbox-photo-in` in app/globals.css, with the
+ * reduced-motion opt-out beside them. They were Framer Motion elements, and
+ * because every image block on an article is openable, that put the whole
+ * library into every article with a photograph in it.
  */
 
 export interface LightboxItem {
@@ -87,8 +93,6 @@ export function ZoomTrigger({
   );
 }
 
-const EASE = [0.16, 1, 0.3, 1] as const;
-
 export function Lightbox({
   items,
   index,
@@ -101,7 +105,6 @@ export function Lightbox({
   onClose: () => void;
   onIndex: (next: number) => void;
 }) {
-  const reduced = useReducedMotion();
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -215,14 +218,11 @@ export function Lightbox({
   if (!src) return null;
 
   return createPortal(
-    <motion.div
+    <div
       ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={item.caption || item.alt || "Photograph"}
-      initial={reduced ? false : { opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.18, ease: EASE }}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       // The backdrop closes; anything inside it does not. Checking the target
@@ -237,7 +237,7 @@ export function Lightbox({
           would simply not be drawn. See tests/tailwind-tokens.test.ts, which
           catches exactly that — including, twice now, when the offending
           class name appears only inside a comment explaining the rule. */
-      className="fixed inset-0 z-[100] flex flex-col bg-[rgba(10,9,8,0.94)] p-3 backdrop-blur-sm sm:p-6"
+      className="lightbox-in fixed inset-0 z-[100] flex flex-col bg-[rgba(10,9,8,0.94)] p-3 backdrop-blur-sm sm:p-6"
       style={{
         // Respect a notch, and the home indicator underneath it.
         paddingTop: "max(0.75rem, env(safe-area-inset-top))",
@@ -275,16 +275,16 @@ export function Lightbox({
         }}
       >
         {many && <Arrow side="left" onClick={() => go(-1)} />}
-        <motion.img
+        {/* Keyed by position, so each photograph mounts fresh and plays its
+            own settle-in rather than swapping pixels under the last one. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           key={index}
           src={src}
           alt={item.alt}
-          initial={reduced ? false : { opacity: 0, scale: 0.985 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.2, ease: EASE }}
           // Fits the box without cropping and without stretching — the whole
           // point of opening it was to see the photograph, all of it.
-          className="max-h-full min-h-0 w-auto max-w-full rounded-sm object-contain"
+          className="lightbox-photo-in max-h-full min-h-0 w-auto max-w-full rounded-sm object-contain"
         />
 
         {many && <Arrow side="right" onClick={() => go(1)} />}
@@ -293,7 +293,7 @@ export function Lightbox({
       {item.caption && (
         <p className="shrink-0 text-center font-hand text-lg text-cream-soft">{item.caption}</p>
       )}
-    </motion.div>,
+    </div>,
     document.body
   );
 }

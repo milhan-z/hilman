@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "../../use-reduced-motion";
 import { Pic } from "../../cld-image";
 import { cn } from "@/lib/utils";
 import { Lightbox, ZoomTrigger, useLightbox } from "../lightbox";
@@ -33,7 +34,84 @@ import { itemLabel, type GalleryItem } from "./shared";
  * different pile on the server and in the browser — a hydration mismatch — and
  * then a different one again on every re-render, so a gallery would rearrange
  * itself while somebody was looking at it. Same index, same tilt, forever.
+ *
+ * ── settling onto the desk ──
+ *
+ * The cards drop into place, one after another, the first time the pile
+ * scrolls into view. That is a CSS transition switched on by one
+ * IntersectionObserver — see useSettle() — rather than Framer Motion, which
+ * this was until the library turned out to be the largest thing every article
+ * downloaded, pile or no pile. The page is sent with the cards already on
+ * the desk: a pile that is on screen when the page opens simply stays put,
+ * and one further down is lifted out of sight first so it has something to
+ * settle from. Nothing is ever hidden waiting for JavaScript.
  */
+
+/** How long one card takes to land, and how far behind the previous one it starts. */
+const SETTLE = { duration: 0.42, stagger: 0.05, ease: "cubic-bezier(0.16, 1, 0.3, 1)", lift: 18 } as const;
+
+type SettlePhase = "resting" | "lifted" | "settling";
+
+/**
+ * "resting" is what the server sends and what reduced motion keeps. After
+ * hydration a pile that is still below the fold is "lifted" (moved out of
+ * place, invisibly, with no transition), and becomes "settling" as it comes
+ * into view, which is what plays the transition.
+ */
+function useSettle(reduced: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [phase, setPhase] = useState<SettlePhase>("resting");
+
+  useEffect(() => {
+    if (reduced) {
+      // Also the way back if the preference arrives after hydration, so a
+      // pile can never be left lifted out of sight.
+      setPhase("resting");
+      return;
+    }
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+
+    let first = true;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (first) {
+          first = false;
+          // Any part of it already on screen: it has been seen where it is,
+          // so it stays. Measured against the whole viewport, not the
+          // trigger margin, so a pile peeking over the fold never vanishes.
+          const onScreen = entries.some(
+            ({ boundingClientRect: box }) => box.top < window.innerHeight && box.bottom > 0
+          );
+          if (onScreen) observer.disconnect();
+          else setPhase("lifted");
+          return;
+        }
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setPhase("settling");
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -40px 0px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [reduced]);
+
+  return { ref, phase };
+}
+
+function settleStyle(phase: SettlePhase, rotate: number, index: number): React.CSSProperties {
+  if (phase === "lifted") {
+    return { opacity: 0, transform: `translateY(${SETTLE.lift}px) rotate(${rotate}deg)` };
+  }
+  const style: React.CSSProperties = { opacity: 1, transform: `rotate(${rotate}deg)` };
+  if (phase === "settling") {
+    const delay = `${index * SETTLE.stagger}s`;
+    style.transition = `opacity ${SETTLE.duration}s ${SETTLE.ease} ${delay}, transform ${SETTLE.duration}s ${SETTLE.ease} ${delay}`;
+  }
+  return style;
+}
 
 /** Index → tilt. Six entries, cycled: enough variety to read as a pile. */
 const TILTS = [
@@ -69,6 +147,7 @@ export function fanGeometry(count: number) {
 export function GalleryStack({ items }: { items: GalleryItem[] }) {
   const reduced = useReducedMotion();
   const lightbox = useLightbox();
+  const settle = useSettle(reduced);
   if (items.length === 0) return null;
 
   const fan = fanGeometry(items.length);
@@ -81,7 +160,7 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
        pile silently grows to the full width of the page.
 
        The cap is lifted at `sm`, where the fan wants the whole column. */
-    <div className="!max-w-none">
+    <div className="!max-w-none" ref={settle.ref}>
       <div
         className={cn(
           "mx-auto w-full max-w-[34rem] pb-2 sm:max-w-none",
@@ -90,14 +169,13 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
       >
         {items.map((item, i) => {
           const tilt = TILTS[i % TILTS.length];
-          const settled = { opacity: 1, y: 0, rotate: tilt.rotate };
 
           return (
             /* Position lives out here, in classes a media query can reach.
-               The rotation and the entrance animation live on the motion
-               element inside, because Framer Motion writes `transform`
-               inline and an inline transform beats any class — the two
-               cannot share one element without one of them losing. */
+               The rotation and the settling live on the figure inside,
+               because they are written as an inline `transform`, and an
+               inline transform beats any class — the two cannot share one
+               element without one of them losing. */
             <div
               key={i}
               style={
@@ -123,17 +201,7 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
                   "sm:ml-[var(--shift)] sm:mr-0 sm:mt-[var(--lift)] sm:w-[var(--card)] sm:shrink-0"
               )}
             >
-              <motion.figure
-                initial={reduced ? false : { opacity: 0, y: 18, rotate: tilt.rotate }}
-                whileInView={settled}
-                animate={reduced ? settled : undefined}
-                viewport={{ once: true, margin: "0px 0px -40px 0px" }}
-                transition={{
-                  duration: 0.42,
-                  ease: [0.16, 1, 0.3, 1],
-                  delay: reduced ? 0 : i * 0.05,
-                }}
-              >
+              <figure style={settleStyle(settle.phase, tilt.rotate, i)}>
                 <ZoomTrigger
                   onOpen={() => lightbox.open(i)}
                   label={`Open ${itemLabel(item, i, items.length)}`}
@@ -172,7 +240,7 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
                     </figcaption>
                   )}
                 </ZoomTrigger>
-              </motion.figure>
+              </figure>
             </div>
           );
         })}

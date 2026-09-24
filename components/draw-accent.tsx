@@ -1,12 +1,16 @@
-"use client";
-
-import { motion, useReducedMotion } from "framer-motion";
-
 /**
- * Hand-drawn SVG accent that "draws in" when scrolled into view.
+ * Hand-drawn SVG accent that draws itself in.
  * Underlines live in a short 200×14 box (stroke near the bottom) so they
  * tuck cleanly under a heading instead of striking through it. Enclosing
  * shapes (circle/bracket) keep the tall 200×60 box.
+ *
+ * The drawing is a CSS animation on the stroke — `.draw-accent` in
+ * app/globals.css, the same `pathLength` + dash technique Framer Motion's
+ * `pathLength` used underneath. So this is a server component: it ships no
+ * JavaScript, and the line draws as soon as the stylesheet arrives rather
+ * than after the page hydrates. Every accent sits under a page title, so
+ * "when scrolled into view" and "when the page opens" were the same moment.
+ * Reduced motion gets the finished line.
  */
 const SHAPES: Record<string, { d: string; vb: [number, number]; }> = {
   underline: { d: "M3 9 C 45 5, 95 12, 135 8 C 168 5, 186 10, 197 8", vb: [200, 14] },
@@ -66,7 +70,6 @@ export function DrawAccent({
   duration?: number;
   className?: string;
 }) {
-  const reduced = useReducedMotion();
   const shape = SHAPES[variant] ?? SHAPES.underline;
   const [vbW, vbH] = shape.vb;
   const height = Math.round((width / vbW) * vbH);
@@ -83,7 +86,7 @@ export function DrawAccent({
       className={className}
       style={{ overflow: "visible", display: "block" }}
     >
-      <motion.path
+      <path
         d={shape.d}
         stroke={stroke}
         strokeWidth={strokeWidth}
@@ -91,10 +94,11 @@ export function DrawAccent({
         strokeLinejoin="round"
         fill="none"
         vectorEffect="non-scaling-stroke"
-        initial={{ pathLength: reduced ? 1 : 0 }}
-        whileInView={{ pathLength: 1 }}
-        viewport={{ once: true, margin: "0px 0px -10% 0px" }}
-        transition={{ duration: reduced ? 0 : duration, delay: reduced ? 0 : delay, ease: [0.45, 0, 0.2, 1] }}
+        // The whole stroke measures 1, so the dash that draws it can be 1 too,
+        // whatever the shape's real length.
+        pathLength={1}
+        className="draw-accent"
+        style={{ animationDuration: `${duration}s`, animationDelay: `${delay}s` }}
       />
     </svg>
   );

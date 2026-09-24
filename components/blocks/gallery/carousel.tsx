@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useReducedMotion } from "framer-motion";
+import { useReducedMotion } from "../../use-reduced-motion";
 import { Pic } from "../../cld-image";
 import { cn } from "@/lib/utils";
 import { Lightbox, ZoomTrigger, useLightbox } from "../lightbox";

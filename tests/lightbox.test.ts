@@ -188,9 +188,23 @@ test("the arrows float over the image rather than competing for its width", () =
 /* ── motion, and what it costs ────────────────────────────── */
 
 test("the overlay respects a preference for less motion", () => {
+  // The two fades are CSS classes, and the stylesheet switches both off for
+  // anyone who has asked for less motion.
   const lb = code(LIGHTBOX);
-  assert.match(lb, /useReducedMotion/);
-  assert.match(lb, /initial=\{reduced \? false : /, "no entrance when it is not wanted");
+  assert.match(lb, /className="lightbox-in /, "the backdrop fades through a class");
+  assert.match(lb, /className="lightbox-photo-in /, "and so does each photograph");
+
+  const css = source("app/globals.css");
+  const reduced = css.match(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\}/g) ?? [];
+  const opted = reduced.join("\n");
+  assert.match(opted, /\.lightbox-in/, "no entrance when it is not wanted");
+  assert.match(opted, /\.lightbox-photo-in/);
+});
+
+test("opening a photograph does not cost an animation library", () => {
+  // Every image block on an article is openable, so whatever this file
+  // imports is downloaded by every article with a photograph in it.
+  assert.ok(!code(LIGHTBOX).includes("framer-motion"));
 });
 
 test("no lightbox library was added to do any of this", () => {
