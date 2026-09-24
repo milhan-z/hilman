@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PublicationDateField } from "../publication-date-field";
-import { readTimeLabel, readTimeMinutes } from "@/lib/read-time";
+import { readTimeLabel } from "@/lib/read-time-core";
 import { MobileSheet } from "../mobile-sheet";
 import { CheckRow, Field, Select, TextArea, TextInput } from "../fields";
 import { MediaField } from "../block-editors";
@@ -33,6 +33,8 @@ export interface MetadataSheetProps {
   allTags: TagRow[];
   /** What the public site currently serves — not what the form holds. */
   published: boolean;
+  /** A journal's reading time, counted by the editor. */
+  readingMinutes: number;
 }
 
 /** The line in the editor that opens the sheet. */
@@ -40,19 +42,19 @@ export function MetadataSummary({
   kind,
   doc,
   published,
+  readingMinutes,
   onOpen,
 }: {
   kind: "project" | "journal";
   doc: EditorDoc;
   published: boolean;
+  readingMinutes: number;
   onOpen: () => void;
 }) {
   const bits = [
     published ? "Live" : "Draft",
     kind === "project" ? STREAMS[doc.stream as Stream]?.name ?? doc.stream : null,
-    kind === "project"
-      ? doc.year || null
-      : readTimeLabel(readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks })),
+    kind === "project" ? doc.year || null : readTimeLabel(readingMinutes),
     doc.tagIds.length > 0 ? `${doc.tagIds.length} tag${doc.tagIds.length === 1 ? "" : "s"}` : null,
   ].filter(Boolean) as string[];
 
@@ -86,6 +88,7 @@ export function MetadataSheet({
   patch,
   allTags,
   published,
+  readingMinutes,
 }: MetadataSheetProps) {
   const [advanced, setAdvanced] = useState(false);
   const isProject = kind === "project";
@@ -146,9 +149,7 @@ export function MetadataSheet({
           /* Shown, not asked for. It moves as you type, with no request and
              nothing to keep up to date. */
           <Field label="Reading time">
-            <p className="text-sm text-ink">
-              {readTimeLabel(readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks }))}
-            </p>
+            <p className="text-sm text-ink">{readTimeLabel(readingMinutes)}</p>
             <p className="mt-0.5 text-xs text-faint">Calculated from your story.</p>
           </Field>
         )}

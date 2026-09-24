@@ -1,5 +1,5 @@
 import type { Block, JournalPost, Project } from "@/lib/types";
-import { readTimeMinutes } from "@/lib/read-time";
+import { readTimeMinutesNow } from "./read-time";
 import { authorDateInput, isoFromAuthorDate, sameAuthorDay } from "@/lib/dates";
 
 /**
@@ -116,11 +116,17 @@ export function metaIsValid(doc: EditorDoc): boolean {
  * The scalar columns, named exactly as the save actions and /api/studio/sync
  * name them. One definition, so a save made offline lands identically to the
  * same save made online.
+ *
+ * `readingMinutes` is the journal's reading time when the caller has already
+ * counted it — the editor does, with readTimeMinutesFor(), because a document
+ * with Custom HTML needs the parser fetched first. Without it the count is made
+ * here, which is always possible for a document with no markup in it.
  */
 export function fieldsFor(
   kind: "project" | "journal",
   doc: EditorDoc,
-  status: "published" | "draft" = doc.status
+  status: "published" | "draft" = doc.status,
+  readingMinutes?: number
 ): Record<string, unknown> {
   if (kind === "project") {
     return {
@@ -147,8 +153,11 @@ export function fieldsFor(
     status,
     featured: doc.featured,
     // Derived at the save boundary, because the public list pages read the
-    // column and are served without blocks to count.
-    reading_minutes: readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks }),
+    // column and are served without blocks to count. The boundary counts again
+    // regardless, so a save made offline before the parser ever arrived — the
+    // one case where there is no number here — still lands with the right one.
+    reading_minutes:
+      readingMinutes ?? readTimeMinutesNow({ excerpt: doc.excerpt, blocks: doc.blocks }),
     ...publishedAtField(doc),
   };
 }

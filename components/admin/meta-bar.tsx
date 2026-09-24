@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PublicationDateField } from "./publication-date-field";
-import { readTimeLabel, readTimeMinutes } from "@/lib/read-time";
+import { readTimeLabel } from "@/lib/read-time-core";
 import { CheckRow, Field, Select, TextArea, TextInput } from "./fields";
 import { MediaField } from "./block-editors";
 import { PublishBadge } from "./mobile/status-line";
@@ -31,9 +31,11 @@ export interface MetaBarProps {
   allTags: TagRow[];
   /** What the public site serves right now. Shown, not editable. */
   published: boolean;
+  /** A journal's reading time, counted by the editor. Shown, not editable. */
+  readingMinutes: number;
 }
 
-export function MetaBar({ kind, doc, patch, allTags, published }: MetaBarProps) {
+export function MetaBar({ kind, doc, patch, allTags, published, readingMinutes }: MetaBarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isProject = kind === "project";
 
@@ -174,9 +176,7 @@ export function MetaBar({ kind, doc, patch, allTags, published }: MetaBarProps) 
           ) : (
             /* Read-only: the words decide this, not the author. */
             <Field label="Reading time">
-              <p className="text-sm text-ink">
-                {readTimeLabel(readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks }))}
-              </p>
+              <p className="text-sm text-ink">{readTimeLabel(readingMinutes)}</p>
               <p className="mt-0.5 text-xs text-faint">Calculated from your story.</p>
             </Field>
           )}

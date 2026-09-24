@@ -1,20 +1,23 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { readTimeLabel, readTimeMinutes } from "@/lib/read-time";
+import dynamic from "next/dynamic";
+import { readTimeLabel } from "@/lib/read-time-core";
+import { prefetchReadTime, readTimeMinutesFor, useReadTimeMinutes } from "./read-time";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Reorder } from "framer-motion";
 import { InlineAdd } from "./insert-zone";
-import { EditableBlock } from "./editable-block";
+import { EditableBlock, prefetchBlockPreview } from "./editable-block";
 import { PropertyDrawer } from "./property-drawer";
 import { MetaBar } from "./meta-bar";
 import { MetaPair } from "./meta-pair";
-import { DEFAULT_DATA } from "./block-editors";
+import { DEFAULT_DATA, prefetchHtmlBlockEditor } from "./block-editors";
 import { templatesFor } from "@/lib/block-templates";
 import { ActionSheet, MoreButton, type ActionItem } from "./mobile/action-sheet";
 import { AddBlockSheet } from "./mobile/add-block-sheet";
-import { ImportContentSheet } from "./mobile/import-content-sheet";
+import { MobileSheet } from "./mobile-sheet";
+import { DeferredUnavailable, useLoadedOr } from "./deferred";
 import { StarterPromptsSheet } from "./mobile/starter-prompts-sheet";
 import { useDragEdgeScroll } from "./mobile/use-drag-edge-scroll";
 import { MobileEditorShell } from "./mobile/mobile-editor-shell";
@@ -78,7 +81,82 @@ interface LiveEditorProps {
   kind: "project" | "journal";
   initial: (Project & JournalPost) | null;
   allTags: TagRow[];
+  /**
+   * A journal's reading time as the server counted it for `initial`, shown
+   * until the browser can count it too. See components/admin/read-time.ts.
+   */
+  readingMinutes?: number;
 }
+
+/**
+ * The import sheet, fetched the first time it is opened.
+ *
+ * It carries the Markdown and HTML importers — marked, htmlparser2 and the
+ * sanitiser behind them — and most sessions never import anything. It draws
+ * nothing while closed, so it is not mounted until it has been asked for, and
+ * the server's HTML is exactly what it was.
+ */
+type ImportSheet = typeof import("./mobile/import-content-sheet").ImportContentSheet;
+
+let loadedImportSheet: ImportSheet | null = null;
+
+const rememberImportSheet = (module: typeof import("./mobile/import-content-sheet")) =>
+  (loadedImportSheet = module.ImportContentSheet);
+
+const LazyImportContentSheet = dynamic(
+  () =>
+    import("./mobile/import-content-sheet").then(rememberImportSheet, () => ImportUnavailable),
+  { ssr: false }
+);
+
+const prefetchImportSheet = () =>
+  import("./mobile/import-content-sheet").then(rememberImportSheet);
+
+function ImportContentSheet(props: React.ComponentProps<ImportSheet>) {
+  const Sheet = useLoadedOr(loadedImportSheet, LazyImportContentSheet);
+  return <Sheet {...props} />;
+}
+
+/** The import sheet's stand-in when its code could not be fetched. */
+function ImportUnavailable({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <MobileSheet open={open} onClose={onClose} title="Bring content in">
+      <DeferredUnavailable />
+    </MobileSheet>
+  );
+}
+
+/**
+ * Everything the editor left out of its first download, fetched once it has
+ * settled.
+ *
+ * "When it is first needed" is not quite enough on its own: the studio keeps
+ * working offline, and a part of the editor it never fetched is a part it
+ * cannot show once the connection has gone. So when the editor is idle — drawn,
+ * interactive, and not waiting on anything — it asks for the rest. Each part is
+ * fetched once, whichever asks first.
+ *
+ * Skipped while offline: a fetch that fails is remembered as failed until the
+ * page is reloaded, and would turn a later, working fetch into a failure.
+ */
+function warmEditor() {
+  if (!navigator.onLine) return;
+  for (const prefetch of [
+    prefetchBlockPreview,
+    prefetchHtmlBlockEditor,
+    prefetchImportSheet,
+    prefetchReadTime,
+  ]) {
+    // A failure here is only a missed head start; using the part will say so.
+    prefetch().catch(() => {});
+  }
+}
+
+/**
+ * Past hydration on a slow phone. The deadline given to requestIdleCallback,
+ * and the plain delay in a browser without it.
+ */
+const WARM_AFTER_MS = 2_000;
 
 /** How long a publish may sit unanswered before we stop calling it in flight. */
 const PUBLISH_PATIENCE_MS = 12_000;
@@ -107,7 +185,7 @@ function failureOf(reason: SyncState["lastFailure"]): FailureKind {
   return "SERVER_ERROR";
 }
 
-export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
+export function LiveEditor({ kind, initial, allTags, readingMinutes: counted = 1 }: LiveEditorProps) {
   const isProject = kind === "project";
   const isNew = !initial;
   const router = useRouter();
@@ -122,6 +200,8 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     []
   );
   const snapshot = useMemo(() => JSON.stringify(doc), [doc]);
+  // Counted once here and handed to everything that shows it. Projects have none.
+  const readingMinutes = useReadTimeMinutes(isProject ? null : doc, counted);
 
   /* ── identity, stable across the save that creates the row ── */
   const [entityId, setEntityId] = useState<string | null>(initial?.id ?? null);
@@ -173,6 +253,10 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
   } | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  // Mounted from the first time it opens, then kept, so closing it is the
+  // sheet's own business rather than an unmount.
+  const [importMounted, setImportMounted] = useState(false);
+  if (importOpen && !importMounted) setImportMounted(true);
 
   /**
    * Whether the automatic recovery copy actually reached this device.
@@ -315,6 +399,16 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
     return () => {
       void pending.stop();
     };
+  }, []);
+
+  /* ── the rest of the editor, once this much of it is up — see warmEditor() ── */
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(warmEditor, { timeout: WARM_AFTER_MS });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const timer = window.setTimeout(warmEditor, WARM_AFTER_MS);
+    return () => window.clearTimeout(timer);
   }, []);
 
   /* ── the moment the app might not come back ──
@@ -483,6 +577,15 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       setPublishQueued(false);
       setInFlight(nextStatus === "published" ? "publishing" : "saving");
 
+      // Counted exactly as the save boundary will count it. Only a document
+      // with Custom HTML can wait here, and only if the parser has never been
+      // fetched. If it cannot be fetched — offline, before it ever arrived —
+      // this sends the number on screen, and the boundary counts again anyway.
+      const minutes =
+        kind === "journal"
+          ? await readTimeMinutesFor(source).catch(() => readingMinutes)
+          : undefined;
+
       const result = await handOffSave({
         entity: kind,
         entityId,
@@ -490,7 +593,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         baseUpdatedAt,
         intent: intentFor({ nextStatus, published }),
         payload: {
-          fields: fieldsFor(kind, source, nextStatus),
+          fields: fieldsFor(kind, source, nextStatus, minutes),
           blocks: source.blocks,
           tagIds: source.tagIds,
         },
@@ -533,7 +636,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       if (result.status === "conflict") setConflict(true);
       else setError(result.message);
     },
-    [doc, snapshot, kind, entityId, localId, baseUpdatedAt, published, isNew, isProject, draftKey, router]
+    [doc, snapshot, kind, entityId, localId, baseUpdatedAt, published, isNew, isProject, draftKey, router, readingMinutes]
   );
 
   /**
@@ -1042,10 +1145,23 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         <div>
           {/* Desktop keeps the full settings panel; the phone gets one line. */}
           <div className="hidden lg:block">
-            <MetaBar kind={kind} doc={doc} patch={patch} allTags={allTags} published={published} />
+            <MetaBar
+              kind={kind}
+              doc={doc}
+              patch={patch}
+              allTags={allTags}
+              published={published}
+              readingMinutes={readingMinutes}
+            />
           </div>
           <div className="mb-4 lg:hidden">
-            <MetadataSummary kind={kind} doc={doc} published={published} onOpen={() => setDetailsOpen(true)} />
+            <MetadataSummary
+              kind={kind}
+              doc={doc}
+              published={published}
+              readingMinutes={readingMinutes}
+              onOpen={() => setDetailsOpen(true)}
+            />
           </div>
 
           {/* One editor, at every width.
@@ -1155,11 +1271,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                       <div className="flex flex-wrap items-center gap-2 text-2xs text-faint">
                         <span>{published ? "Live" : "Draft"}</span>
                         <span>·</span>
-                        <span>
-                          {readTimeLabel(
-                            readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks })
-                          )}
-                        </span>
+                        <span>{readTimeLabel(readingMinutes)}</span>
                       </div>
                       <InlineTextarea
                         value={doc.title}
@@ -1364,6 +1476,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         patch={patch}
         allTags={allTags}
         published={published}
+        readingMinutes={readingMinutes}
       />
 
       <AddBlockSheet
@@ -1376,21 +1489,23 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       {/* Templates and pasted documents both end here: ordinary blocks in the
           editor's own state. Nothing below reaches the server — publishing is
           still the only thing that does. */}
-      <ImportContentSheet
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        kind={kind}
-        existing={doc.blocks}
-        onApply={(blocks, imported) => {
-          patch({
-            blocks,
-            // An untitled new document takes the imported title; one that has
-            // been named keeps its name.
-            ...(imported.title && !doc.title.trim() ? { title: imported.title } : {}),
-          });
-          setAnnouncement(`${imported.blocks.length} blocks added.`);
-        }}
-      />
+      {importMounted && (
+        <ImportContentSheet
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          kind={kind}
+          existing={doc.blocks}
+          onApply={(blocks, imported) => {
+            patch({
+              blocks,
+              // An untitled new document takes the imported title; one that has
+              // been named keeps its name.
+              ...(imported.title && !doc.title.trim() ? { title: imported.title } : {}),
+            });
+            setAnnouncement(`${imported.blocks.length} blocks added.`);
+          }}
+        />
+      )}
 
       <PropertyDrawer
         open={drawerOpen}

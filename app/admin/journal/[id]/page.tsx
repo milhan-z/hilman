@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { LiveEditor } from "@/components/admin/live-editor";
+import { readTimeMinutes } from "@/lib/read-time";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { Block } from "@/lib/types";
 
@@ -47,7 +48,19 @@ export default async function JournalEditorPage(props: { params: Promise<{ id: s
       }
     : null;
 
+  // Counted here, with the helper the save boundary uses, so the editor has the
+  // number for its first paint. A Custom HTML block means the browser has to
+  // fetch the HTML parser before it can count for itself.
+  const readingMinutes = readTimeMinutes({ excerpt: initial?.excerpt, blocks: initial?.blocks });
+
   // No chrome around the editor: it owns the whole screen, including its
   // own back button, status line and "View live" link.
-  return <LiveEditor kind="journal" initial={initial} allTags={allTags ?? []} />;
+  return (
+    <LiveEditor
+      kind="journal"
+      initial={initial}
+      allTags={allTags ?? []}
+      readingMinutes={readingMinutes}
+    />
+  );
 }
