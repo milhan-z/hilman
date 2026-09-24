@@ -18,7 +18,7 @@ red pen — disciplined, not scrapbook.
 | Styling | Tailwind CSS + CSS-variable design tokens (dark/light) |
 | Animation | Framer Motion (respects `prefers-reduced-motion`) |
 | DB + Auth | Supabase (Postgres, Auth, RLS) via `@supabase/ssr` |
-| Media | Cloudinary (signed server-side uploads, `f_auto,q_auto` delivery) |
+| Media | Cloudinary (signed server-side uploads, `f_auto,q_auto` delivery; `next/image` srcsets served by Cloudinary directly) |
 | Video | YouTube facade embed (iframe loads only on click) |
 | Deploy | Vercel (ISR, `revalidatePath` on CMS saves) |
 
@@ -125,7 +125,8 @@ blocks still point at it, and names them before letting you continue.
 1. Push to GitHub and import the repo in Vercel.
 2. Add **all env vars** from the table above (Production + Preview).
 3. Set `NEXT_PUBLIC_SITE_URL` to the production origin.
-4. Deploy. Public pages use ISR (`revalidate = 60`) and every CMS save calls
+4. Deploy. Public pages use ISR (`revalidate = 60`) — every project and journal
+   entry included, prerendered at build time — and every CMS save calls
    `revalidatePath`, so published edits appear within seconds.
 
 ## Content model
@@ -246,6 +247,34 @@ filter*, and *the query failed* — now read differently on Home, Works and Jour
 A failed read on a detail page renders that state instead of a 404, so an outage
 never tells a crawler the work does not exist.
 
+### What keeps the public site fast
+
+- **Every public route is static (ISR).** That includes `/works`, whose stream and
+  tag filters are applied in the browser from the address, and each project and
+  journal entry, listed by `generateStaticParams` (an entry published later is
+  rendered on its first visit and cached from then on).
+- **One question per table per render.** The readers in `lib/data.ts` are wrapped
+  in React's `cache()`, and a detail page reads its entry out of the same list it
+  needs for previous/next — two queries where there used to be six to eight.
+  Studio's layout and pages share one `getUser()` and one ownership check the same
+  way (`checkOwnerForRender()` in `lib/owner.ts`); server actions still check for
+  themselves.
+- **No animation library in the site shell.** The reading-progress bar
+  (`animation-timeline: scroll()`), the hand-drawn accents, the lightbox and the
+  gallery stack are CSS. Framer Motion is loaded only where it animates layout —
+  the Works and Journal explorers, which fetch its engine after the list is on
+  screen (`LazyMotion`), and the Studio's drag-to-reorder.
+- **Images come straight from Cloudinary.** `lib/cloudinary-loader.ts` makes each
+  width in a `srcset` a Cloudinary URL (`f_auto` picks AVIF/WebP per browser), so
+  there is no second optimiser in front of the CDN. Other URLs are shown as-is.
+- **Measured, then decided.** Two ideas were tried and taken back because
+  Lighthouse got worse: dropping the preload on the handwriting and mono fonts
+  (the first paint waited for them), and a `loading.tsx` skeleton on detail pages
+  (it sat in the static HTML in front of the finished article).
+
+`tests/public-performance.test.ts` pins each of these, so a regression fails the
+suite instead of quietly shipping.
+
 ## Design system
 
 Tokens live in `app/globals.css` (CSS variables, single source) and are mapped in
@@ -272,7 +301,8 @@ Tokens live in `app/globals.css` (CSS variables, single source) and are mapped i
 ## Decisions & assumptions
 
 1. **Streams are query params** (`/works?stream=visual-design`) rather than nested
-   routes — one curated index, three filtered landings.
+   routes — one curated index, three filtered landings. The filter is applied in
+   the browser, so the index itself stays one static page.
 2. **Ownership is explicit membership**, not "any authenticated user". See
    migration 0003.
 3. **Home / About / Connect are edited as forms**, driven by
