@@ -6,6 +6,7 @@ import { readTimeLabel, readTimeMinutes } from "@/lib/read-time";
 import { MobileSheet } from "../mobile-sheet";
 import { CheckRow, Field, Select, TextArea, TextInput } from "../fields";
 import { MediaField } from "../block-editors";
+import { TagField } from "../tag-field";
 import { PublishBadge } from "./status-line";
 import type { EditorDoc, EditorPatch } from "../editor-doc";
 import { STREAMS, type Stream } from "@/lib/types";
@@ -47,13 +48,15 @@ export function MetadataSummary({
   published: boolean;
   onOpen: () => void;
 }) {
+  // Typed names count: they are this entry's tags from the next save on.
+  const tags = doc.tagIds.length + (doc.newTags?.length ?? 0);
   const bits = [
     published ? "Live" : "Draft",
     kind === "project" ? STREAMS[doc.stream as Stream]?.name ?? doc.stream : null,
     kind === "project"
       ? doc.year || null
       : readTimeLabel(readTimeMinutes({ excerpt: doc.excerpt, blocks: doc.blocks })),
-    doc.tagIds.length > 0 ? `${doc.tagIds.length} tag${doc.tagIds.length === 1 ? "" : "s"}` : null,
+    tags > 0 ? `${tags} tag${tags === 1 ? "" : "s"}` : null,
   ].filter(Boolean) as string[];
 
   /* A byline, not a settings row.
@@ -173,30 +176,7 @@ export function MetadataSheet({
           </div>
         )}
 
-        <fieldset className="rounded-md border border-line bg-raise p-3.5">
-          <legend className="px-1 font-mono text-2xs uppercase tracking-widest text-faint">
-            Tags
-          </legend>
-          <div className="flex flex-wrap gap-x-5">
-            {allTags.map((tag) => (
-              <CheckRow
-                key={tag.id}
-                label={tag.name}
-                checked={doc.tagIds.includes(tag.id)}
-                onChange={(event) =>
-                  patch({
-                    tagIds: event.target.checked
-                      ? [...doc.tagIds, tag.id]
-                      : doc.tagIds.filter((id) => id !== tag.id),
-                  })
-                }
-              />
-            ))}
-            {allTags.length === 0 && (
-              <p className="py-2 text-xs text-faint">No tags yet — add some under Taxonomy.</p>
-            )}
-          </div>
-        </fieldset>
+        <TagField doc={doc} patch={patch} allTags={allTags} />
 
         <div className="rounded-md border border-line bg-raise px-3.5">
           <CheckRow

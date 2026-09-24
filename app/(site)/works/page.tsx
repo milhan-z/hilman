@@ -29,7 +29,10 @@ const streamKeys = Object.keys(STREAMS) as Stream[];
 export default async function WorksPage() {
   const [projectsRes, tagsRes] = await Promise.all([load(() => getProjects()), load(getTags)]);
   const projects = projectsRes.ok ? projectsRes.value : [];
-  const tags = tagsRes.ok ? tagsRes.value : [];
+  // Only tags some project here carries. Tags are made from the editor now,
+  // journal entries included, and a filter that empties the grid is a dead end.
+  const used = new Set(projects.flatMap((project) => (project.tags ?? []).map((tag) => tag.id)));
+  const tags = tagsRes.ok ? tagsRes.value.filter((tag) => used.has(tag.id)) : [];
 
   return (
     <div className="mx-auto max-w-wide px-5 py-14 sm:px-8 lg:px-12">

@@ -5,6 +5,7 @@ import { PublicationDateField } from "./publication-date-field";
 import { readTimeLabel, readTimeMinutes } from "@/lib/read-time";
 import { CheckRow, Field, Select, TextArea, TextInput } from "./fields";
 import { MediaField } from "./block-editors";
+import { TagField } from "./tag-field";
 import { PublishBadge } from "./mobile/status-line";
 import type { EditorDoc, EditorPatch } from "./editor-doc";
 import { STREAMS } from "@/lib/types";
@@ -189,30 +190,9 @@ export function MetaBar({ kind, doc, patch, allTags, published }: MetaBarProps) 
             <PublicationDateField doc={doc} patch={patch} />
           </div>
 
-          <fieldset className="rounded border border-line bg-raise p-3.5 sm:col-span-2">
-            <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-faint">
-              Tags
-            </legend>
-            <div className="flex flex-wrap gap-x-5 gap-y-1">
-              {allTags.map((tag) => (
-                <CheckRow
-                  key={tag.id}
-                  label={tag.name}
-                  checked={doc.tagIds.includes(tag.id)}
-                  onChange={(event) =>
-                    patch({
-                      tagIds: event.target.checked
-                        ? [...doc.tagIds, tag.id]
-                        : doc.tagIds.filter((id) => id !== tag.id),
-                    })
-                  }
-                />
-              ))}
-              {allTags.length === 0 && (
-                <p className="text-xs text-faint">No tags yet — create some under Taxonomy.</p>
-              )}
-            </div>
-          </fieldset>
+          <div className="sm:col-span-2">
+            <TagField doc={doc} patch={patch} allTags={allTags} />
+          </div>
 
           <div className="sm:col-span-2">
             <CheckRow

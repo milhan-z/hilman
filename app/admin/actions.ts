@@ -7,7 +7,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { checkOwner } from "@/lib/owner";
 import { destroyAsset } from "@/lib/cloudinary-server";
 import { slugify } from "@/lib/utils";
-import type { Block } from "@/lib/types";
+import type { Block, TagRow } from "@/lib/types";
 import { getJournalQualityIssues, getProjectQualityIssues, type ContentQualityInput } from "@/lib/content-quality";
 import {
   checkPin,
@@ -398,6 +398,22 @@ export async function bulkDeleteItems(
 }
 
 /* ── taxonomy ──────────────────────────────────────────── */
+
+/**
+ * The tag list, read again.
+ *
+ * The editor asks after a save that named new tags: the save made them on
+ * the server, and this is how the editor learns their ids and stops calling
+ * them new. Null when it can't be read — the names stay names until the next
+ * try, and saving them again finds the same tags.
+ */
+export async function listTags(): Promise<TagRow[] | null> {
+  const check = await checkOwner();
+  if (!check.ok) return null;
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase.from("tags").select("id, slug, name").order("name");
+  return error ? null : ((data ?? []) as TagRow[]);
+}
 
 export async function createTag(formData: FormData) {
   await guardOrThrow();

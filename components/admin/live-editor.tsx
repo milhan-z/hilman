@@ -25,7 +25,8 @@ import { SyncStatusSheet } from "./mobile/sync-status-sheet";
 import { useSyncState } from "./studio-runtime";
 import { Pic } from "../cld-image";
 import { STREAMS, type Stream } from "@/lib/types";
-import { deleteJournal, deleteProject } from "@/app/admin/actions";
+import { deleteJournal, deleteProject, listTags } from "@/app/admin/actions";
+import { settleNewTags } from "@/lib/tags";
 import { handOffSave } from "@/lib/studio-local/save";
 import { intentFor } from "@/lib/studio-save-intent";
 import { subscribeSyncEvents, type SyncState } from "@/lib/studio-local/sync";
@@ -46,6 +47,7 @@ import {
   docFromInitial,
   fieldsFor,
   parsedMeta,
+  settleSnapshot,
   type EditorDoc,
 } from "./editor-doc";
 import { describeEditor, type EditorAction, type FailureKind } from "@/lib/studio-editor-state";
@@ -157,8 +159,25 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
    * Keyed by mutation id, which now names exactly one immutable payload, so
    * an acknowledgement can only ever move the snapshot it actually belongs to.
    */
-  const submitted = useRef(new Map<string, { snapshot: string; published: boolean }>());
+  const submitted = useRef(
+    new Map<string, { snapshot: string; published: boolean; newTags: boolean }>()
+  );
   const lastAction = useRef<EditorAction | null>(null);
+
+  /* ── the tag catalogue ──
+     Served with the page, and read again after a save that named new tags:
+     the server made them, and this is how the editor learns their ids. The
+     names are folded into ids in the document *and* in both snapshots, or the
+     fold itself would read as an unsaved edit. */
+  const [knownTags, setKnownTags] = useState(allTags);
+  const refreshTags = useCallback(async () => {
+    const fresh = await listTags().catch(() => null);
+    if (!fresh) return;
+    setKnownTags(fresh);
+    setDoc((prev) => settleNewTags(prev, fresh));
+    setKept((prev) => settleSnapshot(prev, fresh));
+    setSynced((prev) => settleSnapshot(prev, fresh));
+  }, []);
 
   /* ── editor chrome ── */
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
@@ -405,6 +424,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
             // so a later edit stays unsynced until it is acknowledged itself.
             setSynced(mine.snapshot);
             setPublished(mine.published);
+            if (mine.newTags) void refreshTags();
           }
           if (isNew) {
             const next = `${kind}:${event.save.id}`;
@@ -428,7 +448,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
           setError(event.message);
         }
       }),
-    [localId, isNew, isProject, kind, draftKey, router]
+    [localId, isNew, isProject, kind, draftKey, router, refreshTags]
   );
 
   /* ── a publish that nobody answered ──
@@ -493,6 +513,9 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
           fields: fieldsFor(kind, source, nextStatus),
           blocks: source.blocks,
           tagIds: source.tagIds,
+          // Only when there are some, so every other save is sent exactly as
+          // it always was.
+          ...(source.newTags?.length ? { tagNames: source.newTags } : {}),
         },
       });
 
@@ -506,6 +529,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         submitted.current.set(result.mutationId, {
           snapshot: sourceSnapshot,
           published: nextStatus === "published",
+          newTags: Boolean(source.newTags?.length),
         });
         setQueued(true);
         // A draft is safe the moment it is in the queue, so say so now. A
@@ -520,6 +544,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         setPublished(nextStatus === "published");
         setInFlight("none");
         setQueued(false);
+        if (source.newTags?.length) void refreshTags();
         if (isNew) {
           const next = `${kind}:${result.id}`;
           void carryRecoveryOver(draftKey, next).then(() => {
@@ -533,7 +558,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
       if (result.status === "conflict") setConflict(true);
       else setError(result.message);
     },
-    [doc, snapshot, kind, entityId, localId, baseUpdatedAt, published, isNew, isProject, draftKey, router]
+    [doc, snapshot, kind, entityId, localId, baseUpdatedAt, published, isNew, isProject, draftKey, router, refreshTags]
   );
 
   /**
@@ -1019,7 +1044,8 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
                 onClick={() => {
                   try {
                     const restored = JSON.parse(recovered.snapshot) as EditorDoc;
-                    setDoc(restored);
+                    // Names typed last time may be tags by now.
+                    setDoc(settleNewTags(restored, knownTags));
                     // And the version it was written against, not the one this
                     // page happened to be served with. Adopting today's would
                     // tell the server this writing had seen a change it never
@@ -1042,7 +1068,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         <div>
           {/* Desktop keeps the full settings panel; the phone gets one line. */}
           <div className="hidden lg:block">
-            <MetaBar kind={kind} doc={doc} patch={patch} allTags={allTags} published={published} />
+            <MetaBar kind={kind} doc={doc} patch={patch} allTags={knownTags} published={published} />
           </div>
           <div className="mb-4 lg:hidden">
             <MetadataSummary kind={kind} doc={doc} published={published} onOpen={() => setDetailsOpen(true)} />
@@ -1362,7 +1388,7 @@ export function LiveEditor({ kind, initial, allTags }: LiveEditorProps) {
         kind={kind}
         doc={doc}
         patch={patch}
-        allTags={allTags}
+        allTags={knownTags}
         published={published}
       />
 

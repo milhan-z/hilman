@@ -1,6 +1,7 @@
-import type { Block, JournalPost, Project } from "@/lib/types";
+import type { Block, JournalPost, Project, TagRow } from "@/lib/types";
 import { readTimeMinutes } from "@/lib/read-time";
 import { authorDateInput, isoFromAuthorDate, sameAuthorDay } from "@/lib/dates";
+import { settleNewTags } from "@/lib/tags";
 
 /**
  * Everything one project or journal entry is, while it is being edited.
@@ -66,6 +67,16 @@ export interface EditorDoc {
    */
   publishedAt: string | null;
   tagIds: string[];
+  /**
+   * Tags typed into the tag field that do not exist yet, by name. They become
+   * real tags on the server when this is saved — see lib/tags.ts — and are
+   * folded into `tagIds` once the tag list has been read back.
+   *
+   * Left out, never empty. The recovery copy and the dirty check both compare
+   * serialised documents, so a document with no new tags has to serialise
+   * exactly as it did before this field existed.
+   */
+  newTags?: string[];
   blocks: Block[];
 }
 
@@ -197,6 +208,25 @@ export function publicationDateChanged(doc: EditorDoc): boolean {
   const chosen = (doc.publishedOn ?? "").trim();
   if (!chosen) return false;
   return !sameAuthorDay(doc.publishedAt, chosen);
+}
+
+/**
+ * settleNewTags(), for a document that has been serialised.
+ *
+ * The editor keeps what it has written down and what the site has as
+ * snapshot strings. When a name becomes an id in the document it has to
+ * become one in those too, or the editor would report the fold as an edit.
+ * The same fold over the same keys gives the same string on both sides.
+ */
+export function settleSnapshot(snapshot: string, known: Pick<TagRow, "id" | "slug" | "name">[]): string {
+  if (!snapshot.includes('"newTags"')) return snapshot;
+  try {
+    const parsed = JSON.parse(snapshot) as EditorDoc;
+    const settled = settleNewTags(parsed, known);
+    return settled === parsed ? snapshot : JSON.stringify(settled);
+  } catch {
+    return snapshot;
+  }
 }
 
 /** Why this cannot be saved yet, in one sentence, or null. */

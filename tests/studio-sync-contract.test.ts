@@ -160,3 +160,21 @@ test("identical bodies do not count as a difference just because block ids diffe
 
   assert.deepEqual(describeConflict(mine, theirs), []);
 });
+
+test("tags typed as new names travel by name, and only well-formed ones", () => {
+  const withNames = (tagNames: unknown) =>
+    valid({ payload: { fields: { title: "x" }, blocks: [], tagIds: [TAG_ID], tagNames: tagNames as string[] } });
+
+  assert.equal(describeMalformedMutation(withNames(["coding", "Creative Coding"])), null);
+  // A payload from before new tags existed is still exactly right.
+  assert.equal(describeMalformedMutation(valid()), null);
+  assert.match(String(describeMalformedMutation(withNames("coding"))), /list of names/);
+  assert.match(String(describeMalformedMutation(withNames(["a, b"]))), /comma/);
+  assert.match(String(describeMalformedMutation(withNames(["🎨"]))), /letter or number/);
+});
+
+test("a new tag name is a difference the conflict screen names", () => {
+  const theirs = { fields: { title: "t" }, blocks: [], tagIds: [TAG_ID] };
+  assert.deepEqual(describeConflict({ ...theirs, tagIds: [TAG_ID] }, theirs), []);
+  assert.deepEqual(describeConflict({ ...theirs, tagIds: [TAG_ID], tagNames: ["coding"] }, theirs), ["tags"]);
+});

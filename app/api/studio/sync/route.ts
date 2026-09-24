@@ -6,6 +6,7 @@ import { normaliseFields } from "@/lib/studio-content";
 import { sanitizeStudioHtml } from "@/lib/studio-html";
 import { getJournalQualityIssues, getProjectQualityIssues } from "@/lib/content-quality";
 import { readTimeMinutes } from "@/lib/read-time";
+import { resolveTagIds, tagFailureIsPermanent, type TagStore } from "@/lib/tags";
 import {
   describeMalformedMutation,
   type ServerDocument,
@@ -151,6 +152,25 @@ async function applyMutation(
     }
   }
 
+  // Tags typed as new names become real tags here, last, once everything that
+  // could refuse this save has had its say — so a rejected publish does not
+  // leave tags behind. A retry of the same save finds the tags the first
+  // attempt made and gets the same ids, which keeps the save function's
+  // idempotency digest (0006, 0009) identical. See lib/tags.ts.
+  let tagIds = mutation.payload.tagIds;
+  if (mutation.payload.tagNames?.length) {
+    try {
+      tagIds = await resolveTagIds(tagStore(supabase), tagIds, mutation.payload.tagNames);
+    } catch (cause: any) {
+      return {
+        status: tagFailureIsPermanent(cause) ? "rejected" : "retry",
+        mutationId,
+        localId,
+        message: cause?.message || "The new tags couldn't be created.",
+      };
+    }
+  }
+
   const { data, error } = await supabase.rpc("save_content_synced", {
     p_mutation_id: mutationId,
     p_entity: entity,
@@ -158,7 +178,7 @@ async function applyMutation(
     p_base_updated_at: mutation.baseUpdatedAt,
     p_data: fields,
     p_blocks: blocks,
-    p_tag_ids: mutation.payload.tagIds,
+    p_tag_ids: tagIds,
   });
 
   if (error) {
@@ -215,6 +235,32 @@ async function applyMutation(
     id: result.id,
     updatedAt: result.updated_at,
     replayed: Boolean(result.replayed),
+  };
+}
+
+/**
+ * The tags table, as tag resolution needs it. Reads and writes go through the
+ * owner's own session, so RLS decides here exactly as it does in Taxonomy.
+ */
+function tagStore(supabase: Awaited<ReturnType<typeof createServerSupabase>>): TagStore {
+  return {
+    async list() {
+      const { data, error } = await supabase.from("tags").select("id, slug, name");
+      if (error) throw error;
+      return (data ?? []).map((tag) => ({
+        id: String(tag.id),
+        slug: String(tag.slug),
+        name: String(tag.name),
+      }));
+    },
+    async insert(rows) {
+      // `on conflict (slug) do nothing`: a tag another save made a moment ago
+      // is not an error, it is the tag this save was about to make.
+      const { error } = await supabase
+        .from("tags")
+        .upsert(rows, { onConflict: "slug", ignoreDuplicates: true });
+      if (error) throw error;
+    },
   };
 }
 
@@ -290,4 +336,6 @@ function revalidateSite() {
   revalidatePath("/sitemap.xml");
   revalidatePath("/admin/projects");
   revalidatePath("/admin/journal");
+  // A save can make tags now, so the catalogue can change with it.
+  revalidatePath("/admin/taxonomy");
 }

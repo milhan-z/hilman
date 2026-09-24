@@ -1,4 +1,5 @@
 import { firstBlockProblem } from "./block-contract";
+import { describeBadTagNames } from "./tags";
 import type { Block } from "./types";
 
 /**
@@ -28,6 +29,13 @@ export interface SyncPayload {
   fields: Record<string, unknown>;
   blocks: Block[];
   tagIds: string[];
+  /**
+   * Tags typed in the editor that did not exist yet, by name. The server
+   * creates any that are still missing when the save arrives and saves their
+   * ids with the rest — see lib/tags.ts. Absent, not empty, when there are
+   * none, so a payload without new tags is byte-for-byte what it always was.
+   */
+  tagNames?: string[];
 }
 
 export interface SyncMutation {
@@ -141,6 +149,8 @@ export function describeMalformedMutation(value: unknown): string | null {
   if (badBlock) return badBlock;
   if (!Array.isArray(payload.tagIds) || !payload.tagIds.every(isUuid))
     return "The tag list contains an invalid id.";
+  const badTagName = describeBadTagNames(payload.tagNames);
+  if (badTagName) return badTagName;
 
   const title = String((payload.fields as Record<string, unknown>).title ?? "").trim();
   if (!title) return "A title is needed before this can be saved.";
@@ -204,7 +214,13 @@ export function describeConflict(
   if (JSON.stringify(mine.blocks.map(strippedBlock)) !== JSON.stringify(theirs.blocks.map(strippedBlock)))
     differences.push("content");
 
-  if ([...mine.tagIds].sort().join() !== [...theirs.tagIds].sort().join()) differences.push("tags");
+  // A tag that exists only as a typed name cannot be on the server's version,
+  // so naming one is a difference in itself.
+  if (
+    (mine.tagNames?.length ?? 0) > 0 ||
+    [...mine.tagIds].sort().join() !== [...theirs.tagIds].sort().join()
+  )
+    differences.push("tags");
 
   return differences.sort();
 }
