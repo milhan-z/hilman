@@ -120,7 +120,9 @@ export function LinkCard({
     >
       {data.thumbnail && (
         <div className="hidden h-16 w-24 shrink-0 overflow-hidden rounded sm:block">
-          <Pic src={data.thumbnail} alt="" width={192} height={128} className="h-full w-full object-cover" />
+          {/* The box is 96px wide; without `sizes` the browser assumed the
+              default full column and fetched an 800px-class file for it. */}
+          <Pic src={data.thumbnail} alt="" width={192} height={128} sizes="96px" className="h-full w-full object-cover" />
         </div>
       )}
       <div className="min-w-0">

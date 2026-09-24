@@ -22,6 +22,20 @@ export function mediaSrc(
   return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${t.join(",")}/${publicIdOrUrl}`;
 }
 
+/**
+ * A delivery URL exactly as mediaSrc() writes it, split into the part before
+ * the transform, the quality it asked for, and the public_id after it.
+ *
+ * lib/cloudinary-loader.ts rewrites only URLs of this shape, and <Pic /> sends
+ * only these through it: a Cloudinary URL pasted with transforms of its own
+ * (a crop, a face-fill) must keep them, and swapping in a width would not.
+ */
+export const DELIVERY_URL = /^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)f_auto,q_([^,/]+),w_\d+,c_limit\/(.+)$/;
+
+export function isCloudinaryDelivery(src: string): boolean {
+  return DELIVERY_URL.test(src);
+}
+
 export function fileSrc(publicIdOrUrl: string | null | undefined) {
   if (!publicIdOrUrl) return null;
   if (publicIdOrUrl.startsWith("pending:")) return null;

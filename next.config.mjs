@@ -1,12 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // One less header on every response, and one less thing it says about us.
+  poweredByHeader: false,
+
   images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "res.cloudinary.com" },
-      { protocol: "https", hostname: "i.ytimg.com" },
-      { protocol: "https", hostname: "picsum.photos" },
-      { protocol: "https", hostname: "fastly.picsum.photos" },
-    ],
+    // Cloudinary already resizes and picks the format, so the srcset asks it
+    // directly instead of routing every size through /_next/image first. See
+    // lib/cloudinary-loader.ts. With a custom loader the built-in optimiser is
+    // off, which is also why there are no remotePatterns: <Pic /> serves any
+    // non-Cloudinary URL as it is (`unoptimized`), from whatever host it names.
+    loader: "custom",
+    loaderFile: "./lib/cloudinary-loader.ts",
   },
 
   async headers() {
