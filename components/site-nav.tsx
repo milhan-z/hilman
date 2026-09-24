@@ -10,10 +10,25 @@ export function SiteNav({ items }: { items: { label: string; href: string }[] })
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
   useEffect(() => setOpen(false), [pathname]);
+  // The open menu is a panel, not a modal: the page stays live around it. A tap
+  // anywhere outside the header puts it away, the way a tap outside a native
+  // menu does, instead of leaving it open over the page being read.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!headerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
   const isActive = (href: string) => href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  return <header className="sticky top-0 z-40 border-b border-line bg-paper backdrop-blur-md" onKeyDown={(event) => {
+  // No backdrop-blur: the header is solid --paper, so a blur behind it never
+  // showed, and it still made the browser re-blur the page under a sticky bar
+  // on every frame of scrolling.
+  return <header ref={headerRef} className="sticky top-0 z-40 border-b border-line bg-paper" onKeyDown={(event) => {
     if (event.key === "Escape" && open) { setOpen(false); toggleRef.current?.focus(); }
   }}>
     <nav aria-label="Main" className="mx-auto flex h-16 max-w-wide items-center justify-between gap-4 px-5 sm:h-20 sm:px-8 lg:px-12">

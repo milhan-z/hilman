@@ -1,12 +1,16 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Fraunces, Inter, JetBrains_Mono } from "next/font/google";
-import { siteUrl } from "@/lib/site";
+import { SITE_NAME, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // The browser's own toolbar, tinted to the page's paper so a phone shows
+  // one surface instead of a white band over a black notebook. This is the
+  // Night value; the theme script below and <ThemeToggle /> swap it for Paper.
+  themeColor: "#0a0a0a",
 };
 
 const fraunces = Fraunces({
@@ -16,6 +20,14 @@ const fraunces = Fraunces({
   axes: ["opsz"],
 });
 const inter = Inter({ subsets: ["latin"], variable: "--font-body", display: "swap" });
+/*
+ * All four faces stay preloaded, and that was measured rather than assumed.
+ * Dropping the preload on the handwriting and the ledger type looked like an
+ * easy 115 KB off the front of every visit, but both are on the first screen
+ * of every page — the kicker above each title is Caveat — so the browser only
+ * found them at first layout and held that first paint for them. Lighthouse
+ * put First Contentful Paint at 1.8 s instead of 0.9 s on a mobile profile.
+ */
 const caveat = Caveat({ subsets: ["latin"], variable: "--font-hand", display: "swap" });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
@@ -28,7 +40,7 @@ export const metadata: Metadata = {
   description:
     "Meet Hilman, an Informatics student at ITS exploring design, film, photography, motion, and code. Work, notes, and things made together.",
   openGraph: {
-    siteName: "Hilman.",
+    siteName: SITE_NAME,
     type: "website",
   },
 };
@@ -44,8 +56,11 @@ export const metadata: Metadata = {
  * React logs "Encountered a script tag while rendering React component" for
  * this in development. It is a development-only warning: the script is in the
  * server HTML and does execute. Running before paint is worth the warning.
+ *
+ * It also retints <meta name="theme-color">, which Next renders earlier in the
+ * head from `viewport` — the colours are --paper in app/globals.css.
  */
-const themeScript = `(function(){try{var t=localStorage.getItem("hilman-theme");if(t!=="light"&&t!=="dark"){t="dark"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})()`;
+const themeScript = `(function(){var t="dark";try{t=localStorage.getItem("hilman-theme");if(t!=="light"&&t!=="dark"){t="dark"}}catch(e){t="dark"}document.documentElement.setAttribute("data-theme",t);var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute("content",t==="light"?"#f4efe3":"#0a0a0a")}})()`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

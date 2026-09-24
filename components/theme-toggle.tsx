@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+/** --paper in app/globals.css, for the browser toolbar (<meta name="theme-color">). */
+const PAPER = { dark: "#0a0a0a", light: "#f4efe3" } as const;
+
+function tintToolbar(theme: "light" | "dark") {
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", PAPER[theme]);
+}
+
 /**
  * Theme is applied before paint by the inline script in app/layout.tsx.
  * This toggle just flips the attribute + persists the choice.
@@ -10,14 +17,16 @@ export function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark" | null>(null);
 
   useEffect(() => {
-    setTheme(
-      (document.documentElement.getAttribute("data-theme") as "light" | "dark") ?? "light"
-    );
+    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    setTheme(current);
+    // A client navigation can render the meta tag afresh with its default.
+    tintToolbar(current);
   }, []);
 
   function toggle() {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
+    tintToolbar(next);
     try {
       localStorage.setItem("hilman-theme", next);
     } catch {}

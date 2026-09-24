@@ -24,7 +24,7 @@ export default async function ConnectPage() {
   const d = resolveProfileData("connect", pageRes.ok ? pageRes.value?.data : undefined);
 
   return (
-    <div className="mx-auto max-w-wide px-5 py-14 sm:px-8">
+    <div className="mx-auto max-w-wide px-5 py-14 sm:px-8 lg:px-12">
       <div className="grid gap-12 lg:grid-cols-[1fr_1.3fr]">
         <header>
           <Kicker>a small hello goes a long way</Kicker>

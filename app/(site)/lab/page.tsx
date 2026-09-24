@@ -40,7 +40,7 @@ const experiments = [
 
 export default function LabPage() {
   return (
-    <div className="mx-auto max-w-wide px-5 py-14 sm:px-8">
+    <div className="mx-auto max-w-wide px-5 py-14 sm:px-8 lg:px-12">
       <header className="max-w-2xl">
         <Kicker>please touch the exhibits</Kicker>
         <div className="relative mt-3 inline-block">

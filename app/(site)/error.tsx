@@ -7,13 +7,18 @@ import { Button } from "@/components/ui";
  * Shown when a page could not read its content. This exists so a broken
  * database never gets mistaken for an empty archive — "nothing here yet" and
  * "we could not load this" must not look the same.
+ *
+ * "Try again" calls `retry`, not `reset`. In this version of Next.js `reset`
+ * only re-renders what the browser already has — the same failed answer — so
+ * the button could never succeed; `retry` fetches the page from the server
+ * again, which is the whole point of offering it after a failed read.
  */
 export default function SiteError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error("[site] render failed:", error.message, error.digest ?? "");
@@ -36,7 +41,7 @@ export default function SiteError({
       )}
       <div className="mt-8 flex flex-wrap gap-3">
         <button
-          onClick={reset}
+          onClick={() => retry()}
           className="rounded bg-hl px-5 py-2.5 text-sm font-semibold text-hl-ink transition-opacity hover:opacity-90"
         >
           Try again

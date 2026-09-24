@@ -39,7 +39,7 @@ export default async function AboutPage() {
     : [];
 
   return (
-    <div className="mx-auto max-w-wide px-5 pb-16 pt-14 sm:px-8 sm:pb-24 sm:pt-20">
+    <div className="mx-auto max-w-wide px-5 pb-16 pt-14 sm:px-8 sm:pb-24 sm:pt-20 lg:px-12">
       <header className="grid items-start gap-10 lg:grid-cols-[1.3fr_0.85fr] lg:gap-20">
         <div>
           <Kicker>a little more than the work</Kicker>
