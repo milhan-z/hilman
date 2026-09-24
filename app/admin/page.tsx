@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { MessageCard, type InboxMessage } from "@/components/admin/message-card";
-import { checkOwner } from "@/lib/owner";
+import { checkOwnerForRender } from "@/lib/owner";
 import { cloudinaryConfigured } from "@/lib/cloudinary-server";
 import { siteUrl, siteUrlIsPlaceholder } from "@/lib/site";
 import { findHiddenPublished } from "@/lib/studio-visibility";
@@ -141,7 +141,8 @@ async function Recent() {
 
 async function SiteState() {
   const supabase = await createServerSupabase();
-  const owner = await checkOwner();
+  // The layout already asked this during the same render; this reuses it.
+  const owner = await checkOwnerForRender();
 
   const [projects, journal, messages] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }),

@@ -7,8 +7,7 @@ import { KeyboardInset } from "@/components/admin/mobile/keyboard-inset";
 import { StudioMobileHeader } from "@/components/admin/mobile/studio-mobile-header";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { supabaseConfigured } from "@/lib/supabase/config";
-import { createServerSupabase } from "@/lib/supabase/server";
-import { checkOwner } from "@/lib/owner";
+import { checkOwnerForRender, getSessionUser } from "@/lib/owner";
 import { signOut } from "./actions";
 import { MediaSelectorProvider } from "@/components/admin/media-library-context";
 import { StudioRuntime } from "@/components/admin/studio-runtime";
@@ -86,10 +85,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
 
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Shared with the page below through React's cache(): one getUser() and one
+  // ownership check per render, however many server components ask.
+  const user = await getSessionUser();
 
   // unauthenticated → /admin/login renders without the shell. No runtime here:
   // there is no session to sync with, and a service worker registered from the
@@ -98,7 +96,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   // Signed in is not the same as owning the site. A non-owner gets a door,
   // not a studio — and RLS would refuse their writes anyway.
-  const owner = await checkOwner();
+  const owner = await checkOwnerForRender();
   if (!owner.ok) {
     return (
       <div className="mx-auto max-w-xl px-5 py-24 text-center">
