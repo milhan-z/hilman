@@ -223,6 +223,31 @@
   color-scheme: light;
 }
 
+/* ── Motion — one set of numbers for everything that moves ─────────
+   The HILMAN BITS primitives (components/bits/, docs/HILMAN-BITS.md)
+   read these, and so can anything else. They sit apart from the palette
+   because they are the same in both themes.
+
+   `duration-fast`, `duration-base` and `ease-out` in tailwind.config.ts are
+   the same values under Tailwind's names; tests/bits-contract.test.ts
+   fails if the two ever disagree. Every duration is in milliseconds. */
+:root {
+  --motion-fast: 150ms; /* a press, a toggle */
+  --motion-base: 250ms; /* a change of state */
+  --motion-reveal: 520ms; /* something arriving on the page */
+  --motion-draw: 900ms; /* a line drawing itself */
+  --motion-stagger: 60ms; /* between one arrival and the next */
+  --motion-rise: 8px; /* how far an arrival travels */
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-ease-draw: cubic-bezier(0.45, 0, 0.2, 1);
+}
+/* Paper doesn't fly, and on a phone it travels less still. */
+@media (max-width: 639px) {
+  :root {
+    --motion-rise: 6px;
+  }
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

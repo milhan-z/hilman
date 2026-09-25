@@ -289,7 +289,11 @@ test("media width is asked for by the page, not baked into the block", () => {
 
 test("a case study is expansive and a journal entry is calmer", () => {
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  const root = css.slice(css.indexOf(":root {"), css.indexOf(":root {") + 220);
+  // The :root that sets the default: the nearest one above the first
+  // --media-lg. (Not simply the first :root in the file — the motion tokens
+  // have their own.)
+  const at = css.lastIndexOf(":root {", css.indexOf("--media-lg"));
+  const root = css.slice(at, at + 220);
   assert.match(root, /--media-lg:\s*54rem/, "Works keeps the wide default");
   assert.match(root, /--media-xl:\s*60rem/);
 

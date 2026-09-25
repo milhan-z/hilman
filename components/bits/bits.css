@@ -1,0 +1,24 @@
+/* ═══════════════════════════════════════════════════════════
+   HILMAN BITS — the notebook's own motion primitives.
+
+   One section per primitive, headed with the file it styles. What they
+   are for, where they may go and how much of them a page can take is in
+   docs/HILMAN-BITS.md; tests/bits-contract.test.ts holds the rules a
+   machine can check:
+
+   - Movement is opt-in. Every animation, and every translate, rotate or
+     scale, sits inside a `prefers-reduced-motion: no-preference` block,
+     so reduced motion gets the finished page by construction rather than
+     through a list of exceptions somebody has to remember to extend.
+   - A "waiting" state (components/bits/in-view.tsx) is only ever styled
+     for the screen, so a printed page is always the finished one.
+   - Transforms are the individual `translate` / `rotate` / `scale`
+     properties, never `transform`, so they add to whatever Tailwind has
+     put on the same element instead of replacing it.
+   - Nothing blurs, no shadow is animated, and every duration is a
+     --motion-* token (app/globals.css) or milliseconds.
+
+   Loaded by app/(site)/layout.tsx, not the root layout: the Studio never
+   downloads any of it. Every class starts with `bits-`, so the sheet
+   staying behind after a navigation into the Studio touches nothing.
+   ═══════════════════════════════════════════════════════════ */

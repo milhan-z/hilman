@@ -98,6 +98,9 @@ const config: Config = {
         fast: "150ms",
         base: "250ms",
         slow: "400ms",
+        // The motion tokens in app/globals.css, by name rather than by value.
+        reveal: "var(--motion-reveal)",
+        draw: "var(--motion-draw)",
       },
       maxWidth: {
         content: "72rem",
