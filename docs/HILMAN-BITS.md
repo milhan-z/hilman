@@ -99,6 +99,10 @@ primitives per page. Every page is inside it.
   "waiting" state inside `@media screen and (…no-preference)`.
 - It works on a phone at 390 px with a finger, with a keyboard, with reduced
   motion, and with JavaScript off.
+- If it reads a token from JavaScript, it reads it with its unit
+  (`cssDuration` in `tally.tsx`): the production build's minifier ships
+  `520ms` as `.52s`, and a bare `parseFloat` turns that into half a
+  millisecond. Check it in `next build`, not only in `next dev`.
 - `npm test` passes: the contract test, a render test showing its content is
   in the server HTML, and tests for any logic it carries.
 - It is added to both tables above, including where it is used.

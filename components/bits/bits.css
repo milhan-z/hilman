@@ -167,3 +167,32 @@
     rotate: var(--bits-paper-tilt, 0deg);
   }
 }
+
+/* ── Tally (components/bits/tally.tsx) ─────────────────────────────────
+   At rest a Tally is plain text, and it fades in when it first appears.
+   While it rolls, each changing digit is a window one line tall onto a
+   strip of digits, which the component moves with the Web Animations API
+   (and never at all under reduced motion). */
+@keyframes bits-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bits-tally {
+    animation: bits-fade var(--motion-fast) ease-out backwards;
+  }
+}
+.bits-tally-digit {
+  display: inline-block;
+  height: 1lh;
+  overflow: hidden;
+  vertical-align: top;
+}
+.bits-tally-strip {
+  display: flex;
+  flex-direction: column;
+}
+.bits-tally-strip > span {
+  height: 1lh;
+}

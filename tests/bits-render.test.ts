@@ -7,6 +7,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { EditorialReveal, revealStagger } from "../components/bits/editorial-reveal";
 import { HAND_DRAWN_VARIANTS, HandDrawnReveal } from "../components/bits/hand-drawn-reveal";
 import { PaperCard, paperTilt } from "../components/bits/paper-card";
+import { Tally, cssDuration, tallyRuns } from "../components/bits/tally";
+import { formatReaders } from "../lib/readers";
 
 /**
  * What the HILMAN BITS primitives send from the server, before any script
@@ -198,4 +200,68 @@ test("the cards are paper now, and nothing else moves on them", () => {
   assert.ok(!/group-hover:scale/.test(project), "the photo no longer zooms: one card, one idea");
   assert.ok(!/overflow-hidden rounded-md border/.test(project), "the card does not clip its own lifted shadow");
   assert.match(journal, /lift="sm"/, "a wide row lifts less");
+});
+
+/* ── Tally ────────────────────────────────────────────────── */
+
+test("only digits roll, each against the digit in its own place", () => {
+  assert.deepEqual(tallyRuns("2 readers", "3 readers"), [
+    { kind: "digit", from: 2, to: 3 },
+    { kind: "text", text: " readers" },
+  ]);
+  assert.deepEqual(tallyRuns("1 reader", "2 readers"), [
+    { kind: "digit", from: 1, to: 2 },
+    { kind: "text", text: " readers" },
+  ], "the word simply changes");
+  assert.deepEqual(tallyRuns("1.2K readers", "1.3K readers"), [
+    { kind: "digit", from: 1, to: 1 },
+    { kind: "text", text: "." },
+    { kind: "digit", from: 2, to: 3 },
+    { kind: "text", text: "K readers" },
+  ]);
+  assert.deepEqual(tallyRuns("19", "20"), [
+    { kind: "digit", from: 1, to: 2 },
+    { kind: "digit", from: 9, to: 0 },
+  ], "9 to 0 is a column like any other; the strip rolls it forward");
+});
+
+test("a number that gains or loses a digit is swapped, not rolled", () => {
+  assert.equal(tallyRuns("9 readers", "10 readers"), null);
+  assert.equal(tallyRuns("999 readers", "1K readers"), null);
+  assert.equal(tallyRuns("12", "12 readers"), null);
+});
+
+test("at rest, and from the server, a tally is plain text", () => {
+  const out = html(h(Tally, { value: 128, format: formatReaders }));
+  assert.equal(out, '<span class="bits-tally">128 readers</span>');
+  assert.equal(html(h(Tally, { value: 48200 })), '<span class="bits-tally">48,200</span>');
+  assert.equal(html(h(Tally, { value: 0, format: formatReaders })), "", "nothing to print, nothing printed");
+});
+
+test("the reader count rolls, politely", () => {
+  const tally = readFileSync(new URL("../components/bits/tally.tsx", import.meta.url), "utf8");
+  assert.match(tally, /prefers-reduced-motion: reduce/, "reduced motion swaps the number");
+  assert.match(tally, /useReducedMotion\(\)/);
+  assert.match(tally, /\.animate\(/, "the Web Animations API, not a frame loop");
+  assert.match(tally, /value > shown\.value/, "it only rolls upwards");
+  assert.match(tally, /className="sr-only"/, "the real text is there while the digits roll");
+  assert.match(tally, /aria-hidden className="bits-tally-roll"/);
+  assert.ok(!/aria-live/.test(tally), "a count going up is not worth an announcement");
+  const count = readFileSync(new URL("../components/reader-count.tsx", import.meta.url), "utf8");
+  assert.match(count, /<Tally value=\{count\} format=\{formatReaders\} \/>/);
+});
+
+test("a token's duration is read with its unit, whatever the build did to it", () => {
+  // Found in the production build: the minifier ships --motion-reveal as
+  // ".52s", and parseFloat made the roll half a millisecond long.
+  assert.equal(cssDuration("520ms", 0), 520);
+  assert.equal(cssDuration(" .52s", 0), 520);
+  assert.equal(cssDuration("0.52s", 0), 520);
+  assert.equal(cssDuration("", 400), 400);
+  assert.equal(cssDuration("fast", 400), 400);
+  assert.equal(cssDuration("520", 400), 400, "a bare number is not a duration");
+  assert.equal(cssDuration("-5ms", 400), 400);
+  const tally = readFileSync(new URL("../components/bits/tally.tsx", import.meta.url), "utf8");
+  assert.match(tally, /cssDuration\(root\.getPropertyValue\("--motion-reveal"\), 520\)/);
+  assert.ok(!/parseFloat\(root\.getPropertyValue/.test(tally));
 });

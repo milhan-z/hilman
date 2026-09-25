@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Tally } from "./bits/tally";
 import {
   browserStorage,
   formatReaders,
@@ -142,7 +143,7 @@ export function ReaderCount({
   }, [kind, id]);
 
   const label = ready ? formatReaders(count) : null;
-  if (!label) return null;
+  if (!label || count === null) return null;
   return (
     <span className="flex items-center gap-2.5">
       {separator && (
@@ -150,7 +151,9 @@ export function ReaderCount({
           /
         </span>
       )}
-      {label}
+      {/* Rolls over when the number goes up while the page is open — the live
+          count arriving, or this visit being counted. */}
+      <Tally value={count} format={formatReaders} />
     </span>
   );
 }
