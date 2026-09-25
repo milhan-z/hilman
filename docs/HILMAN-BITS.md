@@ -15,7 +15,7 @@ that blurs in letter by letter, a page that scrolls itself.
 
 | Primitive | The one idea | Engine | Status |
 |---|---|---|---|
-| `HandDrawnReveal` | A line drawing itself under, around or beside a word | SVG, a dashed mask (`pathLength`) + CSS | Wave 1 |
+| `HandDrawnReveal` | A line drawing itself under, around or beside a word — with a pen, or with a brush | Pen: SVG through a dashed mask (`pathLength`). Brush: CSS `scale`, compositor only | Wave 1 |
 | `EditorialReveal` | The details around a title inked in after it, the title already printed | CSS keyframes; `InView` for `trigger="view"` | Wave 1 |
 | `PaperCard` | A card lifted a little off the desk | CSS | Wave 1 |
 | `Tally` | A number that rolls over when it changes in front of you | Web Animations API | Wave 1 |
@@ -38,7 +38,7 @@ primitives per page. Every page is inside it.
 
 | Page | What moves | Primitives |
 |---|---|---|
-| Home | The line under "Hilman"; the lines under the title arriving in turn; section headings arriving as they scroll in; the line under "together."; the cards | 3 |
+| Home | The brush swept under "Hilman"; the lines under the title arriving in turn; section headings arriving as they scroll in; the pen under "together."; the cards | 3 |
 | Works, Journal | The line under the title; the cards | 2 |
 | A work, a journal entry | The details around the title (never the title); the reader count; the related cards | 2–3 |
 | About, Lab, Connect | The line under the title | 1 |

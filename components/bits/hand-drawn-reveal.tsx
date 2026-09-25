@@ -24,10 +24,19 @@ const SHAPES = {
   bracket: { d: "M 34 5 L 5 5 L 5 55 L 34 55 M 166 5 L 195 5 L 195 55 L 166 55", vb: [200, 60] },
 } satisfies Record<string, { d: string; vb: [number, number] }>;
 
-export type HandDrawnVariant = keyof typeof SHAPES;
+export type PenShape = keyof typeof SHAPES;
 
-/** Every shape there is, in the order they are listed above. */
-export const HAND_DRAWN_VARIANTS = Object.keys(SHAPES) as HandDrawnVariant[];
+/** Every shape the pen draws, in the order they are listed above. */
+export const PEN_SHAPES = Object.keys(SHAPES) as PenShape[];
+
+/**
+ * A pen shape, or the brush: a highlighter swipe rather than a pen line — a
+ * flat ellipse, tapered at both ends and tilted a little, as wide as its
+ * holder and 0.045em thick, so it keeps its proportions under any size of
+ * heading. It is the stroke Home had under the name before this was
+ * animated, now swept in from its left end.
+ */
+export type HandDrawnVariant = PenShape | "brush";
 
 /**
  * The site's pens. `hl` is the highlighter: the same bright yellow in both
@@ -75,9 +84,14 @@ export type HandDrawnTone = keyof typeof TONES;
  * line far enough down a page that it would otherwise finish drawing long
  * before anyone scrolled to it.
  *
- * Decoration only. The SVG is aria-hidden; whatever it underlines is the real
- * text beside it. Reduced motion, printing and a browser without JavaScript
- * all get the finished line.
+ * `variant="brush"` is not drawn with the pen at all (see HandDrawnVariant).
+ * It is a plain element grown from its left end with `scale`, which the
+ * compositor runs on its own: nothing is repainted while it sweeps, where the
+ * pen's mask repaints on every frame. That matters on a first screen.
+ *
+ * Decoration only. The line is aria-hidden; whatever it underlines is the
+ * real text beside it. Reduced motion, printing and a browser without
+ * JavaScript all get the finished line.
  */
 export function HandDrawnReveal({
   variant = "underline",
@@ -98,7 +112,7 @@ export function HandDrawnReveal({
   delay?: number;
   /** Milliseconds the stroke takes; --motion-draw when left out. */
   duration?: number;
-  /** A fixed pixel width. Ignored when `fluid` is set. */
+  /** A fixed pixel width. Ignored when `fluid` is set, and by the brush. */
   width?: number;
   /**
    * Stretch to whatever contains this, instead of taking a fixed size.
@@ -115,17 +129,36 @@ export function HandDrawnReveal({
    * `vectorEffect="non-scaling-stroke"` keeps the pen weight even while it does.
    */
   fluid?: boolean;
+  /** The pen's weight in pixels. The brush's is always 0.045em. */
   strokeWidth?: number;
   className?: string;
 }) {
   const mask = useId();
-  const shape = SHAPES[variant] ?? SHAPES.underline;
+  const shape = SHAPES[variant as PenShape] ?? SHAPES.underline;
   const [vbW, vbH] = shape.vb;
   const height = Math.round((width / vbW) * vbH);
   const timing = {
     "--bits-draw-delay": `${Math.max(0, delay)}ms`,
     ...(duration != null && { "--bits-draw-duration": `${Math.max(0, duration)}ms` }),
   } as CSSProperties;
+
+  if (variant === "brush") {
+    const brush = (
+      <span
+        aria-hidden
+        data-trigger={trigger}
+        className={cn("bits-brush", TONES[tone] ?? TONES.pen, className)}
+        style={timing}
+      />
+    );
+    return trigger === "view" ? (
+      <InView as="span" className="bits-draw-holder">
+        {brush}
+      </InView>
+    ) : (
+      brush
+    );
+  }
   // How wide the mask's stroke must be, in the box's own units, to cover the
   // visible one with room to spare: the pen weight in pixels, divided by how
   // much the box is scaled. A fluid box is stretched sideways by an amount

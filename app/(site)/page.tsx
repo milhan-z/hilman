@@ -38,15 +38,16 @@ export default async function HomePage() {
           <Kicker className="text-pen">a little corner of my world</Kicker>
           <h1 id="hello-heading" className="mt-5 font-display text-[clamp(3.4rem,7.5vw,7.4rem)] font-semibold leading-[0.95] tracking-[-0.055em]">
             Hello, I’m<br />
-            {/* The one signature moment on this screen: the highlighter going
-                under the name, once the lines below it have arrived. Not
-                sooner — measured, a pen starting at 200ms put its frames
-                beside the first paint and cost Lighthouse's LCP ~90ms; at
-                500ms it costs nothing, and reads better as a sequence. */}
+            {/* The one signature moment on this screen: the highlighter
+                swept under the name, once the lines below it have arrived.
+                The brush is the stroke this name always had — same place,
+                same weight, same tilt — and it sweeps on the compositor, so
+                unlike the pen it repaints nothing while the first screen is
+                still settling. */}
             <span className="relative inline-block">
               Hilman<span className="text-pen">.</span>
-              <span aria-hidden className="absolute -bottom-[0.12em] left-0 right-[8%]">
-                <HandDrawnReveal variant="underline2" tone="hl" fluid strokeWidth={4} delay={500} />
+              <span aria-hidden className="absolute -bottom-[0.09em] left-0 right-[8%]">
+                <HandDrawnReveal variant="brush" tone="hl" delay={500} duration={700} />
               </span>
             </span>
           </h1>
@@ -62,21 +63,29 @@ export default async function HomePage() {
           </EditorialReveal>
         </div>
         <div className="relative hidden min-w-0 lg:block">
-          {portrait ? (
-            <figure className="portrait-paper mx-auto max-w-sm rotate-2">
-              <Pic src={portrait} alt={home.portrait_alt || "Hilman"} width={720} height={850} priority className="aspect-[4/5] w-full object-cover" sizes="380px" />
-              {home.portrait_caption && <figcaption className="px-2 pb-1 pt-4 font-hand text-xl text-cream-ink">{home.portrait_caption}</figcaption>}
-            </figure>
-          ) : (
-            <div className="notebook-cover relative ml-auto max-w-[430px] -rotate-2 px-9 pb-10 pt-9">
-              <div className="flex items-center justify-between border-b border-cream-line pb-4 font-mono text-xs uppercase tracking-[0.15em]"><span>A personal notebook</span><span aria-hidden>✳</span></div>
-              <p className="mt-9 font-display text-[3.7rem] font-semibold leading-[0.95] tracking-tight">Ideas.<br />People.<br /><span className="italic">Possibilities.</span></p>
-              <p className="mt-8 max-w-[15rem] font-hand text-2xl leading-tight">{home.note}</p>
-              <div className="mt-9 flex items-center justify-between border-t border-cream-line pt-4"><span className="font-mono text-xs">HILMAN / OPEN NOTEBOOK</span><span className="font-hand text-3xl">h.</span></div>
-              <span aria-hidden className="absolute -right-4 top-20 rotate-12 rounded-sm bg-hl px-5 py-3 font-hand text-2xl text-hl-ink shadow-sticky">stay curious ↗</span>
-            </div>
-          )}
-          <span aria-hidden className="absolute -bottom-8 left-2 -rotate-6 font-hand text-2xl text-soft">a work in progress, like me</span>
+          {/* The note belongs to the paper above it: it takes the paper's
+              width and angle and hangs just clear of its bottom edge.
+              Placed against the column instead, it started left of the
+              notebook and, tilted further than it, ran up into the
+              notebook's corner. Still out of the flow, so the hero is laid
+              out exactly as before. */}
+          <div className={`relative ${portrait ? "mx-auto max-w-sm" : "ml-auto max-w-[430px]"}`}>
+            {portrait ? (
+              <figure className="portrait-paper rotate-2">
+                <Pic src={portrait} alt={home.portrait_alt || "Hilman"} width={720} height={850} priority className="aspect-[4/5] w-full object-cover" sizes="380px" />
+                {home.portrait_caption && <figcaption className="px-2 pb-1 pt-4 font-hand text-xl text-cream-ink">{home.portrait_caption}</figcaption>}
+              </figure>
+            ) : (
+              <div className="notebook-cover relative -rotate-2 px-9 pb-10 pt-9">
+                <div className="flex items-center justify-between border-b border-cream-line pb-4 font-mono text-xs uppercase tracking-[0.15em]"><span>A personal notebook</span><span aria-hidden>✳</span></div>
+                <p className="mt-9 font-display text-[3.7rem] font-semibold leading-[0.95] tracking-tight">Ideas.<br />People.<br /><span className="italic">Possibilities.</span></p>
+                <p className="mt-8 max-w-[15rem] font-hand text-2xl leading-tight">{home.note}</p>
+                <div className="mt-9 flex items-center justify-between border-t border-cream-line pt-4"><span className="font-mono text-xs">HILMAN / OPEN NOTEBOOK</span><span className="font-hand text-3xl">h.</span></div>
+                <span aria-hidden className="absolute -right-4 top-20 rotate-12 rounded-sm bg-hl px-5 py-3 font-hand text-2xl text-hl-ink shadow-sticky">stay curious ↗</span>
+              </div>
+            )}
+            <span aria-hidden className={`absolute inset-x-0 top-full mt-5 font-hand text-2xl text-soft ${portrait ? "rotate-2 pl-3" : "-rotate-2 pl-9"}`}>a work in progress, like me</span>
+          </div>
         </div>
       </section>
       <section id="selected-work" className="scroll-mt-24 border-t border-line-strong pt-9" aria-label={showcase.length ? "Selected work" : "Creative interests"}>

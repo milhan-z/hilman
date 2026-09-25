@@ -7,9 +7,11 @@
    machine can check:
 
    - Movement is opt-in. Every animation, and every translate, rotate or
-     scale, sits inside a `prefers-reduced-motion: no-preference` block,
-     so reduced motion gets the finished page by construction rather than
-     through a list of exceptions somebody has to remember to extend.
+     scale that answers a state (hover, focus, a press, "waiting"), sits
+     inside a `prefers-reduced-motion: no-preference` block, so reduced
+     motion gets the finished page by construction rather than through a
+     list of exceptions somebody has to remember to extend. A transform
+     that never changes — a tilt — is a shape, not a movement.
    - A "waiting" state (components/bits/in-view.tsx) is only ever styled
      for the screen, so a printed page is always the finished one.
    - Transforms are the individual `translate` / `rotate` / `scale`
@@ -64,6 +66,42 @@
   [data-bits-view="waiting"] > .bits-draw .bits-draw-ink {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
+  }
+}
+
+/* The brush (variant="brush"): Home's highlighter stroke. The element is
+   the stroke's frame — its size and its tilt, turned about its centre as
+   the old static bar was, so the finished swipe is that bar exactly — and
+   ::before is the ink, grown from its left end along the tilt. `scale` is
+   the compositor's alone: nothing repaints while it sweeps. */
+.bits-brush {
+  display: block;
+  height: 0.045em;
+  rotate: -2deg;
+}
+.bits-brush::before {
+  content: "";
+  display: block;
+  height: 100%;
+  border-radius: 50%;
+  background: currentColor;
+  transform-origin: left center;
+}
+@keyframes bits-brush {
+  from {
+    scale: 0 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bits-brush[data-trigger="load"]::before,
+  [data-bits-view="playing"] > .bits-brush::before {
+    animation: bits-brush var(--bits-draw-duration, var(--motion-draw)) var(--motion-ease-draw)
+      var(--bits-draw-delay, 200ms) backwards;
+  }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  [data-bits-view="waiting"] > .bits-brush::before {
+    scale: 0 1;
   }
 }
 

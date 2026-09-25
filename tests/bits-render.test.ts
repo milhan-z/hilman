@@ -5,7 +5,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { EditorialReveal, revealStagger } from "../components/bits/editorial-reveal";
-import { HAND_DRAWN_VARIANTS, HandDrawnReveal } from "../components/bits/hand-drawn-reveal";
+import { HandDrawnReveal, PEN_SHAPES } from "../components/bits/hand-drawn-reveal";
 import { PaperCard, paperTilt } from "../components/bits/paper-card";
 import { Tally, cssDuration, tallyRuns } from "../components/bits/tally";
 import { formatReaders } from "../lib/readers";
@@ -29,7 +29,7 @@ const html = (element: React.ReactElement) => renderToStaticMarkup(element);
 /* ── HandDrawnReveal ──────────────────────────────────────── */
 
 test("every shape DrawAccent had is still there", () => {
-  assert.deepEqual(HAND_DRAWN_VARIANTS, [
+  assert.deepEqual(PEN_SHAPES, [
     "underline",
     "underline2",
     "scribble",
@@ -42,7 +42,7 @@ test("every shape DrawAccent had is still there", () => {
 });
 
 test("a drawn line is decoration, uncovered by a mask that measures 1", () => {
-  for (const variant of HAND_DRAWN_VARIANTS) {
+  for (const variant of PEN_SHAPES) {
     const out = html(h(HandDrawnReveal, { variant }));
     assert.match(out, /^<svg[^>]*aria-hidden="true"/, `${variant} is hidden from assistive technology`);
     const id = out.match(/<mask id="([^"]+)" maskUnits="userSpaceOnUse"/)?.[1];
@@ -101,6 +101,32 @@ test("a line that waits for the screen is still sent finished", () => {
   assert.ok(!out.includes("data-bits-view"), "no waiting state in the HTML: with no script, the line is simply there");
   assert.match(out, /data-trigger="view"/);
   assert.match(out, /text-hl/, "the highlighter, bright in both themes");
+});
+
+test("the brush is Home's stroke: a plain, hidden element the stylesheet sweeps", () => {
+  const out = html(h(HandDrawnReveal, { variant: "brush", tone: "hl", delay: 500, duration: 700 }));
+  assert.equal(
+    out,
+    '<span aria-hidden="true" data-trigger="load" class="bits-brush text-hl" style="--bits-draw-delay:500ms;--bits-draw-duration:700ms"></span>'
+  );
+  const waiting = html(h(HandDrawnReveal, { variant: "brush", trigger: "view" }));
+  assert.match(waiting, /^<span class="bits-draw-holder"><span aria-hidden="true" data-trigger="view" class="bits-brush text-pen"/);
+  assert.ok(!waiting.includes("data-bits-view"), "sent finished, like every line");
+  assert.ok(!out.includes("<svg"), "no SVG and no mask: nothing to repaint while it sweeps");
+});
+
+test("the brush is the bar Home always had, swept rather than painted", () => {
+  const css = readFileSync(new URL("../components/bits/bits.css", import.meta.url), "utf8");
+  const frame = css.match(/\.bits-brush \{([^}]*)\}/)?.[1] ?? "";
+  assert.match(frame, /height: 0\.045em;/, "the old bar's weight, in em so it follows the heading");
+  assert.match(frame, /rotate: -2deg;/, "and its tilt, about the centre as before");
+  const ink = css.match(/\.bits-brush::before \{([^}]*)\}/)?.[1] ?? "";
+  assert.match(ink, /border-radius: 50%;/, "tapered at both ends");
+  assert.match(ink, /transform-origin: left center;/, "grown from its left end");
+  assert.match(css, /@keyframes bits-brush \{\s*from \{\s*scale: 0 1;/, "by scale alone — the compositor's");
+  const home = readFileSync(new URL("../app/(site)/page.tsx", import.meta.url), "utf8");
+  assert.match(home, /absolute -bottom-\[0\.09em\] left-0 right-\[8%\]">\s*<HandDrawnReveal variant="brush" tone="hl"/, "where the bar was");
+  assert.ok(!/personal-name/.test(readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")), "and the old bar is gone");
 });
 
 test("timings are milliseconds, and never negative", () => {

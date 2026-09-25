@@ -141,12 +141,18 @@ const allowsMotion = (d: Declaration) =>
   d.context.some((c) => c.startsWith("@media") && /prefers-reduced-motion:\s*no-preference/.test(c));
 
 test("movement is opt-in: reduced motion gets the finished page by construction", () => {
+  // An animation always moves. A transform moves when it answers a state —
+  // hover, focus, a press, an entrance waiting — and is only a shape (the
+  // brush's tilt) when it never changes.
+  const answersState = (d: Declaration) => /:(hover|focus|focus-visible|active)\b|data-bits-view/.test(d.context.at(-1) ?? "");
   const moving = all.filter(
     (d) =>
       !inKeyframes(d) &&
-      ["animation", "animation-name", "translate", "rotate", "scale"].includes(d.property) &&
-      d.value !== "none"
+      d.value !== "none" &&
+      (["animation", "animation-name"].includes(d.property) ||
+        (["translate", "rotate", "scale"].includes(d.property) && answersState(d)))
   );
+  assert.ok(moving.length > 0, "the rule is looking at something");
   for (const d of moving) {
     assert.ok(allowsMotion(d), `${d.context.at(-1)} { ${d.property}: ${d.value} } is outside a no-preference block`);
   }
