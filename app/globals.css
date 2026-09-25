@@ -10,18 +10,6 @@
   opacity: 0.3;
   pointer-events: none;
 }
-.personal-name { position: relative; display: inline-block; }
-.personal-name::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 8%;
-  bottom: -0.09em;
-  height: 0.045em;
-  border-radius: 50%;
-  background: var(--hl);
-  transform: rotate(-2deg);
-}
 .notebook-cover, .portrait-paper {
   color: var(--cream-ink);
   background: var(--cream);
@@ -67,18 +55,6 @@
   to { transform: scaleX(1); }
 }
 
-/* Hand-drawn accents (components/draw-accent.tsx). The path measures 1
-   (pathLength="1"), so one dash of length 1 is the whole stroke and moving
-   its offset from 1 to 0 draws it end to end. Duration and delay come from
-   the component, inline. */
-.draw-accent {
-  animation: draw-accent 0.9s cubic-bezier(0.45, 0, 0.2, 1) 0.2s both;
-}
-@keyframes draw-accent {
-  from { stroke-dasharray: 1; stroke-dashoffset: 1; }
-  to { stroke-dasharray: 1; stroke-dashoffset: 0; }
-}
-
 /* The lightbox (components/blocks/lightbox.tsx): the backdrop fades up, and
    each photograph settles in as it is shown. */
 .lightbox-in { animation: lightbox-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both; }
@@ -92,7 +68,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .play-glyph,
-  .draw-accent,
   .lightbox-in,
   .lightbox-photo-in { animation: none; }
   *, *::before, *::after { scroll-behavior: auto !important; }

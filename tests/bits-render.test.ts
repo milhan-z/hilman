@@ -1,0 +1,105 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { HAND_DRAWN_VARIANTS, HandDrawnReveal } from "../components/bits/hand-drawn-reveal";
+
+/**
+ * What the HILMAN BITS primitives send from the server, before any script
+ * has run.
+ *
+ * The rule that matters most, and the easiest to break without noticing, is
+ * that the page is finished in the HTML: content is there and visible, and
+ * any entrance is something the browser adds on top. An animation library
+ * that renders `opacity: 0` on the server and waits for JavaScript to undo it
+ * passes every visual review on a fast laptop and fails every slow phone —
+ * which is why these render the real components with react-dom/server, the
+ * same path a request takes.
+ */
+
+const h = React.createElement;
+const html = (element: React.ReactElement) => renderToStaticMarkup(element);
+
+/* ── HandDrawnReveal ──────────────────────────────────────── */
+
+test("every shape DrawAccent had is still there", () => {
+  assert.deepEqual(HAND_DRAWN_VARIANTS, [
+    "underline",
+    "underline2",
+    "scribble",
+    "wave",
+    "zigzag",
+    "arrow",
+    "circle",
+    "bracket",
+  ]);
+});
+
+test("a drawn line is decoration, uncovered by a mask that measures 1", () => {
+  for (const variant of HAND_DRAWN_VARIANTS) {
+    const out = html(h(HandDrawnReveal, { variant }));
+    assert.match(out, /^<svg[^>]*aria-hidden="true"/, `${variant} is hidden from assistive technology`);
+    const id = out.match(/<mask id="([^"]+)" maskUnits="userSpaceOnUse"/)?.[1];
+    assert.ok(id, `${variant} has a mask in the box's own units`);
+    assert.match(out, /<path[^>]*class="bits-draw-ink"[^>]*pathLength="1"/, `${variant}: the mask's path is the one that measures 1`);
+    const visible = out.match(/<path(?![^>]*bits-draw-ink)[^>]*>/)?.[0] ?? "";
+    assert.ok(visible.includes(`mask="url(#${id})"`), `${variant}: the line is seen through its own mask`);
+    assert.match(visible, /stroke="currentColor"/, `${variant} takes its colour from its tone`);
+    assert.match(visible, /vector-effect="non-scaling-stroke"/, `${variant} keeps its pen weight when stretched`);
+    assert.ok(!visible.includes("pathLength"), `${variant}: the visible line is never dashed`);
+  }
+});
+
+test("two lines on one page never share a mask", () => {
+  // A fixed id would have the second line drawn by the first one's mask —
+  // React Bits' StickerPeel collides exactly like this with its SVG filter.
+  const out = html(h("div", null, h(HandDrawnReveal, {}), h(HandDrawnReveal, {})));
+  const ids = [...out.matchAll(/<mask id="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(ids.length, 2);
+  assert.notEqual(ids[0], ids[1]);
+});
+
+test("the mask is wide enough to cover the pen at any scale", () => {
+  // /works: 4px at 0.75 scale is 5.3 units of line; the mask gives 2.5 times that.
+  const works = html(h(HandDrawnReveal, { width: 150, strokeWidth: 4 }));
+  assert.match(works, /class="bits-draw-ink" stroke="white" stroke-width="13.3"/);
+  // Fluid: only the height is known, 13px for a 14-unit box.
+  const fluid = html(h(HandDrawnReveal, { fluid: true, strokeWidth: 4 }));
+  assert.match(fluid, /class="bits-draw-ink" stroke="white" stroke-width="10.8"/);
+});
+
+test("the titles draw exactly what DrawAccent drew", () => {
+  // /works: 150 wide, a 4px pen, the plain underline, 0.2s in, 0.9s long.
+  const out = html(h(HandDrawnReveal, { variant: "underline", width: 150, strokeWidth: 4 }));
+  assert.match(out, /width="150" height="11"/, "150 × 14/200, rounded as before");
+  assert.match(out, /viewBox="0 0 200 14"/);
+  assert.match(out, /stroke-width="4"/);
+  assert.match(out, /class="bits-draw text-pen"/, "yellow was var(--pen), and pen is the default tone");
+  assert.match(out, /--bits-draw-delay:200ms/, "the same 0.2s before the pen starts");
+  assert.ok(!out.includes("--bits-draw-duration"), "and --motion-draw's 900ms, DrawAccent's 0.9s");
+
+  const lab = html(h(HandDrawnReveal, { variant: "circle", tone: "cyan", width: 120, strokeWidth: 3 }));
+  assert.match(lab, /width="120" height="36" viewBox="0 0 200 60"/, "the circle keeps its tall box");
+  assert.match(lab, /text-cyan/);
+});
+
+test("a fluid line stretches to the word it is under", () => {
+  const out = html(h(HandDrawnReveal, { variant: "underline2", fluid: true }));
+  assert.match(out, /width="100%"/);
+  assert.match(out, /preserveAspectRatio="none"/);
+});
+
+test("a line that waits for the screen is still sent finished", () => {
+  const out = html(h(HandDrawnReveal, { trigger: "view", tone: "hl" }));
+  assert.match(out, /^<span class="bits-draw-holder">/, "held by InView");
+  assert.ok(!out.includes("data-bits-view"), "no waiting state in the HTML: with no script, the line is simply there");
+  assert.match(out, /data-trigger="view"/);
+  assert.match(out, /text-hl/, "the highlighter, bright in both themes");
+});
+
+test("timings are milliseconds, and never negative", () => {
+  const out = html(h(HandDrawnReveal, { delay: -50, duration: 1100 }));
+  assert.match(out, /--bits-draw-delay:0ms/);
+  assert.match(out, /--bits-draw-duration:1100ms/);
+});

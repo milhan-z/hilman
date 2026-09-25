@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { Pic } from "@/components/cld-image";
 import { JournalCard } from "@/components/journal-card";
 import { ProjectCard } from "@/components/project-card";
@@ -35,7 +36,15 @@ export default async function HomePage() {
         <div className="relative z-10">
           <Kicker className="text-pen">a little corner of my world</Kicker>
           <h1 id="hello-heading" className="mt-5 font-display text-[clamp(3.4rem,7.5vw,7.4rem)] font-semibold leading-[0.95] tracking-[-0.055em]">
-            Hello, I’m<br /><span className="personal-name">Hilman<span className="text-pen">.</span></span>
+            Hello, I’m<br />
+            {/* The one signature moment on this screen: the highlighter going
+                under the name, after the name is already there. */}
+            <span className="relative inline-block">
+              Hilman<span className="text-pen">.</span>
+              <span aria-hidden className="absolute -bottom-[0.12em] left-0 right-[8%]">
+                <HandDrawnReveal variant="underline2" tone="hl" fluid strokeWidth={4} />
+              </span>
+            </span>
           </h1>
           {home.headline && <p className="mt-7 max-w-md whitespace-pre-line text-xl font-medium leading-snug sm:text-2xl">{home.headline}</p>}
           {home.intro && <p className="mt-4 max-w-xl text-base leading-relaxed text-soft sm:text-lg">{home.intro}</p>}
@@ -91,7 +100,7 @@ export default async function HomePage() {
         <div><SectionHeading index="03" title="A little room to play" /><NotebookPlay /><div className="mt-5"><ArrowLink href="/lab">More experiments in the Lab</ArrowLink></div></div>
       </section>
       <section className="my-16 flex flex-col justify-between gap-7 rounded-lg border border-line-strong bg-surface p-7 sm:my-20 sm:p-10 lg:flex-row lg:items-center" aria-labelledby="connect-heading">
-        <div><Kicker className="text-pen">new ideas start with a hello</Kicker><h2 id="connect-heading" className="mt-4 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Let’s make something <span className="italic">together.</span></h2><p className="mt-3 max-w-xl text-soft">A creative project, a tech idea, a new opportunity — or just a good conversation.</p></div>
+        <div><Kicker className="text-pen">new ideas start with a hello</Kicker><h2 id="connect-heading" className="mt-4 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Let’s make something <span className="relative inline-block italic">together.<span aria-hidden className="absolute -bottom-2 left-0 right-1"><HandDrawnReveal variant="underline" trigger="view" fluid strokeWidth={3} /></span></span></h2><p className="mt-3 max-w-xl text-soft">A creative project, a tech idea, a new opportunity — or just a good conversation.</p></div>
         <Button href="/connect" className="self-start lg:shrink-0">Say hello <span aria-hidden>↗</span></Button>
       </section>
     </div>

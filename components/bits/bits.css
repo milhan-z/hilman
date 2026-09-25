@@ -22,3 +22,41 @@
    downloads any of it. Every class starts with `bits-`, so the sheet
    staying behind after a navigation into the Studio touches nothing.
    ═══════════════════════════════════════════════════════════ */
+
+/* ── HandDrawnReveal (components/bits/hand-drawn-reveal.tsx) ───────────
+   The visible line is never dashed; its mask is. The mask's path measures
+   1 (pathLength="1") in the SVG's own units, so one dash of length 1 is the
+   whole stroke however the box is stretched, and moving its offset from 1
+   to 0 uncovers the line end to end. Timing comes from the component as
+   --bits-draw-delay and, when it asks for something other than
+   --motion-draw, --bits-draw-duration. */
+.bits-draw {
+  display: block;
+  overflow: visible;
+}
+.bits-draw-holder {
+  display: block;
+}
+@keyframes bits-draw {
+  from {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bits-draw[data-trigger="load"] .bits-draw-ink,
+  [data-bits-view="playing"] > .bits-draw .bits-draw-ink {
+    animation: bits-draw var(--bits-draw-duration, var(--motion-draw)) var(--motion-ease-draw)
+      var(--bits-draw-delay, 200ms) both;
+  }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  [data-bits-view="waiting"] > .bits-draw .bits-draw-ink {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+}

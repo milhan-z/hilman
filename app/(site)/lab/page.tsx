@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { DrawAccent } from "@/components/draw-accent";
+import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { CustomBlock } from "@/components/lab/registry";
 import { SectionReveal } from "@/components/motion";
 import { Kicker, Marginalia } from "@/components/ui";
@@ -46,7 +46,7 @@ export default function LabPage() {
         <div className="relative mt-3 inline-block">
           <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Lab</h1>
           <div className="absolute -bottom-2 left-0">
-            <DrawAccent variant="circle" color="cyan" width={120} strokeWidth={3} />
+            <HandDrawnReveal variant="circle" tone="cyan" width={120} strokeWidth={3} />
           </div>
         </div>
         <p className="mt-4 text-lg text-pretty leading-relaxed text-soft">

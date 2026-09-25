@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ConnectForm } from "@/components/connect-form";
-import { DrawAccent } from "@/components/draw-accent";
+import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { Kicker, Marginalia, Stamp } from "@/components/ui";
 import { getPage, getSettings, load } from "@/lib/data";
 import { DEFAULT_SETTINGS } from "@/lib/types";
@@ -31,7 +31,7 @@ export default async function ConnectPage() {
           <div className="relative mt-3 inline-block">
             <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Let’s talk.</h1>
             <div className="absolute -bottom-1 left-0">
-              <DrawAccent variant="underline2" color="yellow" width={150} strokeWidth={4} />
+              <HandDrawnReveal variant="underline2" width={150} strokeWidth={4} />
             </div>
           </div>
           {d.lede && <p className="mt-5 text-lg text-pretty leading-relaxed text-soft">{d.lede}</p>}

@@ -390,12 +390,12 @@ test("a carousel slide is never smaller on a tablet than on a phone", () => {
 test("a hand-drawn accent can size itself to the word it underlines", () => {
   // Measured on About at 390: the word was 160px and the accent asked for
   // 260px, so the holder's overflow-hidden cropped 38% of the squiggle.
-  const accent = code("components/draw-accent.tsx");
+  const accent = code("components/bits/hand-drawn-reveal.tsx");
   assert.match(accent, /fluid\s*\?\s*"100%"\s*:\s*width/, "it can fill its holder");
   assert.match(accent, /preserveAspectRatio=\{fluid \? "none" : undefined\}/, "stretching, not cropping");
 
   const about = readFileSync(new URL("../app/(site)/about/page.tsx", import.meta.url), "utf8");
-  assert.match(about, /<DrawAccent[^>]*fluid/, "and About uses it");
+  assert.match(about, /<HandDrawnReveal[^>]*fluid/, "and About uses it");
 });
 
 test("the touch targets of a touch-first experiment are thumb-sized", () => {

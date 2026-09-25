@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DrawAccent } from "@/components/draw-accent";
+import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { JournalExplorer } from "@/components/journal-explorer";
 import { ArrowLink, Kicker } from "@/components/ui";
 import { getJournalPosts, load } from "@/lib/data";
@@ -23,7 +23,7 @@ export default async function JournalPage() {
         <div className="relative mt-3 inline-block">
           <h1 className="font-display text-4xl font-bold leading-none tracking-tight sm:text-5xl">Journal</h1>
           <div className="absolute -bottom-2 left-0">
-            <DrawAccent variant="scribble" color="yellow" width={155} strokeWidth={3.5} />
+            <HandDrawnReveal variant="scribble" width={155} strokeWidth={3.5} />
           </div>
         </div>
         <p className="mt-5 text-lg text-pretty leading-relaxed text-soft">

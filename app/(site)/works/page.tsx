@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DrawAccent } from "@/components/draw-accent";
+import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { ArrowLink, Button, Kicker } from "@/components/ui";
 import { WorksExplorer } from "@/components/works-explorer";
 import { getProjects, getTags, load } from "@/lib/data";
@@ -41,7 +41,7 @@ export default async function WorksPage() {
         <div className="relative mt-3 inline-block">
           <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Works</h1>
           <div className="absolute -bottom-1 left-0">
-            <DrawAccent variant="underline" color="yellow" width={150} strokeWidth={4} />
+            <HandDrawnReveal variant="underline" width={150} strokeWidth={4} />
           </div>
         </div>
         <p className="mt-5 text-lg text-pretty leading-relaxed text-soft">

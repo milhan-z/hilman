@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Pic } from "@/components/cld-image";
 import { ContentUnavailablePage } from "@/components/content-unavailable";
-import { DrawAccent } from "@/components/draw-accent";
+import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { SectionReveal } from "@/components/motion";
 import { PersonalMoments } from "@/components/personal-moments";
 import { ArrowLink, Button, Kicker, Tag } from "@/components/ui";
@@ -44,7 +44,7 @@ export default async function AboutPage() {
         <div>
           <Kicker>a little more than the work</Kicker>
           <h1 className="mt-5 font-display text-[clamp(2.75rem,6.5vw,5.96rem)] font-semibold tracking-tight">
-            Hi, I&apos;m <span className="relative inline-block">Hilman.<span aria-hidden className="absolute -bottom-3 left-0 right-0 overflow-hidden"><DrawAccent variant="underline2" color="yellow" fluid strokeWidth={4} /></span></span>
+            Hi, I&apos;m <span className="relative inline-block">Hilman.<span aria-hidden className="absolute -bottom-3 left-0 right-0 overflow-hidden"><HandDrawnReveal variant="underline2" fluid strokeWidth={4} /></span></span>
           </h1>
           {d.lede && <p className="mt-10 max-w-2xl text-pretty text-xl font-medium leading-relaxed sm:text-2xl">{d.lede}</p>}
           {story.length > 0 && (
