@@ -364,3 +364,58 @@
 [data-bits-pile-ready] .bits-photo-pile {
   cursor: pointer;
 }
+
+/* ── ImagePeek (components/bits/image-peek.tsx) ────────────────────────
+   A print tucked behind a card: .bits-peek is the strip just above the
+   card's top edge where the print shows, clipped along that edge (and a
+   little room left around the other three sides for its tilt and shadow),
+   so the card hides the rest of it. The picture is a background-image that
+   only the hover and focus rules set: it is fetched the first time it is
+   wanted, and never on a phone. The print rises a few pixels out from
+   behind the card as it fades in; reduced motion gets the end, not the
+   rise. */
+.bits-peek {
+  position: absolute;
+  bottom: 100%;
+  z-index: 1;
+  width: 8.5rem;
+  height: 2.125rem;
+  clip-path: inset(-1rem -1rem 0 -1rem);
+  pointer-events: none;
+}
+.bits-peek-print {
+  position: absolute;
+  inset: 0 0 auto 0;
+  aspect-ratio: 4 / 3;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  rotate: var(--bits-peek-tilt, 3deg);
+  opacity: 0;
+}
+.bits-paper:focus-visible .bits-peek-print {
+  background-image: var(--bits-peek-src);
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .bits-paper:hover .bits-peek-print {
+    background-image: var(--bits-peek-src);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bits-peek-print {
+    translate: 0 10px;
+    transition:
+      opacity var(--motion-base) var(--motion-ease-out),
+      translate var(--motion-base) var(--motion-ease-out);
+  }
+  .bits-paper:focus-visible .bits-peek-print {
+    translate: 0 0;
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .bits-paper:hover .bits-peek-print {
+    translate: 0 0;
+  }
+}

@@ -1,3 +1,4 @@
+import { ImagePeek } from "./bits/image-peek";
 import { PaperCard } from "./bits/paper-card";
 import { Stamp, Tag } from "./ui";
 import { formatDateParts } from "@/lib/dates";
@@ -13,6 +14,8 @@ export function JournalCard({ post }: { post: JournalPost }) {
       lift="sm"
       className="group grid grid-cols-[auto_1fr] gap-5 rounded-md border border-line bg-surface p-5 hover:border-line-strong sm:gap-6 sm:p-6"
     >
+      {/* The entry's cover, peeking out from behind the card. */}
+      <ImagePeek src={post.cover_public_id} />
       {/* diary date-rail */}
       <div className="flex flex-col items-center border-r border-dashed border-line-strong pr-5 text-center sm:pr-6">
         <span className="font-display text-2xl font-bold leading-none tnum">{day}</span>

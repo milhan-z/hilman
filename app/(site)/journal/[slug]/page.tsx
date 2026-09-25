@@ -68,7 +68,7 @@ export default async function JournalEntryPage(props: { params: Promise<{ slug: 
   const idx = all.findIndex((p) => p.slug === post.slug);
   const newer = idx > 0 ? all[idx - 1] : null;
   const older = idx >= 0 && idx < all.length - 1 ? all[idx + 1] : null;
-  const toItem = (p: typeof newer) => (p ? { href: `/journal/${p.slug}`, title: p.title } : null);
+  const toItem = (p: typeof newer) => (p ? { href: `/journal/${p.slug}`, title: p.title, image: p.cover_public_id } : null);
 
   return (
     <article

@@ -21,7 +21,7 @@ that blurs in letter by letter, a page that scrolls itself.
 | `Tally` | A number that rolls over when it changes in front of you | Web Animations API | Wave 1 |
 | `WorkTransition` | A card's photograph carried into the cover of the work it opens | React `<ViewTransition>` over the browser's View Transitions, compositor only | Wave 2 |
 | `PhotoStack` | A pile of prints, one on top with its words, the rest underneath; put the top one back to see the next | A server-drawn pile (CSS grid, one cell) + `InView`; its hands — put back, look closer — load after the page (Web Animations API for the lift) | Wave 2 |
-| `ImagePeek` | A photograph peeking out from behind a title | CSS + pointer → CSS variables | Wave 2 |
+| `ImagePeek` | A photograph tucked behind a card, its top peeking out over the card's edge while you point at the card or focus it | CSS only: the picture is a `background-image` that only the hover and focus rules set, so it is fetched when first wanted and never on a phone. It does not follow the pointer | Wave 2 |
 | `ChapterMark` | An archive tab that changes with the chapter | One IntersectionObserver + CSS | Wave 3 |
 | `MarginNote` | A handwritten note in the margin | SVG + CSS (needs a Studio block) | Wave 3 |
 | MagneticNote, CursorReaction, PaperFloat | Ambient, always moving | — | Lab only |
@@ -42,8 +42,8 @@ primitives per page. Every page is inside it.
 | Page | What moves | Primitives |
 |---|---|---|
 | Home | The brush swept under "Hilman"; the lines under the title arriving in turn; section headings arriving as they scroll in; the pen under "together."; the cards | 3 |
-| Works, Journal | The line under the title; the cards | 2 |
-| A work, a journal entry | The details around the title (never the title); the reader count; the related cards; a Stack gallery's prints settling onto the desk as it comes into view, when the author chose a Stack | 2–3, and the pile |
+| Works, Journal | The line under the title; the cards (on Journal, an entry's cover peeks out from behind its card as you point at it) | 2–3 |
+| A work, a journal entry | The details around the title (never the title); the reader count; previous and next, lifted cards with the page they lead to peeking out from behind them; a Stack gallery's prints settling onto the desk as it comes into view, when the author chose a Stack | 2–3, and the pile |
 | About | The line under the title; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 1–2 |
 | Lab, Connect | The line under the title | 1 |
 | Studio | Nothing — feedback only, 150 ms or less. (It downloads bits.css with the rest of the stylesheet; nothing there uses it.) | 0 |

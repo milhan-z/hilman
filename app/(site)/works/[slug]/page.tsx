@@ -77,7 +77,7 @@ export default async function ProjectPage(props: { params: Promise<{ slug: strin
   const prevP = idx > 0 ? all[idx - 1] : null;
   const nextP = idx >= 0 && idx < all.length - 1 ? all[idx + 1] : null;
   const toItem = (p: typeof prevP) =>
-    p ? { href: `/works/${p.slug}`, title: p.title, kicker: STREAMS[p.stream].name } : null;
+    p ? { href: `/works/${p.slug}`, title: p.title, kicker: STREAMS[p.stream].name, image: p.thumbnail_public_id } : null;
 
   return (
     <article className="pb-20">

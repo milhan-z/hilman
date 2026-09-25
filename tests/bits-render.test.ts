@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { EditorialReveal, revealStagger } from "../components/bits/editorial-reveal";
 import { HandDrawnReveal, PEN_SHAPES } from "../components/bits/hand-drawn-reveal";
+import { ImagePeek, cssUrl } from "../components/bits/image-peek";
 import { PaperCard, paperTilt } from "../components/bits/paper-card";
 import { PhotoStack } from "../components/bits/photo-stack";
 import { Tally, tallyRuns } from "../components/bits/tally";
@@ -14,6 +15,7 @@ import { WorkTransition, workHeaderStyle, workPhotoName } from "../components/bi
 import { BlockRenderer } from "../components/blocks/renderer";
 import { settleDelay } from "../components/bits/pile";
 import { PersonalMoments, momentItems } from "../components/personal-moments";
+import { PrevNext } from "../components/prev-next";
 import { formatReaders } from "../lib/readers";
 import type { Block } from "../lib/types";
 
@@ -487,4 +489,53 @@ test("the pile is one grid cell and moves up a notch only when motion is welcome
   assert.match(css, /\.bits-photo-paper \{\s*translate: calc\(min\(var\(--bits-print-place, 0\), 3\) \* 6px\) calc\(min\(var\(--bits-print-place, 0\), 3\) \* 4px\);/);
   assert.match(css, /@media \(prefers-reduced-motion: no-preference\) \{\s*\.bits-photo-paper \{\s*transition: translate var\(--motion-base\) var\(--motion-ease-out\);/);
   assert.match(css, /\[data-bits-pile-ready\] \.bits-photo-pile \{\s*cursor: pointer;/, "a hand only once the hands are there");
+});
+
+/* ── ImagePeek ────────────────────────────────────────────── */
+
+test("a peeking photograph is decoration, and nothing is fetched until it is wanted", () => {
+  const out = html(h(ImagePeek, { src: "https://picsum.photos/seed/next/800/600" }));
+  assert.equal(
+    out,
+    '<span aria-hidden="true" class="bits-peek right-5" style="--bits-peek-src:url(&quot;https://picsum.photos/seed/next/800/600&quot;);--bits-peek-tilt:3deg"><span class="bits-peek-print rounded-sm border-4 border-cream bg-cream shadow-card"></span></span>'
+  );
+  assert.ok(!out.includes("<img"), "no image element for the browser to fetch up front");
+  assert.match(html(h(ImagePeek, { src: "https://picsum.photos/seed/p/8/6", side: "left" })), /left-5" style="[^"]*--bits-peek-tilt:-3deg/);
+  assert.equal(html(h(ImagePeek, { src: null })), "", "no photograph, no peek");
+  assert.equal(html(h(ImagePeek, { src: "pending:abc" })), "", "nor a photograph still on somebody's phone");
+});
+
+test("a URL cannot break out of the style it sits in", () => {
+  assert.equal(cssUrl('https://x.test/a b"c(d)\\e\'f'), "https://x.test/a%20b%22c%28d%29%5Ce%27f");
+  assert.equal(cssUrl("https://res.cloudinary.com/demo/image/upload/f_auto,q_auto,w_320,c_limit/works/cover.jpg"), "https://res.cloudinary.com/demo/image/upload/f_auto,q_auto,w_320,c_limit/works/cover.jpg");
+});
+
+test("the picture is only ever set by the hover and focus rules, and only rises when motion is welcome", () => {
+  const css = readFileSync(new URL("../components/bits/bits.css", import.meta.url), "utf8");
+  const section = css.slice(css.indexOf("/* ── ImagePeek"));
+  const sets = [...section.matchAll(/([^{}]+)\{[^{}]*background-image: var\(--bits-peek-src\)/g)].map((m) => m[1].trim());
+  assert.deepEqual(sets, [".bits-paper:focus-visible .bits-peek-print", ".bits-paper:hover .bits-peek-print"]);
+  assert.match(section, /@media \(hover: hover\) and \(pointer: fine\) \{\s*\.bits-paper:hover \.bits-peek-print \{/, "hover only for a real pointer");
+  assert.match(section, /@media \(prefers-reduced-motion: no-preference\) \{\s*\.bits-peek-print \{\s*translate: 0 10px;/, "the rise is motion, and waits for no-preference");
+  assert.match(section, /\.bits-peek \{[^}]*bottom: 100%;[^}]*height: 2\.125rem;\s*clip-path: inset\(-1rem -1rem 0 -1rem\);\s*pointer-events: none;/, "a strip above the card, cut along its edge, never catching a click");
+});
+
+test("previous and next are lifted cards, with the next page's photograph behind them", () => {
+  const out = html(
+    h(PrevNext, {
+      prev: { href: "/works/a", title: "Paper Trail", kicker: "Design", image: "https://picsum.photos/seed/a/800/600" },
+      next: { href: "/works/b", title: "Harbor Light", image: null },
+      label: "project",
+    })
+  );
+  const cards = out.match(/<a class="bits-paper[^"]*" data-lift="sm"[^>]*href="[^"]*"/g) ?? [];
+  assert.equal(cards.length, 2, "both are PaperCards, lifted a little");
+  assert.ok(!/transition-all|hover:-translate-y|hover:shadow-card/.test(out), "the old hover is gone");
+  assert.equal((out.match(/class="bits-peek /g) ?? []).length, 1, "a peek only where there is a photograph");
+  assert.match(out, /bits-peek [^"]*left-5/, "on the side the arrow points to");
+  const works = readFileSync(new URL("../app/(site)/works/[slug]/page.tsx", import.meta.url), "utf8");
+  const journal = readFileSync(new URL("../app/(site)/journal/[slug]/page.tsx", import.meta.url), "utf8");
+  assert.match(works, /image: p\.thumbnail_public_id/);
+  assert.match(journal, /image: p\.cover_public_id/);
+  assert.match(readFileSync(new URL("../components/journal-card.tsx", import.meta.url), "utf8"), /<ImagePeek src=\{post\.cover_public_id\} \/>/);
 });
