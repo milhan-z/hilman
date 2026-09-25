@@ -336,11 +336,17 @@ test("the carousel does not advance by itself", () => {
 test("motion asks whether motion is wanted", () => {
   for (const path of [
     "components/blocks/gallery/carousel.tsx",
-    "components/blocks/gallery/stack.tsx",
     "components/blocks/gallery/accordion.tsx",
   ]) {
     assert.match(code(path), /useReducedMotion/, `${path} respects the preference`);
   }
+  // The pile settles through HILMAN BITS instead: its movement is only ever
+  // written inside a no-preference block, which tests/bits-contract.test.ts
+  // holds the whole stylesheet to.
+  const stack = code("components/blocks/gallery/stack.tsx");
+  assert.match(stack, /<InView className="!max-w-none">/, "the pile waits for the shared trigger");
+  assert.match(stack, /className="bits-pile-card"/, "and settles by the stylesheet");
+  assert.ok(!/useState|useEffect|IntersectionObserver/.test(stack), "with no observer or state of its own");
   assert.match(
     code("components/loop-clip-facade.tsx"),
     /motion-reduce:/,

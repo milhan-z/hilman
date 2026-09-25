@@ -315,3 +315,29 @@
     animation: none;
   }
 }
+
+/* ── Pile (components/blocks/gallery/stack.tsx) ────────────────────────
+   Photographs dropped on a desk. Each print leans by its own angle
+   (--bits-pile-tilt), which is its shape and never changes. The first time
+   a pile further down the page comes into view, the prints drop into place
+   one after another (--bits-pile-delay): the last few pixels of a fall, as
+   they land. A pile already on screen when the page opens is on the desk,
+   and stays there. */
+.bits-pile-card {
+  rotate: var(--bits-pile-tilt, 0deg);
+}
+@keyframes bits-settle {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--motion-rise) * 1.5);
+  }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  [data-bits-view="waiting"] .bits-pile-card {
+    opacity: 0;
+    translate: 0 calc(var(--motion-rise) * 1.5);
+  }
+  [data-bits-view="playing"] .bits-pile-card {
+    animation: bits-settle var(--motion-reveal) var(--motion-ease-out) var(--bits-pile-delay, 0ms) backwards;
+  }
+}

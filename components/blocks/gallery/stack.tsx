@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useReducedMotion } from "../../use-reduced-motion";
+import type { CSSProperties } from "react";
+import { InView } from "../../bits/in-view";
 import { Pic } from "../../cld-image";
 import { cn } from "@/lib/utils";
 import { Lightbox, ZoomTrigger, useLightbox } from "../lightbox";
@@ -38,79 +38,31 @@ import { itemLabel, type GalleryItem } from "./shared";
  * ── settling onto the desk ──
  *
  * The cards drop into place, one after another, the first time the pile
- * scrolls into view. That is a CSS transition switched on by one
- * IntersectionObserver — see useSettle() — rather than Framer Motion, which
- * this was until the library turned out to be the largest thing every article
- * downloaded, pile or no pile. The page is sent with the cards already on
- * the desk: a pile that is on screen when the page opens simply stays put,
- * and one further down is lifted out of sight first so it has something to
- * settle from. Nothing is ever hidden waiting for JavaScript.
+ * scrolls into view: the HILMAN BITS pile entrance (`.bits-pile-card` in
+ * components/bits/bits.css), started by the shared <InView> trigger. The page
+ * is sent with the cards already on the desk: a pile that is on screen when
+ * the page opens simply stays put, and one further down is lifted out of
+ * sight first so it has something to settle from. Nothing is ever hidden
+ * waiting for JavaScript, and reduced motion only ever gets the pile at rest,
+ * by construction of the stylesheet.
+ *
+ * This used to be Framer Motion — until the library turned out to be the
+ * largest thing every article downloaded, pile or no pile — and then a
+ * transition switched on through React state, which re-rendered the whole
+ * pile twice to play it once. Now nothing re-renders: the trigger writes one
+ * attribute, and CSS does the rest.
  */
-
-/** How long one card takes to land, and how far behind the previous one it starts. */
-const SETTLE = { duration: 0.42, stagger: 0.05, ease: "cubic-bezier(0.16, 1, 0.3, 1)", lift: 18 } as const;
-
-type SettlePhase = "resting" | "lifted" | "settling";
 
 /**
- * "resting" is what the server sends and what reduced motion keeps. After
- * hydration a pile that is still below the fold is "lifted" (moved out of
- * place, invisibly, with no transition), and becomes "settling" as it comes
- * into view, which is what plays the transition.
+ * When each card starts to land, in milliseconds: 60 apart, closer together
+ * for a big pile, so that the last one always starts within 400 ms of the
+ * first (docs/HILMAN-BITS.md, rule 3) and a long gallery does not keep the
+ * reader waiting for its last photograph.
  */
-function useSettle(reduced: boolean) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [phase, setPhase] = useState<SettlePhase>("resting");
-
-  useEffect(() => {
-    if (reduced) {
-      // Also the way back if the preference arrives after hydration, so a
-      // pile can never be left lifted out of sight.
-      setPhase("resting");
-      return;
-    }
-    const node = ref.current;
-    if (!node || typeof IntersectionObserver === "undefined") return;
-
-    let first = true;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (first) {
-          first = false;
-          // Any part of it already on screen: it has been seen where it is,
-          // so it stays. Measured against the whole viewport, not the
-          // trigger margin, so a pile peeking over the fold never vanishes.
-          const onScreen = entries.some(
-            ({ boundingClientRect: box }) => box.top < window.innerHeight && box.bottom > 0
-          );
-          if (onScreen) observer.disconnect();
-          else setPhase("lifted");
-          return;
-        }
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setPhase("settling");
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "0px 0px -40px 0px" }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [reduced]);
-
-  return { ref, phase };
-}
-
-function settleStyle(phase: SettlePhase, rotate: number, index: number): React.CSSProperties {
-  if (phase === "lifted") {
-    return { opacity: 0, transform: `translateY(${SETTLE.lift}px) rotate(${rotate}deg)` };
-  }
-  const style: React.CSSProperties = { opacity: 1, transform: `rotate(${rotate}deg)` };
-  if (phase === "settling") {
-    const delay = `${index * SETTLE.stagger}s`;
-    style.transition = `opacity ${SETTLE.duration}s ${SETTLE.ease} ${delay}, transform ${SETTLE.duration}s ${SETTLE.ease} ${delay}`;
-  }
-  return style;
+export function settleDelay(index: number, count: number): number {
+  if (count < 2 || index < 1) return 0;
+  const step = Math.max(40, Math.min(60, 400 / (count - 1)));
+  return Math.round(Math.min(index * step, 400));
 }
 
 /** Index → tilt. Six entries, cycled: enough variety to read as a pile. */
@@ -145,9 +97,7 @@ export function fanGeometry(count: number) {
 }
 
 export function GalleryStack({ items }: { items: GalleryItem[] }) {
-  const reduced = useReducedMotion();
   const lightbox = useLightbox();
-  const settle = useSettle(reduced);
   if (items.length === 0) return null;
 
   const fan = fanGeometry(items.length);
@@ -159,8 +109,9 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
        wins over `max-w-[34rem]` — `!important` beats source order — and the
        pile silently grows to the full width of the page.
 
-       The cap is lifted at `sm`, where the fan wants the whole column. */
-    <div className="!max-w-none" ref={settle.ref}>
+       The cap is lifted at `sm`, where the fan wants the whole column. The
+       outer one is also what waits to come into view. */
+    <InView className="!max-w-none">
       <div
         className={cn(
           "mx-auto w-full max-w-[34rem] pb-2 sm:max-w-none",
@@ -172,10 +123,9 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
 
           return (
             /* Position lives out here, in classes a media query can reach.
-               The rotation and the settling live on the figure inside,
-               because they are written as an inline `transform`, and an
-               inline transform beats any class — the two cannot share one
-               element without one of them losing. */
+               The tilt and the settling live on the figure inside, which
+               moves on its own `rotate` and `translate` — kept apart from
+               the layout, so neither can undo the other. */
             <div
               key={i}
               style={
@@ -201,7 +151,15 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
                   "sm:ml-[var(--shift)] sm:mr-0 sm:mt-[var(--lift)] sm:w-[var(--card)] sm:shrink-0"
               )}
             >
-              <figure style={settleStyle(settle.phase, tilt.rotate, i)}>
+              <figure
+                className="bits-pile-card"
+                style={
+                  {
+                    "--bits-pile-tilt": `${tilt.rotate}deg`,
+                    "--bits-pile-delay": `${settleDelay(i, items.length)}ms`,
+                  } as CSSProperties
+                }
+              >
                 <ZoomTrigger
                   onOpen={() => lightbox.open(i)}
                   label={`Open ${itemLabel(item, i, items.length)}`}
@@ -252,6 +210,6 @@ export function GalleryStack({ items }: { items: GalleryItem[] }) {
         onClose={lightbox.close}
         onIndex={lightbox.setIndex}
       />
-    </div>
+    </InView>
   );
 }

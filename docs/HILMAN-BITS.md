@@ -29,7 +29,10 @@ that blurs in letter by letter, a page that scrolls itself.
 `InView` (`components/bits/in-view.tsx`) is not a primitive but the trigger
 the others share: *wait until this is on screen, then play, once*. The server
 sends everything finished; after hydration, whatever is below the fold is put
-back to where its entrance starts and plays as it comes into view.
+back to where its entrance starts and plays as it comes into view. The
+gallery Stack settles through it too (the "Pile" section of `bits.css`): the
+tilt of each print is its shape, and the drop onto the desk is the shared
+entrance, with the shared numbers — no observer or state of its own.
 
 ## Where they are used
 
@@ -40,7 +43,7 @@ primitives per page. Every page is inside it.
 |---|---|---|
 | Home | The brush swept under "Hilman"; the lines under the title arriving in turn; section headings arriving as they scroll in; the pen under "together."; the cards | 3 |
 | Works, Journal | The line under the title; the cards | 2 |
-| A work, a journal entry | The details around the title (never the title); the reader count; the related cards | 2–3 |
+| A work, a journal entry | The details around the title (never the title); the reader count; the related cards; a Stack gallery's prints settling onto the desk as it comes into view, when the author chose a Stack | 2–3, and the pile |
 | About, Lab, Connect | The line under the title | 1 |
 | Studio | Nothing — feedback only, 150 ms or less. (It downloads bits.css with the rest of the stylesheet; nothing there uses it.) | 0 |
 

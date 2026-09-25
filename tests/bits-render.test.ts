@@ -9,7 +9,10 @@ import { HandDrawnReveal, PEN_SHAPES } from "../components/bits/hand-drawn-revea
 import { PaperCard, paperTilt } from "../components/bits/paper-card";
 import { Tally, cssDuration, tallyRuns } from "../components/bits/tally";
 import { WorkTransition, workHeaderStyle, workPhotoName } from "../components/bits/work-transition";
+import { BlockRenderer } from "../components/blocks/renderer";
+import { settleDelay } from "../components/blocks/gallery/stack";
 import { formatReaders } from "../lib/readers";
+import type { Block } from "../lib/types";
 
 /**
  * What the HILMAN BITS primitives send from the server, before any script
@@ -349,4 +352,41 @@ test("the morph keeps both pictures' proportions and stands still for reduced mo
   assert.match(css, /@keyframes bits-morph-arrive \{\s*from \{\s*opacity: 0;\s*\}\s*\}/);
   assert.match(css, /::view-transition \{\s*pointer-events: none;/, "clicks go through while it runs");
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*::view-transition-group\(\*\),\s*::view-transition-old\(\*\),\s*::view-transition-new\(\*\) \{\s*animation: none;/);
+});
+
+/* ── the pile (the gallery Stack) ─────────────────────────── */
+
+test("a pile is sent on the desk: tilted, and visible, before any script runs", () => {
+  const items = ["a", "b", "c"].map((seed) => ({ src: `https://picsum.photos/seed/${seed}/1100/825`, alt: `Print ${seed}` }));
+  const blocks = [{ id: "g", type: "gallery", position: 0, data: { layout: "stack", items } }] as unknown as Block[];
+  const out = html(h(BlockRenderer, { blocks }));
+  const cards = out.match(/<figure class="bits-pile-card" style="[^"]*"/g) ?? [];
+  assert.equal(cards.length, 3, "one print per photograph");
+  assert.match(cards[0], /--bits-pile-tilt:-2.4deg;--bits-pile-delay:0ms/);
+  assert.match(cards[1], /--bits-pile-tilt:1.8deg;--bits-pile-delay:60ms/);
+  assert.ok(!out.includes("data-bits-view"), "the waiting state is only ever the browser's to set");
+  assert.ok(!/opacity:\s*0/.test(out), "nothing is hidden in the HTML");
+  assert.ok(!/transform:/.test(out), "the tilt is `rotate`, which the entrance's `translate` cannot undo");
+});
+
+test("a pile lands in 400 ms at most, however many prints are in it", () => {
+  assert.equal(settleDelay(0, 1), 0);
+  assert.deepEqual([0, 1, 2, 3, 4].map((i) => settleDelay(i, 5)), [0, 60, 120, 180, 240], "60 ms apart");
+  assert.equal(settleDelay(9, 10), 400, "closer together for a big pile");
+  assert.ok(settleDelay(1, 10) >= 40, "but never closer than 40 ms");
+  assert.equal(settleDelay(19, 20), 400, "and the last one never starts later than 400 ms");
+});
+
+test("the pile settles through the shared trigger, only when motion is welcome", () => {
+  const css = readFileSync(new URL("../components/bits/bits.css", import.meta.url), "utf8");
+  assert.match(css, /\.bits-pile-card \{\s*rotate: var\(--bits-pile-tilt, 0deg\);/, "the tilt is the print's shape, always there");
+  assert.match(
+    css,
+    /@media screen and \(prefers-reduced-motion: no-preference\) \{\s*\[data-bits-view="waiting"\] \.bits-pile-card \{\s*opacity: 0;/
+  );
+  assert.match(
+    css,
+    /\[data-bits-view="playing"\] \.bits-pile-card \{\s*animation: bits-settle var\(--motion-reveal\) var\(--motion-ease-out\) var\(--bits-pile-delay, 0ms\) backwards;/
+  );
+  assert.match(css, /@keyframes bits-settle \{\s*from \{\s*opacity: 0;\s*translate: 0 calc\(var\(--motion-rise\) \* 1\.5\);/, "12 px on a desktop, 9 on a phone: paper doesn't fly");
 });
