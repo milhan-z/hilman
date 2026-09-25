@@ -246,3 +246,72 @@
 .bits-tally-strip > span {
   height: 1lh;
 }
+
+/* ── WorkTransition (components/bits/work-transition.tsx) ──────────────
+   The browser's View Transitions, as React names them: a card's photograph
+   and its work's cover share a name, and the browser moves one picture
+   into the other. The two pictures are rarely the same shape — a 4:3 card,
+   a wide cover — so both are drawn `cover` inside the moving frame instead
+   of being stretched to it. The overlay lets clicks through while it runs.
+   Under reduced motion nothing moves: the pages simply swap.
+
+   Only the photograph moves. The page itself is not captured, so it swaps
+   at once, as on every other navigation, instead of the browser's default
+   cross-fade. The entry header laid over the cover is captured, to stay on
+   top of the photograph landing under it — still, and there from the
+   start. */
+:root {
+  view-transition-name: none;
+}
+::view-transition {
+  pointer-events: none;
+}
+::view-transition-group(bits-work-header) {
+  z-index: 1;
+  animation: none;
+}
+::view-transition-old(bits-work-header) {
+  display: none;
+}
+::view-transition-new(bits-work-header) {
+  animation: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-group(.bits-morph) {
+    animation-duration: var(--motion-reveal);
+    animation-timing-function: var(--motion-ease-out);
+  }
+  ::view-transition-old(.bits-morph),
+  ::view-transition-new(.bits-morph) {
+    height: 100%;
+    object-fit: cover;
+    overflow: clip;
+  }
+  /* The photograph being carried stays solid, and the cover arrives over
+     it, instead of the two cross-fading. React does not hold the page for
+     an image as big as a cover, so the cover can still be loading while it
+     moves: cross-faded, the photograph you tapped faded into an empty
+     frame; this way it is the frame until the cover is there. The arrival
+     is a plain fade, not the browser's own: that one adds the two pictures'
+     light together (plus-lighter), which only balances when the other is
+     fading out — over a solid photograph it washed both out to pastel. */
+  ::view-transition-old(.bits-morph) {
+    animation: none;
+  }
+  ::view-transition-new(.bits-morph) {
+    animation: bits-morph-arrive var(--motion-reveal) var(--motion-ease-out);
+  }
+}
+
+@keyframes bits-morph-arrive {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none;
+  }
+}

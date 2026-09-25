@@ -66,7 +66,12 @@ const themeScript = `(function(){var t="dark";try{t=localStorage.getItem("hilman
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    // data-scroll-behavior: the page scrolls smoothly (globals.css), but a
+    // new page opens at its top at once. Since Next.js 16 the router only
+    // steps around `scroll-behavior: smooth` when this attribute asks it to;
+    // without it, a page opened from far down the one before glided up from
+    // there for half a second or more.
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

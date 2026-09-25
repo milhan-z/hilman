@@ -8,6 +8,7 @@ import { EditorialReveal, revealStagger } from "../components/bits/editorial-rev
 import { HandDrawnReveal, PEN_SHAPES } from "../components/bits/hand-drawn-reveal";
 import { PaperCard, paperTilt } from "../components/bits/paper-card";
 import { Tally, cssDuration, tallyRuns } from "../components/bits/tally";
+import { WorkTransition, workHeaderStyle, workPhotoName } from "../components/bits/work-transition";
 import { formatReaders } from "../lib/readers";
 
 /**
@@ -290,4 +291,62 @@ test("a token's duration is read with its unit, whatever the build did to it", (
   const tally = readFileSync(new URL("../components/bits/tally.tsx", import.meta.url), "utf8");
   assert.match(tally, /cssDuration\(root\.getPropertyValue\("--motion-reveal"\), 520\)/);
   assert.ok(!/parseFloat\(root\.getPropertyValue/.test(tally));
+});
+
+/* ── WorkTransition ───────────────────────────────────────── */
+
+test("a travelling photograph adds nothing to the page it sits on", () => {
+  // <ViewTransition> renders no element of its own: the photograph is the
+  // same markup it always was, and only gains a name while a navigation runs.
+  const out = html(h(WorkTransition, { name: workPhotoName("p1"), children: h("span", { className: "photo" }, "Paper Trail") }));
+  assert.equal(out, '<span class="photo">Paper Trail</span>');
+  assert.equal(workPhotoName("8bac8a99-e0de-4b7a-a6bb-bac67d993415"), "work-8bac8a99-e0de-4b7a-a6bb-bac67d993415");
+});
+
+test("the card's photograph and the work's cover go by the same name", () => {
+  const card = readFileSync(new URL("../components/project-card.tsx", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/(site)/works/[slug]/page.tsx", import.meta.url), "utf8");
+  // The image itself travels, not its frame: the "pinned" stamp stays on the card.
+  assert.match(card, /<WorkTransition name=\{workPhotoName\(project\.id\)\}>\s*<Pic\s+src=\{project\.thumbnail_public_id\}/);
+  assert.match(page, /<WorkTransition name=\{workPhotoName\(project\.id\)\}>\s*<Pic src=\{project\.cover_public_id\}/);
+  const bits = readFileSync(new URL("../components/bits/work-transition.tsx", import.meta.url), "utf8");
+  assert.match(bits, /share="bits-morph" default="none"/, "only the pair moves, and only when it is a pair");
+});
+
+test("only the photograph moves: the page swaps, and the header it lands under stays put", () => {
+  const css = readFileSync(new URL("../components/bits/bits.css", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/(site)/works/[slug]/page.tsx", import.meta.url), "utf8");
+  assert.match(css, /:root \{\s*view-transition-name: none;/, "no cross-fade of the whole page");
+  assert.deepEqual(workHeaderStyle, { viewTransitionName: "bits-work-header" });
+  assert.match(page, /<header\s[^>]*style=\{workHeaderStyle\}/, "the entry header over the cover is named");
+  assert.match(css, /::view-transition-group\(bits-work-header\) \{\s*z-index: 1;\s*animation: none;/, "above the landing photograph, and still");
+  assert.match(css, /::view-transition-old\(bits-work-header\) \{\s*display: none;/, "never two headers at once");
+  assert.match(css, /::view-transition-new\(bits-work-header\) \{\s*animation: none;/);
+});
+
+test("a page opened from far down the last one starts at its top, instead of gliding up to it", () => {
+  // globals.css scrolls smoothly, and since Next.js 16 the router only sets
+  // that aside for a navigation when <html> asks it to. Without it the new
+  // page glided up from the old one's scroll position for over half a second
+  // (measured, on master too), and the photograph landed on a cover that was
+  // still on its way up.
+  const globals = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const layout = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+  assert.match(globals, /html \{\s*scroll-behavior: smooth;/);
+  assert.match(layout, /<html [^>]*data-scroll-behavior="smooth"/);
+});
+
+test("the morph keeps both pictures' proportions and stands still for reduced motion", () => {
+  const css = readFileSync(new URL("../components/bits/bits.css", import.meta.url), "utf8");
+  assert.match(css, /::view-transition-group\(\.bits-morph\) \{\s*animation-duration: var\(--motion-reveal\);/);
+  assert.match(css, /::view-transition-new\(\.bits-morph\) \{\s*height: 100%;\s*object-fit: cover;/, "a 4:3 card and a wide cover are cropped, never stretched");
+  assert.match(css, /::view-transition-old\(\.bits-morph\) \{\s*animation: none;/, "a cover still loading never leaves an empty frame mid-flight");
+  assert.match(
+    css,
+    /::view-transition-new\(\.bits-morph\) \{\s*animation: bits-morph-arrive var\(--motion-reveal\) var\(--motion-ease-out\);/,
+    "the cover arrives with a plain fade: the browser's plus-lighter one washes out over a solid photograph"
+  );
+  assert.match(css, /@keyframes bits-morph-arrive \{\s*from \{\s*opacity: 0;\s*\}\s*\}/);
+  assert.match(css, /::view-transition \{\s*pointer-events: none;/, "clicks go through while it runs");
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*::view-transition-group\(\*\),\s*::view-transition-old\(\*\),\s*::view-transition-new\(\*\) \{\s*animation: none;/);
 });

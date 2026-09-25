@@ -4,6 +4,7 @@ import { BlockRenderer } from "@/components/blocks/renderer";
 import { Pic } from "@/components/cld-image";
 import { PrevNext } from "@/components/prev-next";
 import { EditorialReveal } from "@/components/bits/editorial-reveal";
+import { WorkTransition, workHeaderStyle, workPhotoName } from "@/components/bits/work-transition";
 import { ReaderCount } from "@/components/reader-count";
 import { ArrowLink, Button, EntryMeta, Stamp, Tag } from "@/components/ui";
 import { getProjectBySlug, getProjects, load } from "@/lib/data";
@@ -83,16 +84,21 @@ export default async function ProjectPage(props: { params: Promise<{ slug: strin
       {/* cover */}
       {project.cover_public_id && (
         <div className="relative h-[42vh] min-h-[280px] w-full overflow-hidden border-b-2 border-ink sm:h-[56vh]">
-          <Pic src={project.cover_public_id} alt={`${project.title} — cover`} fill priority sizes="100vw" />
+          {/* Where the card's photograph lands when the card is opened. */}
+          <WorkTransition name={workPhotoName(project.id)}>
+            <Pic src={project.cover_public_id} alt={`${project.title} — cover`} fill priority sizes="100vw" />
+          </WorkTransition>
         </div>
       )}
 
       <div className="mx-auto max-w-wide px-5 sm:px-8">
-        {/* entry header — an overlapping filed card */}
+        {/* entry header — an overlapping filed card, which the travelling
+            photograph lands under */}
         <header
           className={`relative z-10 mx-auto max-w-3xl rounded-md border border-line-strong bg-surface p-7 shadow-lift sm:p-10 ${
             project.cover_public_id ? "-mt-16 sm:-mt-20" : "mt-12"
           }`}
+          style={workHeaderStyle}
         >
           {/* The title is there from the first paint; what surrounds it
               arrives. The title itself never moves: it is the page's largest

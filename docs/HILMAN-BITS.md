@@ -19,7 +19,7 @@ that blurs in letter by letter, a page that scrolls itself.
 | `EditorialReveal` | The details around a title inked in after it, the title already printed | CSS keyframes; `InView` for `trigger="view"` | Wave 1 |
 | `PaperCard` | A card lifted a little off the desk | CSS | Wave 1 |
 | `Tally` | A number that rolls over when it changes in front of you | Web Animations API | Wave 1 |
-| `WorkTransition` | A thumbnail becoming the page it opens | View Transitions | Wave 2 |
+| `WorkTransition` | A card's photograph carried into the cover of the work it opens | React `<ViewTransition>` over the browser's View Transitions, compositor only | Wave 2 |
 | `PhotoStack` | Photographs dropped on a desk (the gallery stack, generalised) | CSS variables + `InView` | Wave 2 |
 | `ImagePeek` | A photograph peeking out from behind a title | CSS + pointer → CSS variables | Wave 2 |
 | `ChapterMark` | An archive tab that changes with the chapter | One IntersectionObserver + CSS | Wave 3 |
@@ -43,6 +43,29 @@ primitives per page. Every page is inside it.
 | A work, a journal entry | The details around the title (never the title); the reader count; the related cards | 2–3 |
 | About, Lab, Connect | The line under the title | 1 |
 | Studio | Nothing — feedback only, 150 ms or less. (It downloads bits.css with the rest of the stylesheet; nothing there uses it.) | 0 |
+
+`WorkTransition` is not in the counts: it moves *between* two pages, while
+nothing on either is moving. Opening a work from its card on Home or Works
+carries the card's photograph into the cover (520 ms) under the entry header,
+which is simply there; the pages themselves swap at once, as on every other
+navigation. Going back through the site's own links ("Back to the archive",
+the nav) carries it back into its card when both are on screen. What it does
+not do, on purpose or by measurement:
+
+- No pair, no movement: a work without a cover, a destination not prefetched
+  yet, a photograph off screen at either end, a browser without View
+  Transitions. Those are ordinary navigations.
+- The browser's back button and a swipe back are ordinary navigations too:
+  React does not start a transition for them (measured on React 19.3 /
+  Next 16.3), and a phone's own swipe animation is better left alone.
+- A cover can still be loading when it lands — React holds the page for small
+  images, not for one that size — so the photograph stays solid and the cover
+  fades in over it, instead of the two cross-fading into an empty frame.
+- It costs about 50 ms between the click and the new page (the browser
+  photographs the card first); the click itself answers as fast as before.
+- It needs `data-scroll-behavior="smooth"` on `<html>`: without it, a page
+  opened from far down the list glided up from there for over half a second
+  (on master too) and the photograph landed on a cover still on its way up.
 
 ## The rules
 

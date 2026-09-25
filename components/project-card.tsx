@@ -1,4 +1,5 @@
 import { PaperCard } from "./bits/paper-card";
+import { WorkTransition, workPhotoName } from "./bits/work-transition";
 import { Pic } from "./cld-image";
 import { Stamp, Tag } from "./ui";
 import { ReaderTally } from "./reader-tally";
@@ -50,13 +51,16 @@ export function ProjectCard({
       </div>
 
       <div className="relative aspect-[4/3] overflow-hidden bg-n-100">
-        <Pic
-          src={project.thumbnail_public_id}
-          alt={`${project.title} — ${project.subtitle ?? STREAMS[project.stream].name}`}
-          fill
-          priority={priority}
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-        />
+        {/* The photograph that becomes the work's cover when the card is opened. */}
+        <WorkTransition name={workPhotoName(project.id)}>
+          <Pic
+            src={project.thumbnail_public_id}
+            alt={`${project.title} — ${project.subtitle ?? STREAMS[project.stream].name}`}
+            fill
+            priority={priority}
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          />
+        </WorkTransition>
         {project.featured && (
           <span className="absolute right-2.5 top-2.5">
             <Stamp tone="hl" className="shadow-sticky">pinned</Stamp>
