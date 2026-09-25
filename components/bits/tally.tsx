@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useReducedMotion } from "../use-reduced-motion";
+import { cssDuration } from "./tokens";
 
 export type TallyPart = { kind: "text"; text: string } | { kind: "digit"; from: number; to: number };
 
@@ -37,23 +38,6 @@ export function tallyRuns(previous: string, next: string): TallyPart[] | null {
   return parts;
 }
 
-/**
- * A CSS duration in milliseconds, or `fallback`.
- *
- * The motion tokens are written in milliseconds, but what the browser hands
- * back is what the build shipped, and the CSS minifier rewrites `520ms` as
- * `.52s`. Read as a bare number that was a roll of half a millisecond — over
- * before it could be seen, on every production page, while every
- * development build looked right.
- */
-export function cssDuration(value: string, fallback: number): number {
-  const raw = value.trim();
-  const n = parseFloat(raw);
-  if (!Number.isFinite(n) || n < 0) return fallback;
-  if (raw.endsWith("ms")) return n;
-  if (raw.endsWith("s")) return n * 1000;
-  return fallback;
-}
 
 /** Each digit's strip holds 0–9 twice, so 9 → 0 can roll forward, like a counter, not back. */
 const STRIP = [..."01234567890123456789"];

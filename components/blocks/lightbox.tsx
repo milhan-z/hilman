@@ -128,14 +128,20 @@ export function Lightbox({
   /* ── focus and scroll: strictly on the open/close transition ──
 
      Deliberately separate from the keyboard listener below, and depending on
-     nothing but `isOpen`. Folded together, the effect re-ran every time the
-     index changed — because the key handler closes over `go`, which closes
-     over `index` — and each re-run re-captured "what to give focus back to"
-     while focus was already inside the dialog. Closing then returned focus to
-     the dialog's own close button, which by that point no longer existed, so
-     it landed on <body> and the page lost its place. */
+     nothing but `isOpen` (and `mounted`, below). Folded together, the effect
+     re-ran every time the index changed — because the key handler closes
+     over `go`, which closes over `index` — and each re-run re-captured "what
+     to give focus back to" while focus was already inside the dialog.
+     Closing then returned focus to the dialog's own close button, which by
+     that point no longer existed, so it landed on <body> and the page lost
+     its place.
+
+     It also waits for `mounted`, which turns true once and then stays true:
+     a lightbox loaded on demand (PhotoStack's) can arrive already open,
+     before its portal exists, and focusing the close button then found
+     nothing to focus. */
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !mounted) return;
 
     const previouslyFocused = document.activeElement;
     closeRef.current?.focus();
@@ -148,7 +154,7 @@ export function Lightbox({
       // Back to the photograph that was clicked, so the page does not jump.
       if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
     };
-  }, [isOpen]);
+  }, [isOpen, mounted]);
 
   /* ── the keyboard, which may re-subscribe as freely as it likes ── */
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { Pic } from "@/components/cld-image";
+import { PhotoStack, type PhotoStackItem } from "@/components/bits/photo-stack";
 import { mediaSrc } from "@/lib/cloudinary";
 
 export type PersonalMoment = {
@@ -8,37 +8,34 @@ export type PersonalMoment = {
   caption?: string;
 };
 
-/** Optional real memories. Text-only entries remain useful until a photo is added. */
+/**
+ * The moments worth showing, as prints: a moment needs a photograph, a
+ * title or a few words, and one with nothing is left out. Text-only
+ * entries stay useful until a photo is added — they are notes in the pile.
+ */
+export function momentItems(moments?: PersonalMoment[]): PhotoStackItem[] {
+  if (!Array.isArray(moments)) return [];
+  return moments
+    .filter((moment) => moment && (mediaSrc(moment.image) || moment.title || moment.caption))
+    .map((moment) => ({
+      src: mediaSrc(moment.image) ? moment.image : undefined,
+      alt: moment.alt,
+      title: moment.title,
+      caption: moment.caption,
+    }));
+}
+
+/**
+ * Optional real memories, as a pile of prints on the desk (HILMAN BITS
+ * PhotoStack): one on top with its words beside it, the rest underneath.
+ */
 export function PersonalMoments({ moments }: { moments?: PersonalMoment[] }) {
-  const entries = Array.isArray(moments)
-    ? moments.filter((moment) => moment && (mediaSrc(moment.image) || moment.title || moment.caption))
-    : [];
-  if (!entries.length) return null;
+  const items = momentItems(moments);
+  if (!items.length) return null;
 
   return (
     <section className="pb-10" aria-label="Personal moments">
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {entries.map((moment, index) => (
-          <figure key={index} className="h-fit rounded-sm bg-cream p-3 text-cream-ink shadow-card">
-            {mediaSrc(moment.image) && (
-              <Pic
-                src={moment.image}
-                alt={moment.alt || moment.title || ""}
-                width={1000}
-                height={800}
-                sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 420px"
-                className="aspect-[5/4] w-full object-cover"
-              />
-            )}
-            {(moment.title || moment.caption) && (
-              <figcaption className="px-2 pb-3 pt-5">
-                {moment.title && <h3 className="font-display text-xl font-medium">{moment.title}</h3>}
-                {moment.caption && <p className="mt-2 text-sm leading-relaxed text-cream-soft">{moment.caption}</p>}
-              </figcaption>
-            )}
-          </figure>
-        ))}
-      </div>
+      <PhotoStack items={items} />
     </section>
   );
 }

@@ -7,10 +7,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { EditorialReveal, revealStagger } from "../components/bits/editorial-reveal";
 import { HandDrawnReveal, PEN_SHAPES } from "../components/bits/hand-drawn-reveal";
 import { PaperCard, paperTilt } from "../components/bits/paper-card";
-import { Tally, cssDuration, tallyRuns } from "../components/bits/tally";
+import { PhotoStack } from "../components/bits/photo-stack";
+import { Tally, tallyRuns } from "../components/bits/tally";
+import { cssDuration } from "../components/bits/tokens";
 import { WorkTransition, workHeaderStyle, workPhotoName } from "../components/bits/work-transition";
 import { BlockRenderer } from "../components/blocks/renderer";
-import { settleDelay } from "../components/blocks/gallery/stack";
+import { settleDelay } from "../components/bits/pile";
+import { PersonalMoments, momentItems } from "../components/personal-moments";
 import { formatReaders } from "../lib/readers";
 import type { Block } from "../lib/types";
 
@@ -389,4 +392,99 @@ test("the pile settles through the shared trigger, only when motion is welcome",
     /\[data-bits-view="playing"\] \.bits-pile-card \{\s*animation: bits-settle var\(--motion-reveal\) var\(--motion-ease-out\) var\(--bits-pile-delay, 0ms\) backwards;/
   );
   assert.match(css, /@keyframes bits-settle \{\s*from \{\s*opacity: 0;\s*translate: 0 calc\(var\(--motion-rise\) \* 1\.5\);/, "12 px on a desktop, 9 on a phone: paper doesn't fly");
+});
+
+/* ── PhotoStack ───────────────────────────────────────────── */
+
+const moments = [
+  { src: "https://picsum.photos/seed/m1/1000/800", alt: "Stalls lit up at night", title: "Night market", caption: "Where the weekend starts." },
+  { title: "A note to myself", caption: "Make the thing, then make it better." },
+  { src: "https://picsum.photos/seed/m3/1000/800", alt: "Riso posters drying", title: "Riso day" },
+];
+
+test("every print is in the page, in order, with its own words, whichever is on top", () => {
+  const out = html(h(PhotoStack, { items: moments }));
+  const prints = out.match(/<li class="bits-pile-card bits-photo-print"[^>]*>/g) ?? [];
+  assert.equal(prints.length, 3);
+  assert.match(prints[0], /data-bits-title="Night market" data-bits-photo=""/);
+  assert.match(prints[0], /z-index:3;--bits-pile-tilt:-2.4deg;--bits-pile-delay:\d+ms;--bits-print-place:0/, "the first is on top");
+  assert.ok(!prints[1].includes("data-bits-photo"), "the note has no photograph");
+  assert.match(prints[2], /z-index:1;.*--bits-print-place:2/, "the last is at the bottom");
+  // Their words are there for a screen reader (sr-only), in the order they came.
+  const captions = [...out.matchAll(/<figcaption class="sr-only[^"]*">([\s\S]*?)<\/figcaption>/g)].map((m) => m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+  assert.deepEqual(captions, ["Night market Where the weekend starts.", "A note to myself Make the thing, then make it better.", "Riso day"]);
+  assert.match(out, /alt="Stalls lit up at night"/);
+  assert.ok(!out.includes("data-bits-view"), "sent on the desk");
+  assert.ok(!/opacity:\s*0/.test(out), "nothing hidden in the HTML");
+});
+
+test("the top print's words sit beside the pile for the eye, with Next and Look closer", () => {
+  const out = html(h(PhotoStack, { items: moments }));
+  assert.match(out, /<div aria-hidden="true" class="bits-photo-words"><p [^>]*><span data-bits-pile="count">1<\/span> \/ 3<\/p>/);
+  const words = out.match(/<div data-bits-words=""[^>]*>/g) ?? [];
+  assert.deepEqual(words, ['<div data-bits-words="">', '<div data-bits-words="" hidden="">', '<div data-bits-words="" hidden="">'], "one set of words per print, the top one showing");
+  assert.match(out, /<button [^>]*data-bits-pile="next"[^>]*>Next <span aria-hidden="true">↻<\/span><span class="sr-only">: put the top print back underneath<\/span><\/button>/);
+  assert.match(out, /<span data-bits-pile="look"><button [^>]*>Look closer <span aria-hidden="true">⤢<\/span><span class="sr-only" data-bits-pile="look-label">: Night market<\/span>/);
+  assert.match(out, /<p class="sr-only" aria-live="polite" data-bits-pile="announce"><\/p>/, "and a polite announcement of what came up");
+  // Without JavaScript the pile is dealt out as a column, words and all.
+  assert.match(out, /<noscript><style>\.bits-photo-pile\{gap:1\.5rem\}/);
+  assert.match(out, /\.bits-photo-words,\.bits-photo-controls\{display:none\}/);
+});
+
+test("a moment without a photograph is a note, with nothing to look closer at", () => {
+  const out = html(h(PhotoStack, { items: [moments[1], moments[0]] }));
+  assert.match(out, /font-hand[^"]*">A note to myself<\/div>/, "handwritten on the paper");
+  assert.match(out, /<span data-bits-pile="look" hidden="">/, "Look closer waits for a photograph on top");
+  assert.ok(!html(h(PhotoStack, { items: [moments[1]] })).includes("Look closer"), "and a pile of notes never offers it");
+});
+
+test("one print is a print, not a pile", () => {
+  const out = html(h(PhotoStack, { items: [moments[0]] }));
+  assert.ok(!out.includes(">Next "), "nothing to put back underneath");
+  assert.ok(!out.includes('data-bits-pile="count"'), "and no count of one");
+  assert.match(out, /<span data-bits-pile="look">/);
+  assert.equal(html(h(PhotoStack, { items: [] })), "");
+});
+
+test("About's moments are a PhotoStack, in the HTML itself", () => {
+  assert.deepEqual(
+    momentItems([
+      { title: "Night market", image: "https://picsum.photos/seed/m1/1000/800", alt: "Stalls", caption: "x" },
+      { title: "", caption: "" },
+      { caption: "Only words" },
+    ]),
+    [
+      { src: "https://picsum.photos/seed/m1/1000/800", alt: "Stalls", title: "Night market", caption: "x" },
+      { src: undefined, alt: undefined, title: undefined, caption: "Only words" },
+    ],
+    "an empty moment is left out; a moment of words alone is a note"
+  );
+  const out = html(h(PersonalMoments, { moments: [{ title: "Night market", image: "https://picsum.photos/seed/m1/1000/800" }] }));
+  assert.match(out, /^<section class="pb-10" aria-label="Personal moments"><div>/);
+  // Measured: behind a <Suspense> boundary React 19 sent the pile as a
+  // hidden segment for a script to reveal, and with JavaScript off it was not
+  // there at all. No boundary, no hidden segment.
+  assert.ok(!out.includes("<!--$"), "no Suspense boundary around the pile");
+  assert.equal(html(h(PersonalMoments, { moments: [] })), "");
+});
+
+test("the pile is drawn by the server; its hands and the lightbox arrive after the page", () => {
+  const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  assert.ok(!/^["']use client["']/m.test(read("components/bits/photo-stack.tsx")), "the pile is a server component");
+  assert.ok(!/^["']use client["']/m.test(read("components/personal-moments.tsx")));
+  const hands = read("components/bits/photo-stack-hands.tsx");
+  assert.match(hands, /import\("\.\/photo-stack-controller"\)/, "what moves the pile is its own chunk");
+  assert.match(hands, /lazy\(\(\) => import\("\.\.\/blocks\/lightbox"\)/, "and so is the lightbox, fetched when somebody reaches for it");
+  assert.ok(!/^import \{[^}]*\bLightbox\b[^}]*\} from/m.test(hands), "never imported up front");
+  const controller = read("components/bits/photo-stack-controller.ts");
+  assert.match(controller, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches/, "the lift never runs for reduced motion");
+  assert.match(controller, /cssDuration\(tokens\.getPropertyValue\("--motion-reveal"\), 520\)/, "and reads the token with its unit");
+});
+
+test("the pile is one grid cell and moves up a notch only when motion is welcome", () => {
+  const css = readFileSync(new URL("../components/bits/bits.css", import.meta.url), "utf8");
+  assert.match(css, /\.bits-photo-print \{\s*grid-area: 1 \/ 1;/, "as tall as its tallest print, whichever is on top");
+  assert.match(css, /\.bits-photo-paper \{\s*translate: calc\(min\(var\(--bits-print-place, 0\), 3\) \* 6px\) calc\(min\(var\(--bits-print-place, 0\), 3\) \* 4px\);/);
+  assert.match(css, /@media \(prefers-reduced-motion: no-preference\) \{\s*\.bits-photo-paper \{\s*transition: translate var\(--motion-base\) var\(--motion-ease-out\);/);
+  assert.match(css, /\[data-bits-pile-ready\] \.bits-photo-pile \{\s*cursor: pointer;/, "a hand only once the hands are there");
 });

@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { InView } from "../../bits/in-view";
+import { settleDelay } from "../../bits/pile";
 import { Pic } from "../../cld-image";
 import { cn } from "@/lib/utils";
 import { Lightbox, ZoomTrigger, useLightbox } from "../lightbox";
@@ -52,18 +53,6 @@ import { itemLabel, type GalleryItem } from "./shared";
  * pile twice to play it once. Now nothing re-renders: the trigger writes one
  * attribute, and CSS does the rest.
  */
-
-/**
- * When each card starts to land, in milliseconds: 60 apart, closer together
- * for a big pile, so that the last one always starts within 400 ms of the
- * first (docs/HILMAN-BITS.md, rule 3) and a long gallery does not keep the
- * reader waiting for its last photograph.
- */
-export function settleDelay(index: number, count: number): number {
-  if (count < 2 || index < 1) return 0;
-  const step = Math.max(40, Math.min(60, 400 / (count - 1)));
-  return Math.round(Math.min(index * step, 400));
-}
 
 /** Index → tilt. Six entries, cycled: enough variety to read as a pile. */
 const TILTS = [

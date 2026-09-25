@@ -341,3 +341,26 @@
     animation: bits-settle var(--motion-reveal) var(--motion-ease-out) var(--bits-pile-delay, 0ms) backwards;
   }
 }
+
+/* ── PhotoStack (components/bits/photo-stack.tsx) ──────────────────────
+   The prints share one grid cell, so the pile is as tall as its tallest
+   print whichever is on top, and nothing around it moves. Each sits a
+   notch further down and to the right the deeper it is in the pile
+   (--bits-print-place, 0 on top; three notches at most), and moves up a
+   notch when the print above it is put back underneath. The lift of the
+   print being put back is the component's own (Web Animations API). */
+.bits-photo-print {
+  grid-area: 1 / 1;
+}
+.bits-photo-paper {
+  translate: calc(min(var(--bits-print-place, 0), 3) * 6px) calc(min(var(--bits-print-place, 0), 3) * 4px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bits-photo-paper {
+    transition: translate var(--motion-base) var(--motion-ease-out);
+  }
+}
+/* A tap on the pile puts the top print back, once the hands have arrived. */
+[data-bits-pile-ready] .bits-photo-pile {
+  cursor: pointer;
+}

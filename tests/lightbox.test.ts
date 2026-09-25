@@ -115,10 +115,14 @@ test("the page behind does not scroll while it is open", () => {
 test("focus is captured once on opening, not on every navigation", () => {
   const lb = code(LIGHTBOX);
   const deps = lb.match(/\}, \[[^\]]*\]\);/g) ?? [];
+  // `mounted` turns true once and stays true, so it cannot re-run the effect
+  // during an opening; it only lets a lightbox that arrives already open
+  // (loaded on demand) wait for its portal before focusing into it.
   assert.ok(
-    deps.some((d) => d.includes("[isOpen]")),
-    "one effect depends on isOpen alone — the one that owns focus and scroll"
+    deps.some((d) => d.includes("[isOpen, mounted]")),
+    "one effect depends on isOpen (and mounted) alone — the one that owns focus and scroll"
   );
+  assert.match(lb, /if \(!isOpen \|\| !mounted\) return;/);
   assert.ok(
     deps.some((d) => d.includes("isOpen") && d.includes("go")),
     "and a separate one owns the key handler, free to re-subscribe"

@@ -62,7 +62,14 @@ test("every export says what it is for", () => {
 test("only the pieces that need the browser are client components", () => {
   // Everything else is a server component: it ships no JavaScript, and it is
   // finished in the HTML before any script runs.
-  const allowed = new Set(["components/bits/in-view.tsx", "components/bits/tally.tsx"]);
+  // in-view: an IntersectionObserver. tally: the roll runs as a number
+  // changes in front of you. photo-stack-hands: puts a print back, opens the
+  // lightbox (the pile itself, photo-stack.tsx, is a server component).
+  const allowed = new Set([
+    "components/bits/in-view.tsx",
+    "components/bits/tally.tsx",
+    "components/bits/photo-stack-hands.tsx",
+  ]);
   for (const file of sources) {
     const client = /^["']use client["'];?/m.test(read(file));
     if (client) assert.ok(allowed.has(file), `${file} is a client component and is not on the list`);
