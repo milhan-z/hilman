@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Pic } from "./cld-image";
 import { Stamp, Tag } from "./ui";
-import { formatReaders } from "@/lib/readers";
+import { ReaderTally } from "./reader-count";
 import { STREAMS, type Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +28,6 @@ export function ProjectCard({
 }) {
   const cat = index != null ? String(index + 1).padStart(2, "0") : String(project.sort_order).padStart(2, "0");
   const tags = project.tags ?? [];
-  const readers = formatReaders(project.reads);
   return (
     <Link
       href={`/works/${project.slug}`}
@@ -76,18 +75,19 @@ export function ProjectCard({
         </div>
         {(project.subtitle || project.excerpt) && <p className="mt-1.5 text-sm leading-relaxed text-soft">{project.subtitle || project.excerpt}</p>}
         {project.meta?.role && <p className="mt-3 text-xs text-soft"><span className="text-ink">My part:</span> {project.meta.role}</p>}
-        {(tags.length > 0 || readers) && (
-          <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-4">
-            {tags.slice(0, 3).map((t) => (
-              <Tag key={t.id}>{t.name}</Tag>
-            ))}
-            {readers && (
-              <span className="ml-auto pl-2 font-mono text-2xs uppercase tracking-wider text-faint tnum">
-                {readers}
-              </span>
-            )}
-          </div>
-        )}
+        {/* Always there, and gone while it holds nothing: the count may only be
+            known once this browser has looked in its memory. */}
+        <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-4 empty:hidden">
+          {tags.slice(0, 3).map((t) => (
+            <Tag key={t.id}>{t.name}</Tag>
+          ))}
+          <ReaderTally
+            kind="project"
+            id={project.id}
+            reads={project.reads}
+            className="ml-auto pl-2 font-mono text-2xs uppercase tracking-wider text-faint tnum"
+          />
+        </div>
       </div>
     </Link>
   );

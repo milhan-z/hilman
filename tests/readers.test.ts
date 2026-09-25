@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { formatReaders, hasStudioSession, isLikelyBot, readStorageKey, READ_DWELL_MS, READ_WINDOW_MS } from "../lib/readers";
+import {
+  formatReaders,
+  hasStudioSession,
+  isLikelyBot,
+  readStorageKey,
+  recallReaders,
+  rememberReaders,
+  seenStorageKey,
+  READ_DWELL_MS,
+  READ_WINDOW_MS,
+} from "../lib/readers";
 import { GET, POST } from "../app/api/reads/route";
 
 /**
@@ -80,6 +90,73 @@ test("a read is a few seconds on screen, once a day per entry", () => {
   assert.ok(READ_DWELL_MS >= 2000 && READ_DWELL_MS <= 10_000);
   assert.equal(READ_WINDOW_MS, 24 * 60 * 60 * 1000);
   assert.equal(readStorageKey("journal", ID), `hilman-read:journal:${ID}`);
+});
+
+/* ── what a browser remembers having shown ────────────────── */
+
+function memory() {
+  const items = new Map<string, string>();
+  return {
+    items,
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => void items.set(key, value),
+  };
+}
+
+test("a refresh starts from what this browser already showed, not from an older page", () => {
+  // Read, see 2, refresh: the static page still says 1. The memory is what
+  // keeps the number from counting backwards while the live one is fetched.
+  const store = memory();
+  const now = 1_790_000_000_000;
+  assert.equal(recallReaders(store, "journal", ID, now), null, "nothing shown yet");
+
+  rememberReaders(store, "journal", ID, 2, now);
+  assert.equal(recallReaders(store, "journal", ID, now + 1000), 2);
+  assert.equal(recallReaders(store, "project", ID, now), null, "per kind");
+  assert.ok(store.items.has(seenStorageKey("journal", ID)));
+  assert.notEqual(seenStorageKey("journal", ID), readStorageKey("journal", ID), "apart from the once-a-day mark");
+});
+
+test("the memory only ever rises, and lasts a day", () => {
+  const store = memory();
+  const now = 1_790_000_000_000;
+  rememberReaders(store, "journal", ID, 5, now);
+  rememberReaders(store, "journal", ID, 3, now + 10);
+  assert.equal(recallReaders(store, "journal", ID, now + 20), 5, "a lower number never replaces a higher one");
+  assert.equal(recallReaders(store, "journal", ID, now + READ_WINDOW_MS + 30), null, "a day later every page is newer");
+  rememberReaders(store, "journal", ID, 0, now);
+  rememberReaders(store, "journal", ID, Number.NaN, now);
+  assert.equal(recallReaders(store, "journal", ID, now + 20), 5, "nothing is not a count");
+});
+
+test("a browser that refuses storage, or holds junk, just has no memory", () => {
+  const refusing = {
+    getItem: () => {
+      throw new Error("SecurityError");
+    },
+    setItem: () => {
+      throw new Error("QuotaExceededError");
+    },
+  };
+  assert.doesNotThrow(() => rememberReaders(refusing, "journal", ID, 3));
+  assert.equal(recallReaders(refusing, "journal", ID), null);
+  assert.equal(recallReaders(undefined, "journal", ID), null);
+
+  const junk = memory();
+  for (const raw of ["not json", "42", '{"n":"2","t":1}', '{"n":2}', '{"n":-1,"t":1790000000000}']) {
+    junk.items.set(seenStorageKey("journal", ID), raw);
+    assert.equal(recallReaders(junk, "journal", ID, 1_790_000_000_000), null, raw);
+  }
+});
+
+test("cards start from the same memory, and an empty card row takes no room", () => {
+  const component = source("components/reader-count.tsx");
+  assert.match(component, /export function ReaderTally/);
+  assert.match(component, /recallReaders\(browserStorage\(\), kind, id\)/);
+  for (const card of ["components/journal-card.tsx", "components/project-card.tsx"]) {
+    assert.match(source(card), /<ReaderTally/, `${card} shows the remembered count`);
+  }
+  assert.match(source("components/project-card.tsx"), /empty:hidden/);
 });
 
 /* ── the route ────────────────────────────────────────────── */

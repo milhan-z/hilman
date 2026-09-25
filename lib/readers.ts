@@ -29,6 +29,71 @@ export const READ_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Where the browser remembers when it last counted an entry. */
 export const readStorageKey = (kind: ReadKind, id: string) => `hilman-read:${kind}:${id}`;
 
+/** Where the browser remembers the highest count it has shown for an entry. */
+export const seenStorageKey = (kind: ReadKind, id: string) => `hilman-readers:${kind}:${id}`;
+
+type Store = Pick<Storage, "getItem" | "setItem">;
+
+/**
+ * localStorage, or nothing. Reading the property itself throws in a browser
+ * with site data blocked, so every caller goes through this.
+ */
+export function browserStorage(): Store | undefined {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The highest count this browser has shown for an entry in the last day, or
+ * null.
+ *
+ * The pages are static, and a static page can be older than the number its
+ * reader has already seen: you read an entry, it says "2 readers", you
+ * refresh, and the page arrives with the 1 it was built with. The live count
+ * corrects it a moment later — a moment spent counting backwards. So the
+ * browser keeps what it has shown, and a page never starts below it.
+ *
+ * Only a day, like the read itself: by then every page has been rebuilt, and
+ * a count the owner reset should not be held up by an old memory.
+ */
+export function recallReaders(
+  store: Store | undefined,
+  kind: ReadKind,
+  id: string,
+  now = Date.now()
+): number | null {
+  try {
+    const raw = store?.getItem(seenStorageKey(kind, id));
+    if (!raw) return null;
+    const { n, t } = JSON.parse(raw) as { n?: unknown; t?: unknown };
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 1) return null;
+    if (typeof t !== "number" || now - t > READ_WINDOW_MS || t - now > 60_000) return null;
+    return Math.floor(n);
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers a count this browser has shown — never lowering what it holds. */
+export function rememberReaders(
+  store: Store | undefined,
+  kind: ReadKind,
+  id: string,
+  count: number,
+  now = Date.now()
+): void {
+  if (!Number.isFinite(count) || count < 1) return;
+  try {
+    const held = recallReaders(store, kind, id, now) ?? 0;
+    store?.setItem(seenStorageKey(kind, id), JSON.stringify({ n: Math.max(held, Math.floor(count)), t: now }));
+  } catch {
+    // Full or refused: the page simply starts from its own number next time.
+  }
+}
+
 /**
  * The count as the page prints it, or null when there is nothing to print.
  *
