@@ -39,11 +39,14 @@ export default async function HomePage() {
           <h1 id="hello-heading" className="mt-5 font-display text-[clamp(3.4rem,7.5vw,7.4rem)] font-semibold leading-[0.95] tracking-[-0.055em]">
             Hello, I’m<br />
             {/* The one signature moment on this screen: the highlighter going
-                under the name, after the name is already there. */}
+                under the name, once the lines below it have arrived. Not
+                sooner — measured, a pen starting at 200ms put its frames
+                beside the first paint and cost Lighthouse's LCP ~90ms; at
+                500ms it costs nothing, and reads better as a sequence. */}
             <span className="relative inline-block">
               Hilman<span className="text-pen">.</span>
               <span aria-hidden className="absolute -bottom-[0.12em] left-0 right-[8%]">
-                <HandDrawnReveal variant="underline2" tone="hl" fluid strokeWidth={4} />
+                <HandDrawnReveal variant="underline2" tone="hl" fluid strokeWidth={4} delay={500} />
               </span>
             </span>
           </h1>
