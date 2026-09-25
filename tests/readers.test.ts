@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { formatReaders, hasStudioSession, isLikelyBot, readStorageKey, READ_DWELL_MS, READ_WINDOW_MS } from "../lib/readers";
-import { POST } from "../app/api/reads/route";
+import { GET, POST } from "../app/api/reads/route";
 
 /**
  * What counts as a reader, and how the count is printed.
@@ -108,6 +108,33 @@ test("a crawler or the author is answered without being counted", async () => {
     assert.deepEqual(await response.json(), { reads: null });
     assert.equal(response.headers.get("cache-control"), "no-store");
   }
+});
+
+const lookup = (query: string) => GET(new Request(`http://localhost/api/reads?${query}`));
+
+test("the live number is asked for by entry, and nothing else", async () => {
+  for (const query of ["", "kind=page&id=" + ID, "kind=project&id=12", "kind=journal"]) {
+    const response = await lookup(query);
+    assert.equal(response.status, 400, query || "(no query)");
+  }
+  // No database in this environment: a well-formed question gets "no number",
+  // never an error, and is never cached — it is the live number or nothing.
+  const response = await lookup(`kind=journal&id=${ID}`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { reads: null });
+  assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("an entry page asks for the live count as it opens, not only when it counts", () => {
+  // A static page is regenerated only when asked for after a minute, so the
+  // number built into it can be several reads old — or, before its first
+  // read, no number at all. That is how the count went missing from the
+  // entry pages while the lists already showed it.
+  const component = source("components/reader-count.tsx");
+  assert.match(component, /fetch\(`\/api\/reads\?kind=\$\{kind\}&id=\$\{encodeURIComponent\(id\)\}`/);
+  const lookupAt = component.indexOf("/api/reads?kind=");
+  const windowAt = component.indexOf("READ_WINDOW_MS)");
+  assert.ok(lookupAt > 0 && lookupAt < windowAt, "asked before the once-a-day check can return early");
 });
 
 test("the page ships no Supabase client to count with", () => {
