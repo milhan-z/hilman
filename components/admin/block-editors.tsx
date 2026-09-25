@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Field, Select, TextArea, TextInput } from "./fields";
 import { MediaCapture } from "./media-capture";
 import { PendingPhoto } from "./pending-media";
@@ -8,7 +9,7 @@ import { isPendingRef } from "@/lib/studio-media-refs";
 import { discardPendingMedia } from "@/lib/studio-local/media";
 import { useMediaSelector } from "./media-library-context";
 import { mediaSrc } from "@/lib/cloudinary";
-import { HtmlBlockEditor } from "./html-block-editor";
+import { DeferredLoading, DeferredUnavailable, useLoadedOr } from "./deferred";
 import { LoopClipField } from "./loop-clip-field";
 import { normalizeBlockLayout, resolveSpacing, resolveSpan } from "@/lib/block-layout";
 import { LayoutPicker } from "./layout-picker";
@@ -88,6 +89,38 @@ export function blockSummary(type: BlockType, data: Record<string, any>): string
 interface EditorProps {
   data: Record<string, any>;
   onChange: (data: Record<string, any>) => void;
+}
+
+/**
+ * The Custom HTML editor, fetched the first time a Custom HTML block's
+ * settings are opened.
+ *
+ * It reviews pasted markup with lib/studio-html.ts, and that brings
+ * sanitize-html, postcss and htmlparser2 with it — weight every other block's
+ * settings, and the editor's first paint, would otherwise carry for the one
+ * block type that uses it. It only ever renders inside an open settings sheet,
+ * which the server never draws, hence `ssr: false`.
+ */
+type HtmlEditor = typeof import("./html-block-editor").HtmlBlockEditor;
+
+let loadedHtmlEditor: HtmlEditor | null = null;
+
+const rememberHtmlEditor = (module: typeof import("./html-block-editor")) =>
+  (loadedHtmlEditor = module.HtmlBlockEditor);
+
+const LazyHtmlBlockEditor = dynamic(
+  () => import("./html-block-editor").then(rememberHtmlEditor, () => DeferredUnavailable),
+  { ssr: false, loading: () => <DeferredLoading what="the HTML editor" /> }
+);
+
+/** Fetches the Custom HTML editor ahead of need. See warmEditor() in live-editor.tsx. */
+export function prefetchHtmlBlockEditor(): Promise<unknown> {
+  return import("./html-block-editor").then(rememberHtmlEditor);
+}
+
+function HtmlBlockEditor(props: React.ComponentProps<HtmlEditor>) {
+  const Editor = useLoadedOr(loadedHtmlEditor, LazyHtmlBlockEditor);
+  return <Editor {...props} />;
 }
 
 export function MediaField({

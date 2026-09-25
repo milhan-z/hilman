@@ -1,13 +1,70 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { memo, Suspense, useRef, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Reorder, useDragControls } from "framer-motion";
 import { BlockDragGrip } from "./mobile/block-drag-grip";
 import { collectPendingRefs } from "@/lib/studio-media-refs";
 import { PendingClip, PendingPhoto } from "./pending-media";
-import { renderers } from "../blocks/renderer";
+import { DeferredUnavailable, useLoadedOr } from "./deferred";
 import { BLOCK_TYPES } from "./block-editors";
 import type { Block, BlockType } from "@/lib/types";
+
+type RendererPreview = typeof import("./block-preview").BlockPreview;
+
+/** The renderer, once this browser has it. See useLoadedOr(). */
+let loadedPreview: RendererPreview | null = null;
+
+const remember = (module: typeof import("./block-preview")) => {
+  // Browser only: on the server, going through next/dynamic every time is
+  // what puts a preload for the renderer's code into the page.
+  if (typeof window !== "undefined") loadedPreview = module.BlockPreview;
+  return module.BlockPreview;
+};
+
+/**
+ * The canvas draws each block with the public renderer, fetched rather than
+ * imported (see block-preview.tsx for what it would bring along).
+ *
+ * The server still draws every preview into the HTML, so the page looks the
+ * same from the first paint. In the browser each preview waits behind its own
+ * Suspense boundary until the renderer arrives — which keeps that wait from
+ * holding up the rest of the editor, whose controls work in the meantime.
+ */
+const LazyBlockPreview = dynamic(() =>
+  import("./block-preview").then(remember, () => DeferredUnavailable)
+);
+
+/** Fetches the renderer ahead of need. See warmEditor() in live-editor.tsx. */
+export function prefetchBlockPreview(): Promise<unknown> {
+  return import("./block-preview").then(remember);
+}
+
+/**
+ * Memoised on purpose, not for speed.
+ *
+ * The editor re-renders every block whenever anything about the document
+ * changes, and it does so within moments of loading. A Suspense boundary that
+ * is still holding the server's HTML and receives new props at that point
+ * gives the HTML up and shows its fallback until the code arrives. Held still,
+ * it keeps the server's copy on screen and simply comes alive when it can.
+ * `data` is the block's own object, which an edit to another block leaves
+ * alone, so a preview only renders again when its own block changes.
+ */
+const BlockPreview = memo(function BlockPreview({
+  type,
+  data,
+}: {
+  type: BlockType;
+  data: Block["data"];
+}) {
+  const Preview = useLoadedOr(loadedPreview, LazyBlockPreview);
+  return (
+    <Suspense fallback={null}>
+      <Preview type={type} data={data} />
+    </Suspense>
+  );
+});
 
 interface EditableBlockProps {
   block: Block;
@@ -415,8 +472,6 @@ export function EditableBlock({
     );
   };
 
-  const Renderer = renderers[block.type];
-
   return (
     <Reorder.Item
       value={block}
@@ -512,10 +567,8 @@ export function EditableBlock({
               )
             )}
           </div>
-        ) : Renderer ? (
-          <Renderer data={block.data ?? {}} />
         ) : (
-          <div className="text-xs text-faint italic">Unknown block type: {block.type}</div>
+          <BlockPreview type={block.type} data={block.data} />
         )}
 
         {active && block.type === "image" && (
