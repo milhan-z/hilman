@@ -17,6 +17,10 @@
      put on the same element instead of replacing it.
    - Nothing blurs, no shadow is animated, and every duration is a
      --motion-* token (app/globals.css) or milliseconds.
+   - Entrances fill `backwards`, never `both`. They end where the element
+     already is, so holding the last frame adds nothing — except keeping the
+     element on its own compositor layer for the life of the page, with its
+     text rasterised apart from everything around it.
 
    Loaded by app/(site)/layout.tsx, not the root layout: the Studio never
    downloads any of it. Every class starts with `bits-`, so the sheet
@@ -51,12 +55,61 @@
   .bits-draw[data-trigger="load"] .bits-draw-ink,
   [data-bits-view="playing"] > .bits-draw .bits-draw-ink {
     animation: bits-draw var(--bits-draw-duration, var(--motion-draw)) var(--motion-ease-draw)
-      var(--bits-draw-delay, 200ms) both;
+      var(--bits-draw-delay, 200ms) backwards;
   }
 }
 @media screen and (prefers-reduced-motion: no-preference) {
   [data-bits-view="waiting"] > .bits-draw .bits-draw-ink {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
+  }
+}
+
+/* ── EditorialReveal (components/bits/editorial-reveal.tsx) ────────────
+   Type settling onto the page: up from --motion-rise, faded in, once.
+   With data-stagger the direct children go one after another, the sixth
+   and later together, so a sequence spreads over five steps at most. The
+   element resets its own index, so a reveal inside another's child never
+   inherits a delay it did not ask for. */
+@keyframes bits-rise {
+  from {
+    opacity: 0;
+    translate: 0 var(--motion-rise);
+  }
+}
+.bits-reveal {
+  --bits-reveal-i: 0;
+}
+.bits-reveal[data-stagger] > :nth-child(2) {
+  --bits-reveal-i: 1;
+}
+.bits-reveal[data-stagger] > :nth-child(3) {
+  --bits-reveal-i: 2;
+}
+.bits-reveal[data-stagger] > :nth-child(4) {
+  --bits-reveal-i: 3;
+}
+.bits-reveal[data-stagger] > :nth-child(5) {
+  --bits-reveal-i: 4;
+}
+.bits-reveal[data-stagger] > :nth-child(n + 6) {
+  --bits-reveal-i: 5;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bits-reveal[data-trigger="load"]:not([data-stagger]),
+  .bits-reveal[data-trigger="load"][data-stagger] > *,
+  .bits-reveal[data-bits-view="playing"]:not([data-stagger]),
+  .bits-reveal[data-bits-view="playing"][data-stagger] > * {
+    animation: bits-rise var(--motion-reveal) var(--motion-ease-out) backwards;
+    animation-delay: calc(
+      var(--bits-reveal-delay, 0ms) + var(--bits-reveal-i) * var(--bits-reveal-stagger, 0ms)
+    );
+  }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  .bits-reveal[data-bits-view="waiting"]:not([data-stagger]),
+  .bits-reveal[data-bits-view="waiting"][data-stagger] > * {
+    opacity: 0;
+    translate: 0 var(--motion-rise);
   }
 }

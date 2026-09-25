@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { EditorialReveal, revealStagger } from "../components/bits/editorial-reveal";
 import { HAND_DRAWN_VARIANTS, HandDrawnReveal } from "../components/bits/hand-drawn-reveal";
 
 /**
@@ -102,4 +104,56 @@ test("timings are milliseconds, and never negative", () => {
   const out = html(h(HandDrawnReveal, { delay: -50, duration: 1100 }));
   assert.match(out, /--bits-draw-delay:0ms/);
   assert.match(out, /--bits-draw-duration:1100ms/);
+});
+
+/* ── EditorialReveal ──────────────────────────────────────── */
+
+test("a reveal is sent with its content in place, and plays from CSS alone", () => {
+  const out = html(h(EditorialReveal, { stagger: 60, children: h(React.Fragment, null, h("p", null, "One"), h("p", null, "Two")) }));
+  assert.equal(
+    out,
+    '<div class="bits-reveal" style="--bits-reveal-delay:0ms;--bits-reveal-stagger:60ms" data-trigger="load" data-stagger=""><p>One</p><p>Two</p></div>'
+  );
+});
+
+test("a reveal that waits for the screen is still sent finished", () => {
+  const out = html(h(EditorialReveal, { trigger: "view", as: "header", children: h("h2", null, "Notes along the way") }));
+  assert.match(out, /^<header class="bits-reveal"[^>]*data-trigger="view"/);
+  assert.ok(!out.includes("data-bits-view"), "nothing is hidden until JavaScript says so");
+  assert.ok(!out.includes("data-stagger"), "one block, no stagger unless asked");
+  assert.match(out, /<h2>Notes along the way<\/h2>/);
+});
+
+test("a stagger is a step of 40-80ms, or none", () => {
+  assert.equal(revealStagger(undefined), 0);
+  assert.equal(revealStagger(0), 0);
+  assert.equal(revealStagger(-20), 0);
+  assert.equal(revealStagger(Number.NaN), 0);
+  assert.equal(revealStagger(10), 40);
+  assert.equal(revealStagger(60), 60);
+  assert.equal(revealStagger(200), 80);
+  const late = html(h(EditorialReveal, { delay: 5000, children: "x" }));
+  assert.match(late, /--bits-reveal-delay:600ms/, "no reveal waits more than 600ms to start");
+  assert.match(html(h(EditorialReveal, { delay: -5, children: "x" })), /--bits-reveal-delay:0ms/);
+});
+
+test("a sequence never spreads over more than five steps", () => {
+  const css = readFileSync(new URL("../components/bits/bits.css", import.meta.url), "utf8");
+  assert.match(css, /\.bits-reveal\[data-stagger\] > :nth-child\(n \+ 6\) \{\s*--bits-reveal-i: 5;/);
+  assert.equal(5 * revealStagger(1000), 400, "400ms at the most");
+});
+
+test("no page title is ever inside a reveal", () => {
+  // The title is the first paint, and usually the page's largest text: an
+  // entrance on it would be an entrance on the page's LCP.
+  for (const path of ["app/(site)/page.tsx", "app/(site)/works/[slug]/page.tsx", "app/(site)/journal/[slug]/page.tsx"]) {
+    const src = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+    let depth = 0;
+    for (const [tag] of src.matchAll(/<\/?EditorialReveal\b[^>]*?\/?>|<h1\b/g)) {
+      if (tag.startsWith("<h1")) assert.equal(depth, 0, `${path}: the <h1> sits outside every reveal`);
+      else if (tag.startsWith("</")) depth--;
+      else if (!tag.endsWith("/>")) depth++;
+    }
+    assert.match(src, /<EditorialReveal/, `${path} does use one`);
+  }
 });

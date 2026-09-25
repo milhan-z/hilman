@@ -170,6 +170,16 @@ test("only what is cheap to move is moved", () => {
   }
 });
 
+test("an entrance lets go of the element when it ends", () => {
+  // Measured: with `both`, a finished reveal held its last frame and stayed on
+  // its own compositor layer, and its text came out rasterised differently
+  // from the identical, unrevealed text beside it. Entrances end where the
+  // element already is, so `backwards` loses nothing.
+  for (const d of all.filter((d) => d.property === "animation" || d.property === "animation-fill-mode")) {
+    assert.ok(!/\b(both|forwards)\b/.test(d.value), `${d.context.at(-1)}: ${d.value} holds its last frame`);
+  }
+});
+
 test("every duration is a token or milliseconds, and every name is ours", () => {
   for (const d of all.filter((d) => /^(animation|transition)/.test(d.property))) {
     assert.ok(!/(^|[\s,(])\d*\.?\d+s\b/.test(d.value), `${d.context.at(-1)}: ${d.value} — durations are in ms`);

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EditorialReveal } from "@/components/bits/editorial-reveal";
 import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { Pic } from "@/components/cld-image";
 import { JournalCard } from "@/components/journal-card";
@@ -46,13 +47,16 @@ export default async function HomePage() {
               </span>
             </span>
           </h1>
-          {home.headline && <p className="mt-7 max-w-md whitespace-pre-line text-xl font-medium leading-snug sm:text-2xl">{home.headline}</p>}
-          {home.intro && <p className="mt-4 max-w-xl text-base leading-relaxed text-soft sm:text-lg">{home.intro}</p>}
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Button href={showcase.length ? "#selected-work" : "/about"}>{showcase.length ? "Explore my work" : "A little about me"}<span aria-hidden>↗</span></Button>
-            <Button href="/connect" variant="ghost">Let’s make something</Button>
-          </div>
-          <div className="mt-7 flex items-center gap-3 text-xs text-soft"><span className="h-px w-8 shrink-0 bg-line-strong" aria-hidden /><span>Informatics at ITS{home.field ? ` · ${home.field}` : ""}{home.based ? ` · ${home.based}` : ""}</span></div>
+          {/* The title is the first paint; what it says about itself follows. */}
+          <EditorialReveal stagger={60}>
+            {home.headline && <p className="mt-7 max-w-md whitespace-pre-line text-xl font-medium leading-snug sm:text-2xl">{home.headline}</p>}
+            {home.intro && <p className="mt-4 max-w-xl text-base leading-relaxed text-soft sm:text-lg">{home.intro}</p>}
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Button href={showcase.length ? "#selected-work" : "/about"}>{showcase.length ? "Explore my work" : "A little about me"}<span aria-hidden>↗</span></Button>
+              <Button href="/connect" variant="ghost">Let’s make something</Button>
+            </div>
+            <div className="mt-7 flex items-center gap-3 text-xs text-soft"><span className="h-px w-8 shrink-0 bg-line-strong" aria-hidden /><span>Informatics at ITS{home.field ? ` · ${home.field}` : ""}{home.based ? ` · ${home.based}` : ""}</span></div>
+          </EditorialReveal>
         </div>
         <div className="relative hidden min-w-0 lg:block">
           {portrait ? (
@@ -73,7 +77,7 @@ export default async function HomePage() {
         </div>
       </section>
       <section id="selected-work" className="scroll-mt-24 border-t border-line-strong pt-9" aria-label={showcase.length ? "Selected work" : "Creative interests"}>
-        <SectionHeading index="01" title={showcase.length ? "A few things I’ve made" : "The things I love exploring"} href={showcase.length ? "/works" : undefined} hrefLabel="All work" />
+        <EditorialReveal trigger="view"><SectionHeading index="01" title={showcase.length ? "A few things I’ve made" : "The things I love exploring"} href={showcase.length ? "/works" : undefined} hrefLabel="All work" /></EditorialReveal>
         {!projectsRes.ok ? <ContentUnavailable what="the work" compact /> : showcase.length ? (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{showcase.map((project, index) => <ProjectCard key={project.id} project={project} index={index} />)}</div>
         ) : (
@@ -92,12 +96,12 @@ export default async function HomePage() {
       </section>}
       <section className="mt-16 grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:gap-14" aria-label="Notes and experiments">
         <div>
-          <SectionHeading index="02" title="Notes along the way" href="/journal" hrefLabel={home.journal_hook} />
+          <EditorialReveal trigger="view"><SectionHeading index="02" title="Notes along the way" href="/journal" hrefLabel={home.journal_hook} /></EditorialReveal>
           {!journalRes.ok ? <ContentUnavailable what="the journal" compact /> : journal.length ? <div className="space-y-4">{journal.map((post) => <JournalCard key={post.id} post={post} />)}</div> : (
             <div className="ruled rounded-lg border border-line bg-surface p-7 sm:p-9"><span className="font-hand text-2xl text-pen">There’s room for the unfinished.</span><p className="mt-4 max-w-md text-soft">This is where I’ll share moments, things I’m learning, and the thinking behind the work. The first notes are still taking shape.</p><div className="mt-6"><ArrowLink href="/about">For now, get to know me</ArrowLink></div></div>
           )}
         </div>
-        <div><SectionHeading index="03" title="A little room to play" /><NotebookPlay /><div className="mt-5"><ArrowLink href="/lab">More experiments in the Lab</ArrowLink></div></div>
+        <div><EditorialReveal trigger="view"><SectionHeading index="03" title="A little room to play" /></EditorialReveal><NotebookPlay /><div className="mt-5"><ArrowLink href="/lab">More experiments in the Lab</ArrowLink></div></div>
       </section>
       <section className="my-16 flex flex-col justify-between gap-7 rounded-lg border border-line-strong bg-surface p-7 sm:my-20 sm:p-10 lg:flex-row lg:items-center" aria-labelledby="connect-heading">
         <div><Kicker className="text-pen">new ideas start with a hello</Kicker><h2 id="connect-heading" className="mt-4 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Let’s make something <span className="relative inline-block italic">together.<span aria-hidden className="absolute -bottom-2 left-0 right-1"><HandDrawnReveal variant="underline" trigger="view" fluid strokeWidth={3} /></span></span></h2><p className="mt-3 max-w-xl text-soft">A creative project, a tech idea, a new opportunity — or just a good conversation.</p></div>
