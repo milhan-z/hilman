@@ -15,7 +15,7 @@ that blurs in letter by letter, a page that scrolls itself.
 
 | Primitive | The one idea | Engine | Status |
 |---|---|---|---|
-| `HandDrawnReveal` | A line drawing itself under, around or beside a word | SVG `pathLength` + CSS | Wave 1 |
+| `HandDrawnReveal` | A line drawing itself under, around or beside a word | SVG, a dashed mask (`pathLength`) + CSS | Wave 1 |
 | `EditorialReveal` | The details around a title inked in after it, the title already printed | CSS keyframes; `InView` for `trigger="view"` | Wave 1 |
 | `PaperCard` | A card lifted a little off the desk | CSS | Wave 1 |
 | `Tally` | A number that rolls over when it changes in front of you | Web Animations API | Wave 1 |
