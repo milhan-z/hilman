@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { PaperCard } from "./bits/paper-card";
 import { Stamp, Tag } from "./ui";
 import { formatDateParts } from "@/lib/dates";
 import { ReaderTally } from "./reader-count";
@@ -7,9 +7,11 @@ import type { JournalPost } from "@/lib/types";
 export function JournalCard({ post }: { post: JournalPost }) {
   const { day, month, year } = formatDateParts(post.published_at);
   return (
-    <Link
+    <PaperCard
       href={`/journal/${post.slug}`}
-      className="group grid grid-cols-[auto_1fr] gap-5 rounded-md border border-line bg-surface p-5 shadow-card transition-all duration-base ease-out hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lift sm:gap-6 sm:p-6"
+      seed={post.id}
+      lift="sm"
+      className="group grid grid-cols-[auto_1fr] gap-5 rounded-md border border-line bg-surface p-5 hover:border-line-strong sm:gap-6 sm:p-6"
     >
       {/* diary date-rail */}
       <div className="flex flex-col items-center border-r border-dashed border-line-strong pr-5 text-center sm:pr-6">
@@ -43,6 +45,6 @@ export function JournalCard({ post }: { post: JournalPost }) {
           </div>
         )}
       </div>
-    </Link>
+    </PaperCard>
   );
 }

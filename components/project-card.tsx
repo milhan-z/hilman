@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { PaperCard } from "./bits/paper-card";
 import { Pic } from "./cld-image";
 import { Stamp, Tag } from "./ui";
 import { ReaderTally } from "./reader-count";
@@ -29,9 +29,12 @@ export function ProjectCard({
   const cat = index != null ? String(index + 1).padStart(2, "0") : String(project.sort_order).padStart(2, "0");
   const tags = project.tags ?? [];
   return (
-    <Link
+    <PaperCard
       href={`/works/${project.slug}`}
-      className="group relative flex flex-col overflow-hidden rounded-md border border-line bg-surface shadow-card transition-all duration-base ease-out hover:-translate-y-1 hover:border-line-strong hover:shadow-lift focus-visible:-translate-y-1"
+      seed={project.id}
+      // No overflow-hidden here: it would clip the lifted shadow. The photo
+      // clips itself, and it never reaches the card's rounded corners.
+      className="group flex flex-col rounded-md border border-line bg-surface hover:border-line-strong"
     >
       {/* filed-under header */}
       <div className="flex items-center justify-between border-b border-line px-3 py-1.5">
@@ -53,7 +56,6 @@ export function ProjectCard({
           fill
           priority={priority}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          className="transition-transform duration-slow ease-out group-hover:scale-[1.04]"
         />
         {project.featured && (
           <span className="absolute right-2.5 top-2.5">
@@ -89,6 +91,6 @@ export function ProjectCard({
           />
         </div>
       </div>
-    </Link>
+    </PaperCard>
   );
 }

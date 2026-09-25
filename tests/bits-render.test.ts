@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { EditorialReveal, revealStagger } from "../components/bits/editorial-reveal";
 import { HAND_DRAWN_VARIANTS, HandDrawnReveal } from "../components/bits/hand-drawn-reveal";
+import { PaperCard, paperTilt } from "../components/bits/paper-card";
 
 /**
  * What the HILMAN BITS primitives send from the server, before any script
@@ -156,4 +157,45 @@ test("no page title is ever inside a reveal", () => {
     }
     assert.match(src, /<EditorialReveal/, `${path} does use one`);
   }
+});
+
+/* ── PaperCard ────────────────────────────────────────────── */
+
+test("a card that goes somewhere is a real link", () => {
+  const out = html(h(PaperCard, { href: "/works/paper-trail-identity", seed: "p1", children: "Paper Trail" }));
+  assert.match(out, /^<a [^>]*href="\/works\/paper-trail-identity"/);
+  assert.match(out, /class="bits-paper"/);
+  assert.match(out, /data-lift="md"/);
+  assert.match(out, /style="--bits-paper-tilt:-?0?\.\d+deg"/);
+  assert.match(out, />Paper Trail<\/a>$/);
+});
+
+test("a card that goes nowhere is the element it is asked to be", () => {
+  const out = html(h(PaperCard, { as: "li", lift: "sm", children: "x" }));
+  assert.match(out, /^<li class="bits-paper" data-lift="sm"/);
+});
+
+test("the lean is a function of the seed, never a dice roll", () => {
+  const seeds = Array.from({ length: 24 }, (_, i) => `aaaaaaaa-bbbb-4ccc-8ddd-${String(i).padStart(12, "0")}`);
+  for (const seed of seeds) {
+    assert.equal(paperTilt(seed), paperTilt(seed), "same seed, same lean");
+    assert.ok(Math.abs(paperTilt(seed)) <= 0.6, "a grid card leans 0.6° at most");
+    assert.ok(Math.abs(paperTilt(seed, "sm")) <= 0.25, "a wide row leans 0.25° at most");
+    assert.ok(paperTilt(seed) !== 0, "and it does lean");
+  }
+  assert.ok(new Set(seeds.map((s) => paperTilt(s))).size >= 4, "a row of cards does not all lean the same way");
+  assert.ok(new Set(seeds.map((s) => Math.sign(paperTilt(s)))).size === 2, "they lean both ways");
+  assert.equal(paperTilt(Number.NaN), paperTilt(0), "a nonsense seed is still a lean");
+});
+
+test("the cards are paper now, and nothing else moves on them", () => {
+  const project = readFileSync(new URL("../components/project-card.tsx", import.meta.url), "utf8");
+  const journal = readFileSync(new URL("../components/journal-card.tsx", import.meta.url), "utf8");
+  for (const [name, src] of [["project", project], ["journal", journal]] as const) {
+    assert.match(src, /<PaperCard\b[^>]*seed=\{(project|post)\.id\}/, `${name}: leans by its own id`);
+    assert.ok(!/transition-all|hover:-translate-y|hover:shadow-lift|shadow-card/.test(src), `${name}: the lift is PaperCard's alone`);
+  }
+  assert.ok(!/group-hover:scale/.test(project), "the photo no longer zooms: one card, one idea");
+  assert.ok(!/overflow-hidden rounded-md border/.test(project), "the card does not clip its own lifted shadow");
+  assert.match(journal, /lift="sm"/, "a wide row lifts less");
 });

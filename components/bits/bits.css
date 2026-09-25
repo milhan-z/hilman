@@ -113,3 +113,57 @@
     translate: 0 var(--motion-rise);
   }
 }
+
+/* ── PaperCard (components/bits/paper-card.tsx) ────────────────────────
+   Up a few pixels, leaning by its seed (--bits-paper-tilt), the shadow
+   deepening. The deeper shadow sits ready on ::after and fades in: opacity
+   is cheap, an animated box-shadow repaints the card every frame. ::after
+   is placed against the padding box, so -1px puts it on the card's 1px
+   border and the shadow starts where the card ends. Hover only for a real
+   pointer; keyboard focus lifts on every device; a finger gets a press. */
+.bits-paper {
+  --bits-paper-rise: -4px;
+  position: relative;
+  box-shadow: var(--shadow-card);
+  transition:
+    translate var(--motion-base) var(--motion-ease-out),
+    rotate var(--motion-base) var(--motion-ease-out),
+    scale var(--motion-fast) var(--motion-ease-out),
+    border-color var(--motion-fast) ease-out;
+}
+.bits-paper[data-lift="sm"] {
+  --bits-paper-rise: -2px;
+}
+.bits-paper::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: var(--shadow-lift);
+  opacity: 0;
+  transition: opacity var(--motion-base) var(--motion-ease-out);
+  pointer-events: none;
+}
+.bits-paper:focus-visible::after {
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .bits-paper:hover::after {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bits-paper:focus-visible {
+    translate: 0 var(--bits-paper-rise);
+    rotate: var(--bits-paper-tilt, 0deg);
+  }
+  .bits-paper:active {
+    scale: 0.985;
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .bits-paper:hover {
+    translate: 0 var(--bits-paper-rise);
+    rotate: var(--bits-paper-tilt, 0deg);
+  }
+}
