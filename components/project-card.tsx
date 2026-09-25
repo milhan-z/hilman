@@ -1,7 +1,7 @@
 import { PaperCard } from "./bits/paper-card";
 import { Pic } from "./cld-image";
 import { Stamp, Tag } from "./ui";
-import { ReaderTally } from "./reader-count";
+import { ReaderTally } from "./reader-tally";
 import { STREAMS, type Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 

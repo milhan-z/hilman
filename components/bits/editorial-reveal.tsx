@@ -21,21 +21,25 @@ export function revealStagger(stagger: number | undefined): number {
 /**
  * The details around a title, inked in after it.
  *
- * Each child rises a few pixels (--motion-rise) and fades up, once. No blur
- * and nothing letter by letter: this is type settling onto paper, not text
- * performing. With `stagger`, the direct children arrive one after another;
- * without it the whole block arrives at once. Lines are whatever the
- * children are — splitting a paragraph into its rendered lines would mean
- * measuring it with JavaScript and splitting it again on every resize, and
- * one line at a time is not worth that.
+ * Each child rises a few pixels (--motion-rise) and darkens like ink as it
+ * dries, once. No blur and nothing letter by letter: this is type settling
+ * onto paper, not text performing. With `stagger`, the direct children
+ * arrive one after another; without it the whole block arrives at once.
+ * Lines are whatever the children are — splitting a paragraph into its
+ * rendered lines would mean measuring it with JavaScript and splitting it
+ * again on every resize, and one line at a time is not worth that.
  *
  * `trigger="load"` plays as the page paints, from CSS alone: a server
  * component that ships nothing. `trigger="view"` waits for the element to
  * come on screen (InView), for something further down the page.
  *
- * Never around a page's title or its largest element. The title is what the
- * first paint is for — the reveal is for what surrounds it — and an entrance
- * on the largest element would be an entrance on the page's LCP.
+ * Never around a page's title: the title is what the first paint is for,
+ * and the reveal is for what surrounds it. Nor does a load entrance ever
+ * start from nothing — it starts at half opacity, readable and, to the
+ * browser, painted from the first frame. Which element is the largest on
+ * the first screen depends on the screen and on the words: on a phone the
+ * Home intro outgrows the title, and faded in from 0 it held the page's
+ * LCP back by ~740ms. Only `view`, which waited out of sight, starts at 0.
  *
  * The HTML is the finished page. With no JavaScript, `load` still plays and
  * `view` is simply there; with reduced motion, or printed, everything is

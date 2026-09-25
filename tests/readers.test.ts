@@ -150,9 +150,12 @@ test("a browser that refuses storage, or holds junk, just has no memory", () => 
 });
 
 test("cards start from the same memory, and an empty card row takes no room", () => {
-  const component = source("components/reader-count.tsx");
+  const component = source("components/reader-tally.tsx");
   assert.match(component, /export function ReaderTally/);
   assert.match(component, /recallReaders\(browserStorage\(\), kind, id\)/);
+  // Its own module so the cards on every list do not download the rolling
+  // Tally that only the entry page's count uses.
+  assert.ok(!/bits\/tally/.test(component), "the card count never brings the roll with it");
   for (const card of ["components/journal-card.tsx", "components/project-card.tsx"]) {
     assert.match(source(card), /<ReaderTally/, `${card} shows the remembered count`);
   }

@@ -1,7 +1,7 @@
 import { PaperCard } from "./bits/paper-card";
 import { Stamp, Tag } from "./ui";
 import { formatDateParts } from "@/lib/dates";
-import { ReaderTally } from "./reader-count";
+import { ReaderTally } from "./reader-tally";
 import type { JournalPost } from "@/lib/types";
 
 export function JournalCard({ post }: { post: JournalPost }) {

@@ -94,9 +94,15 @@ test("the Studio stays still", () => {
   }
 });
 
-test("the public site loads the stylesheet, and the Studio never does", () => {
-  assert.match(read("app/(site)/layout.tsx"), /import "@\/components\/bits\/bits\.css";/);
-  assert.ok(!read("app/layout.tsx").includes("bits.css"), "not from the root layout, which the Studio shares");
+test("the motion styles ship in the one stylesheet every page already loads", () => {
+  // Measured: imported by the public site's layout alone, bits.css became a
+  // second render-blocking stylesheet on every public page. Next to
+  // globals.css it is bundled into the same file.
+  const root = read("app/layout.tsx");
+  const globals = root.indexOf('import "./globals.css";');
+  const bits = root.indexOf('import "@/components/bits/bits.css";');
+  assert.ok(globals >= 0 && bits > globals, "imported by the root layout, straight after globals.css");
+  assert.ok(!read("app/(site)/layout.tsx").includes("bits.css"), "and nowhere else");
 });
 
 /* ── the stylesheet ───────────────────────────────────────── */
@@ -167,6 +173,22 @@ test("only what is cheap to move is moved", () => {
   }
   for (const d of all.filter(inKeyframes)) {
     assert.ok(!["box-shadow", "width", "height", "top", "left"].includes(d.property), `@keyframes never animate ${d.property}`);
+  }
+});
+
+test("an entrance on load never starts invisible", () => {
+  // Measured: the Home intro faded in from 0 held LCP back by ~740ms. On a
+  // phone that paragraph, not the title, is the largest thing on screen —
+  // and which element is largest depends on the screen and the words, so no
+  // rule about "never the title" can hold it. Starting at half opacity
+  // does: the text is painted, and readable, from the first frame.
+  const rise = stripComments(sheet).match(/@keyframes bits-rise\s*\{\s*from\s*\{([^}]*)\}/)?.[1] ?? "";
+  const from = rise.match(/opacity:\s*var\(--bits-reveal-from,\s*([\d.]+)\)/)?.[1];
+  assert.ok(from && Number(from) >= 0.5, `bits-rise starts at opacity ${from} on load`);
+  const zeroed = all.filter((d) => d.property === "--bits-reveal-from");
+  assert.ok(zeroed.length > 0);
+  for (const d of zeroed) {
+    assert.match(d.context.at(-1) ?? "", /\[data-trigger="view"\]/, "only an entrance that waited out of sight starts from nothing");
   }
 });
 

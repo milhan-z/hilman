@@ -1,4 +1,3 @@
-import "@/components/bits/bits.css";
 import { ScrollProgress } from "@/components/scroll-progress";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";

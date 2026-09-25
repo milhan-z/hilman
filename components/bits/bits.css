@@ -22,9 +22,11 @@
      element on its own compositor layer for the life of the page, with its
      text rasterised apart from everything around it.
 
-   Loaded by app/(site)/layout.tsx, not the root layout: the Studio never
-   downloads any of it. Every class starts with `bits-`, so the sheet
-   staying behind after a navigation into the Studio touches nothing.
+   Imported by app/layout.tsx straight after globals.css, so it ships in
+   the same stylesheet. It was once a sheet of its own for the public
+   pages only, to spare the Studio its 1.3KB — and cost every public page
+   a second render-blocking request instead. Every class starts with
+   `bits-`, so the Studio carrying it touches nothing there.
    ═══════════════════════════════════════════════════════════ */
 
 /* ── HandDrawnReveal (components/bits/hand-drawn-reveal.tsx) ───────────
@@ -66,19 +68,29 @@
 }
 
 /* ── EditorialReveal (components/bits/editorial-reveal.tsx) ────────────
-   Type settling onto the page: up from --motion-rise, faded in, once.
-   With data-stagger the direct children go one after another, the sixth
-   and later together, so a sequence spreads over five steps at most. The
-   element resets its own index, so a reveal inside another's child never
-   inherits a delay it did not ask for. */
+   Type settling onto the page: up from --motion-rise, darkening like ink
+   as it dries, once. With data-stagger the direct children go one after
+   another, the sixth and later together, so a sequence spreads over five
+   steps at most. The element resets its own index, so a reveal inside
+   another's child never inherits a delay it did not ask for.
+
+   On load it starts at half opacity, never at nothing. Whatever is on the
+   first screen is readable — and, to the browser, painted — from the first
+   frame. Measured: fading the Home intro in from 0 held the page's LCP
+   back by ~740ms, because on a phone that paragraph, not the title, is the
+   largest thing on the screen. Only an entrance that waited out of sight
+   ("view") may start from nothing. */
 @keyframes bits-rise {
   from {
-    opacity: 0;
+    opacity: var(--bits-reveal-from, 0.5);
     translate: 0 var(--motion-rise);
   }
 }
 .bits-reveal {
   --bits-reveal-i: 0;
+}
+.bits-reveal[data-trigger="view"] {
+  --bits-reveal-from: 0;
 }
 .bits-reveal[data-stagger] > :nth-child(2) {
   --bits-reveal-i: 1;

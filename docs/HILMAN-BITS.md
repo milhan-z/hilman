@@ -42,7 +42,7 @@ primitives per page. Every page is inside it.
 | Works, Journal | The line under the title; the cards | 2 |
 | A work, a journal entry | The details around the title (never the title); the reader count; the related cards | 2–3 |
 | About, Lab, Connect | The line under the title | 1 |
-| Studio | Nothing — feedback only, 150 ms or less | 0 |
+| Studio | Nothing — feedback only, 150 ms or less. (It downloads bits.css with the rest of the stylesheet; nothing there uses it.) | 0 |
 
 ## The rules
 
@@ -71,9 +71,14 @@ primitives per page. Every page is inside it.
    finished page by construction: no translate, rotate, scale or autoplay; a
    fade of 150 ms or less at most.
 9. **The page is finished without JavaScript.** Content is in the HTML and
-   visible with no script. Nothing is hidden waiting to animate in. The
-   largest thing on the first screen — a page title, the cover — never waits
-   for an animation, so `EditorialReveal` never wraps one.
+   visible with no script. Nothing is hidden waiting to animate in, and
+   nothing on the first screen starts invisible: a load entrance begins at
+   half opacity, so it is readable, and counted as painted, from the first
+   frame. Which element is the largest on the first screen changes with the
+   screen and the words — on a phone the Home intro outgrows the title —
+   and fading it in from 0 held LCP back by ~740ms. Titles never move at
+   all. Measure a new entrance with Lighthouse against master before
+   shipping it.
 10. **Only what is cheap moves.** `translate`, `rotate`, `scale`, `opacity`,
     and a stroke offset. No filters, no blur, no animated shadows (fade in a
     pseudo-element that already has the shadow instead). No frame loops on
@@ -96,7 +101,12 @@ primitives per page. Every page is inside it.
   `tests/bits-contract.test.ts`, with a reason).
 - Its CSS is a section of `components/bits/bits.css`: `bits-` class names and
   keyframes, movement inside `prefers-reduced-motion: no-preference`, any
-  "waiting" state inside `@media screen and (…no-preference)`.
+  "waiting" state inside `@media screen and (…no-preference)`. The sheet is
+  imported next to `globals.css` so it ships in the same file; a stylesheet
+  of its own is one more render-blocking request on every page.
+- Client code stays where it is used. A module the lists import must not
+  bring a primitive only the entry pages need (why `ReaderTally` lives apart
+  from `ReaderCount`).
 - It works on a phone at 390 px with a finger, with a keyboard, with reduced
   motion, and with JavaScript off.
 - If it reads a token from JavaScript, it reads it with its unit

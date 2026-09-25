@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Caveat, Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import { SITE_NAME, siteUrl } from "@/lib/site";
 import "./globals.css";
+// The HILMAN BITS motion styles, in the same stylesheet as everything else.
+import "@/components/bits/bits.css";
 
 export const viewport: Viewport = {
   width: "device-width",
