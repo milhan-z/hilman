@@ -10,10 +10,10 @@ import { mockPages } from "../lib/mock";
 import { PROFILE_DEFAULTS, resolveProfileData } from "../lib/profile";
 
 /**
- * About, in the style of Hilman's old About Me page — the whole page one
- * sheet of cream linen paper, a card clipped to it with his photo on a
- * yellow block — and filled with the notebook's own About, each thing said
- * once.
+ * About, in the style of Hilman's old About Me page — one sheet of cream
+ * linen paper lying on the page, a card clipped over its corner with his
+ * photo on a yellow block — and filled with the notebook's own About, each
+ * thing said once.
  *
  * The first version of it copied the old page's words as well as its look:
  * a CV summary and contacts on the card, then the notebook's own greeting
@@ -102,7 +102,7 @@ test("on the paper: the story in handwriting, the note in red, curiosity and exp
   assert.match(out, /<p class="text-sm italic text-cream-soft">July 2023 – July 2024<\/p>/);
   assert.match(out, /Coordinator of Daarul Rahman III Media<\/p><p class="mt-0\.5 text-\[0\.95rem\] text-cream-soft">PonPes Daarul Rahman III Depok<\/p>/);
   assert.match(out, /<h3 id="focus-heading"[^>]*><span aria-hidden="true" class="absolute[^"]*-z-10"><span class="bits-draw-holder"><span aria-hidden="true" data-trigger="view" class="bits-brush bits-marker text-hl"/);
-  assert.match(out, /<ul aria-labelledby="focus-heading"[^>]*>(<li[^>]*><span aria-hidden="true" class="text-pen">↗<\/span><span>[^<]+<\/span><\/li>){4}<\/ul>/, "where his curiosity goes, four ways");
+  assert.match(out, /<ul aria-labelledby="focus-heading"[^>]*>(<li[^>]*><span aria-hidden="true" class="text-cream-red">↗<\/span><span>[^<]+<\/span><\/li>){4}<\/ul>/, "where his curiosity goes, four ways, in the red pen");
   assert.ok(out.indexOf('id="focus-heading"') < out.indexOf('id="about-experience"'), "the notebook's own words first");
 });
 
@@ -112,16 +112,24 @@ test("no software", () => {
   assert.ok(!/Software|Photoshop|Figma/.test(sheet(about)), "nothing on the page");
 });
 
-test("the whole page is one sheet of cream paper, in both themes", () => {
-  // The light theme's tokens on the page itself: ink on paper, whichever
-  // theme the rest of the site is in.
-  assert.match(page, /<div data-theme="light" className="paper-linen -mb-16 text-ink">/);
+test("one sheet of paper on the page's own background, holding all of About", () => {
+  // The page is not paper: its background shows around the sheet, and the
+  // title sits on it, above the sheet, as on the old page.
+  assert.ok(!/-mb-16|data-theme="light" className="paper-linen/.test(page), "not a paper page from edge to edge");
+  const sheetAt = page.indexOf('<div className="paper-linen relative mt-14 rounded-[3px] shadow-lift');
+  assert.ok(sheetAt > page.indexOf("<header"), "one sheet, under the title");
+  // Everything else is written on it: the card and what is beside it, then
+  // in the light theme the people, the moments and the invitation.
+  const island = page.indexOf('<div data-theme="light" className="px-6');
+  assert.ok(sheetAt < page.indexOf("<AboutSheet") && page.indexOf("<AboutSheet") < island);
+  for (const mark of ['id="people"', "<PersonalMoments", 'id="about-connect-heading"']) assert.ok(page.indexOf(mark) > island, mark);
+  // The card is clipped over the sheet's top-left corner.
+  assert.match(sheet(), /<div class="relative z-10 -mt-8 sm:-mx-4 sm:-mt-10 lg:-ml-5 lg:mr-0 xl:-ml-8"><div class="relative rotate-\[-0\.6deg\] bg-cream/);
+
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(css, /\.paper-linen \{\s*background-color: var\(--paper\);\s*background-image:\s*repeating-linear-gradient\(0deg, var\(--cream-weave\)/, "linen: the paper, woven");
+  assert.match(css, /\.paper-linen \{\s*background-color: var\(--cream\);\s*background-image:\s*repeating-linear-gradient\(0deg, var\(--cream-weave\)/, "linen: the cream, woven");
   assert.match(css, /\[data-theme="light"\] \{/, "a theme any element can carry, not only the root");
-  // It runs to the footer: -mb-16 takes up exactly the footer's top margin.
-  const footer = readFileSync(new URL("../components/site-footer.tsx", import.meta.url), "utf8");
-  assert.match(footer, /<footer className="mt-16 /);
+  assert.match(css, /\.paper-linen \[data-theme="light"\] \{\s*--pen: var\(--pen-deep\);/, "links on the sheet one shade deeper, over 4.5:1");
   assert.ok(!/dark:/.test(readFileSync(new URL("../components/about-sheet.tsx", import.meta.url), "utf8") + page), "no dark: variant, which would still match the site's dark root");
 });
 
