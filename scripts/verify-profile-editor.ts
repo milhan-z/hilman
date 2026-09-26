@@ -23,7 +23,7 @@ for (const slug of ["home", "about", "connect"]) {
 const aboutSeed = mockPages.find((page) => page.slug === "about")!.data;
 const reorderedTimeline = aboutSeed.timeline.map((item: { year: string; text: string }) => ({ text: item.text, year: item.year }));
 const resolvedSeed = resolveProfileData("about", { timeline: reorderedTimeline, lede: aboutSeed.lede });
-assert.equal("timeline" in resolvedSeed, false, "An unchanged seed timeline with JSONB-reordered object keys must be removed");
+assert.deepEqual(resolvedSeed.timeline, PROFILE_DEFAULTS.about.timeline, "An unchanged seed timeline with JSONB-reordered object keys must give way to the verified one");
 assert.equal(resolvedSeed.lede, PROFILE_DEFAULTS.about.lede, "An unchanged seed string must still resolve to verified profile copy");
 const editedTimeline = reorderedTimeline.map((item: { year: string; text: string }, index: number) => index === 0 ? { ...item, text: "My actual experience" } : item);
 assert.deepEqual(resolveProfileData("about", { timeline: editedTimeline }).timeline, editedTimeline, "A custom timeline must survive regardless of object key ordering");

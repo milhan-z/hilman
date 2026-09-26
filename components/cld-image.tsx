@@ -19,6 +19,7 @@ export function Pic({
   sizes = "(max-width: 768px) 100vw, 768px",
   className,
   priority = false,
+  loading,
   fill = false,
 }: {
   src: string | null | undefined;
@@ -29,6 +30,12 @@ export function Pic({
   className?: string;
   /** The image is likely the largest thing on first screen: fetch it first. */
   priority?: boolean;
+  /**
+   * "eager": fetch it as soon as the HTML names it, without the preload that
+   * `priority` adds. For an image that is on the first screen at some widths
+   * and below it at others: the browser still ranks it by where it lands.
+   */
+  loading?: "eager" | "lazy";
   fill?: boolean;
 }) {
   const resolved = mediaSrc(src, { width: fill ? 1600 : width });
@@ -55,6 +62,7 @@ export function Pic({
       height={height}
       sizes={sizes}
       preload={priority}
+      loading={priority ? undefined : loading}
       unoptimized={unoptimized}
       className={className}
     />

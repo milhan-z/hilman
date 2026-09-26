@@ -86,6 +86,12 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
       "Your story, interests, and the people who are part of it. Add real photos and memories when you're ready. Your introduction starts with the profile you shared; optional photos, experience, and tools only appear when filled in.",
     fields: [
       { kind: "media", key: "portrait", label: "Portrait", hint: "Cloudinary public_id or Cloudinary image URL." },
+      {
+        kind: "media",
+        key: "portrait_cutout",
+        label: "Portrait cut-out",
+        hint: "A photo of you with the background removed (a transparent PNG). Shown instead of the portrait, standing on the page like a cut-out sticker.",
+      },
       { kind: "text", key: "portrait_alt", label: "Portrait description", hint: "Describe your photo for people using a screen reader." },
       { kind: "text", key: "portrait_caption", label: "Portrait caption", hint: "Tell us a little about the moment in this photo." },
       { kind: "text", key: "personal_note", label: "Personal note", hint: "A short aside in your own voice. Appears next to your story." },

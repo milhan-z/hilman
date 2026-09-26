@@ -28,7 +28,9 @@ export default async function AboutPage() {
     return <ContentUnavailablePage what="the About page" detail={pageRes.error} />;
   }
   const d = resolveProfileData("about", pageRes.value?.data);
+  const hasCutout = Boolean(mediaSrc(d.portrait_cutout));
   const hasPortrait = Boolean(mediaSrc(d.portrait));
+  const hasPhoto = hasCutout || hasPortrait;
   const story = strings(d.story);
   const focus = strings(d.focus);
   const interests = strings(d.interests);
@@ -59,7 +61,31 @@ export default async function AboutPage() {
         </div>
 
         <aside className="mx-auto w-full max-w-md lg:pt-4" aria-label="A personal note">
-          {hasPortrait ? (
+          {hasCutout ? (
+            /* A cut-out of me, stuck to the page like a sticker: the photo has
+               its background removed and a paper edge around it, so it
+               stands on the notebook, not in a frame. The note beside it
+               points the way. */
+            <figure className="flex items-center justify-center gap-3 sm:gap-5">
+              {d.personal_note && (
+                <figcaption className="flex max-w-[9rem] -rotate-3 flex-col items-end text-right font-hand text-2xl leading-tight text-soft sm:max-w-[11rem] sm:text-[1.7rem]">
+                  {d.personal_note}
+                  <span aria-hidden className="mt-2">
+                    <HandDrawnReveal variant="arrow" width={64} strokeWidth={2.5} delay={900} />
+                  </span>
+                </figcaption>
+              )}
+              <Pic
+                src={d.portrait_cutout}
+                alt={d.portrait_alt || "Hilman"}
+                width={592}
+                height={1792}
+                sizes="(max-width: 640px) 150px, (max-width: 1024px) 170px, 190px"
+                loading="eager"
+                className="h-[28rem] w-auto -rotate-2 drop-shadow-[0_18px_22px_rgba(0,0,0,0.35)] sm:h-[32rem] lg:h-[36rem]"
+              />
+            </figure>
+          ) : hasPortrait ? (
             <figure className="relative bg-cream p-3 pb-5 text-cream-ink shadow-lift sm:rotate-1">
               <span aria-hidden className="absolute -top-2 left-1/2 z-10 h-5 w-20 -translate-x-1/2 -rotate-3 bg-hl" />
               <Pic
@@ -90,9 +116,9 @@ export default async function AboutPage() {
               {d.personal_note && <p className="mt-6 font-hand text-xl leading-snug text-cream-soft">{d.personal_note}</p>}
             </div>
           )}
-          {hasPortrait && d.personal_note && <p className="mt-7 px-2 font-hand text-xl leading-relaxed text-soft">{d.personal_note}</p>}
-          {hasPortrait && interests.length > 0 && (
-            <div className="mt-6 flex flex-wrap gap-2" aria-label="Personal interests">
+          {hasPortrait && !hasCutout && d.personal_note && <p className="mt-7 px-2 font-hand text-xl leading-relaxed text-soft">{d.personal_note}</p>}
+          {hasPhoto && interests.length > 0 && (
+            <div className={`mt-6 flex flex-wrap gap-2 ${hasCutout ? "justify-center" : ""}`} aria-label="Personal interests">
               {interests.map((interest, index) => <Tag key={index}>{interest}</Tag>)}
             </div>
           )}
