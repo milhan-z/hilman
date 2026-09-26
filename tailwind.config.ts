@@ -34,6 +34,7 @@ const config: Config = {
         "cream-ink": "var(--cream-ink)",
         "cream-soft": "var(--cream-soft)",
         "cream-line": "var(--cream-line)",
+        "cream-red": "var(--cream-red)",
         n: {
           50: "var(--n-50)",
           100: "var(--n-100)",

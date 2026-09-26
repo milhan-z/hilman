@@ -20,6 +20,7 @@ export function Pic({
   className,
   priority = false,
   loading,
+  fetchPriority,
   fill = false,
 }: {
   src: string | null | undefined;
@@ -36,6 +37,12 @@ export function Pic({
    * and below it at others: the browser still ranks it by where it lands.
    */
   loading?: "eager" | "lazy";
+  /**
+   * "high": ask for it ahead of the page's other images and scripts. For the
+   * one image that is the page's LCP at every width, with loading="eager" —
+   * what Next's docs recommend over `priority`'s preload.
+   */
+  fetchPriority?: "high" | "low" | "auto";
   fill?: boolean;
 }) {
   const resolved = mediaSrc(src, { width: fill ? 1600 : width });
@@ -63,6 +70,7 @@ export function Pic({
       sizes={sizes}
       preload={priority}
       loading={priority ? undefined : loading}
+      fetchPriority={fetchPriority}
       unoptimized={unoptimized}
       className={className}
     />

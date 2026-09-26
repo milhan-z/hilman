@@ -35,8 +35,13 @@ export const PEN_SHAPES = Object.keys(SHAPES) as PenShape[];
  * holder and 0.045em thick, so it keeps its proportions under any size of
  * heading. It is the stroke Home had under the name before this was
  * animated, now swept in from its left end.
+ *
+ * The marker is the same highlighter pressed flat behind a word rather than
+ * swept under it: most of the word's height, square at the ends, tilted a
+ * degree. The headings on About's sheet wear it, as they did on the old
+ * About Me page it is drawn from.
  */
-export type HandDrawnVariant = PenShape | "brush";
+export type HandDrawnVariant = PenShape | "brush" | "marker";
 
 /**
  * The site's pens. `hl` is the highlighter: the same bright yellow in both
@@ -84,7 +89,7 @@ export type HandDrawnTone = keyof typeof TONES;
  * line far enough down a page that it would otherwise finish drawing long
  * before anyone scrolled to it.
  *
- * `variant="brush"` is not drawn with the pen at all (see HandDrawnVariant).
+ * `variant="brush"` (and the marker) is not drawn with the pen at all (see HandDrawnVariant).
  * It is a plain element grown from its left end with `scale`, which the
  * compositor runs on its own: nothing is repainted while it sweeps, where the
  * pen's mask repaints on every frame. That matters on a first screen.
@@ -112,7 +117,7 @@ export function HandDrawnReveal({
   delay?: number;
   /** Milliseconds the stroke takes; --motion-draw when left out. */
   duration?: number;
-  /** A fixed pixel width. Ignored when `fluid` is set, and by the brush. */
+  /** A fixed pixel width. Ignored when `fluid` is set, and by the brush and the marker. */
   width?: number;
   /**
    * Stretch to whatever contains this, instead of taking a fixed size.
@@ -129,7 +134,7 @@ export function HandDrawnReveal({
    * `vectorEffect="non-scaling-stroke"` keeps the pen weight even while it does.
    */
   fluid?: boolean;
-  /** The pen's weight in pixels. The brush's is always 0.045em. */
+  /** The pen's weight in pixels. The brush's is always 0.045em, the marker's 0.62em. */
   strokeWidth?: number;
   className?: string;
 }) {
@@ -142,12 +147,12 @@ export function HandDrawnReveal({
     ...(duration != null && { "--bits-draw-duration": `${Math.max(0, duration)}ms` }),
   } as CSSProperties;
 
-  if (variant === "brush") {
+  if (variant === "brush" || variant === "marker") {
     const brush = (
       <span
         aria-hidden
         data-trigger={trigger}
-        className={cn("bits-brush", TONES[tone] ?? TONES.pen, className)}
+        className={cn("bits-brush", variant === "marker" && "bits-marker", TONES[tone] ?? TONES.pen, className)}
         style={timing}
       />
     );

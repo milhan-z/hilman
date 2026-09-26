@@ -138,6 +138,19 @@ test("the brush is the bar Home always had, swept rather than painted", () => {
   assert.ok(!/personal-name/.test(readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")), "and the old bar is gone");
 });
 
+test("the marker is the brush pressed flat behind a heading", () => {
+  const out = html(h(HandDrawnReveal, { variant: "marker", tone: "hl", trigger: "view", delay: 120 }));
+  assert.equal(
+    out,
+    '<span class="bits-draw-holder"><span aria-hidden="true" data-trigger="view" class="bits-brush bits-marker text-hl" style="--bits-draw-delay:120ms"></span></span>'
+  );
+  const css = readFileSync(new URL("../components/bits/bits.css", import.meta.url), "utf8");
+  const frame = css.match(/\.bits-brush\.bits-marker \{([^}]*)\}/)?.[1] ?? "";
+  assert.match(frame, /height: 0\.62em;/, "most of a word tall, in em so it follows the heading");
+  assert.match(frame, /rotate: -1deg;/, "tilted less than the brush");
+  assert.match(css, /\.bits-brush\.bits-marker::before \{\s*border-radius: [^;]+;\s*\}/, "squarer at the ends; the same ink and the same sweep");
+});
+
 test("timings are milliseconds, and never negative", () => {
   const out = html(h(HandDrawnReveal, { delay: -50, duration: 1100 }));
   assert.match(out, /--bits-draw-delay:0ms/);

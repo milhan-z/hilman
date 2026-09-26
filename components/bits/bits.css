@@ -87,6 +87,17 @@
   background: currentColor;
   transform-origin: left center;
 }
+/* The marker (variant="marker"): the brush pressed flat behind a heading
+   instead of swept under it — About's sheet, after the old About Me page.
+   Same ink, same sweep; a frame most of a word tall, squarer ends, less
+   tilt. Its holder puts it behind the words. */
+.bits-brush.bits-marker {
+  height: 0.62em;
+  rotate: -1deg;
+}
+.bits-brush.bits-marker::before {
+  border-radius: 0.1em 0.3em 0.16em 0.36em / 0.24em 0.4em 0.28em 0.36em;
+}
 @keyframes bits-brush {
   from {
     scale: 0 1;

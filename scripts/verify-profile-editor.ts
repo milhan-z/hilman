@@ -22,9 +22,10 @@ for (const slug of ["home", "about", "connect"]) {
 
 const aboutSeed = mockPages.find((page) => page.slug === "about")!.data;
 const reorderedTimeline = aboutSeed.timeline.map((item: { year: string; text: string }) => ({ text: item.text, year: item.year }));
-const resolvedSeed = resolveProfileData("about", { timeline: reorderedTimeline, lede: aboutSeed.lede });
+const resolvedSeed = resolveProfileData("about", { timeline: reorderedTimeline, story: aboutSeed.story, lede: aboutSeed.lede });
 assert.deepEqual(resolvedSeed.timeline, PROFILE_DEFAULTS.about.timeline, "An unchanged seed timeline with JSONB-reordered object keys must give way to the verified one");
-assert.equal(resolvedSeed.lede, PROFILE_DEFAULTS.about.lede, "An unchanged seed string must still resolve to verified profile copy");
+assert.deepEqual(resolvedSeed.story, PROFILE_DEFAULTS.about.story, "Unchanged seed copy must still resolve to verified profile copy");
+assert.equal(resolvedSeed.lede, undefined, "An unchanged seed string with no verified replacement must not be shown at all");
 const editedTimeline = reorderedTimeline.map((item: { year: string; text: string }, index: number) => index === 0 ? { ...item, text: "My actual experience" } : item);
 assert.deepEqual(resolveProfileData("about", { timeline: editedTimeline }).timeline, editedTimeline, "A custom timeline must survive regardless of object key ordering");
 
@@ -40,6 +41,7 @@ assert.equal(about.lede, custom.lede, "An unchanged custom string must be preser
 const cleared = {
   ...fieldsFor("about", about),
   lede: "   ",
+  summary: "   ",
   interests: [],
   personal_note: "",
   portrait: "",
@@ -47,7 +49,8 @@ const cleared = {
 };
 const saved = cleanPageData(PAGE_SCHEMAS.about, cleared, custom, Object.keys(PROFILE_DEFAULTS.about));
 const reopened = resolveProfileData("about", saved);
-assert.equal(reopened.lede, "", "A cleared defaulted scalar must stay hidden");
+assert.equal(reopened.summary, "", "A cleared defaulted scalar must stay hidden");
+assert.equal("lede" in saved, false, "A cleared optional scalar with no default must be omitted");
 assert.equal(reopened.personal_note, "", "A cleared defaulted note must stay hidden");
 assert.deepEqual(reopened.interests, [], "A cleared defaulted list must stay hidden");
 assert.deepEqual(reopened.story, custom.story, "Custom biography must survive");

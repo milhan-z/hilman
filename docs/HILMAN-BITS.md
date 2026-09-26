@@ -15,7 +15,7 @@ that blurs in letter by letter, a page that scrolls itself.
 
 | Primitive | The one idea | Engine | Status |
 |---|---|---|---|
-| `HandDrawnReveal` | A line drawing itself under, around or beside a word — with a pen, or with a brush | Pen: SVG through a dashed mask (`pathLength`). Brush: CSS `scale`, compositor only | Wave 1 |
+| `HandDrawnReveal` | A line drawing itself under, around or beside a word — with a pen, a brush, or a marker pressed flat behind it | Pen: SVG through a dashed mask (`pathLength`). Brush and marker: CSS `scale`, compositor only | Wave 1 |
 | `EditorialReveal` | The details around a title inked in after it, the title already printed | CSS keyframes; `InView` for `trigger="view"` | Wave 1 |
 | `PaperCard` | A card lifted a little off the desk | CSS | Wave 1 |
 | `Tally` | A number that rolls over when it changes in front of you | Web Animations API | Wave 1 |
@@ -44,7 +44,7 @@ primitives per page. Every page is inside it.
 | Home | The brush swept under "Hilman"; the lines under the title arriving in turn; section headings arriving as they scroll in; the pen under "together."; the cards | 3 |
 | Works, Journal | The line under the title; the cards (on Journal, an entry's cover peeks out from behind its card as you point at it) | 2–3 |
 | A work, a journal entry | The details around the title (never the title); the reader count; previous and next, lifted cards with the page they lead to peeking out from behind them; a Stack gallery's prints settling onto the desk as it comes into view, when the author chose a Stack | 2–3, and the pile |
-| About | The line under the title; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 1–2 |
+| About | The marker behind the sheet's two headings and the line under "Hilman.", each as it comes into view; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 1–2 |
 | Lab, Connect | The line under the title | 1 |
 | Studio | Nothing — feedback only, 150 ms or less. (It downloads bits.css with the rest of the stylesheet; nothing there uses it.) | 0 |
 

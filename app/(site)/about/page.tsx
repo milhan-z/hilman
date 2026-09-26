@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { Pic } from "@/components/cld-image";
+import { AboutSheet, aboutPhoto, type AboutRole } from "@/components/about-sheet";
 import { ContentUnavailablePage } from "@/components/content-unavailable";
 import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { SectionReveal } from "@/components/motion";
 import { PersonalMoments } from "@/components/personal-moments";
-import { ArrowLink, Button, Kicker, Tag } from "@/components/ui";
+import { ArrowLink, Button, Kicker } from "@/components/ui";
 import { getPage, load } from "@/lib/data";
-import { mediaSrc } from "@/lib/cloudinary";
 import { resolveProfileData } from "@/lib/profile";
 
 export const revalidate = 60;
@@ -22,111 +21,72 @@ function strings(value: unknown): string[] {
     : [];
 }
 
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
 export default async function AboutPage() {
   const pageRes = await load(() => getPage("about"));
   if (!pageRes.ok) {
     return <ContentUnavailablePage what="the About page" detail={pageRes.error} />;
   }
   const d = resolveProfileData("about", pageRes.value?.data);
-  const hasCutout = Boolean(mediaSrc(d.portrait_cutout));
-  const hasPortrait = Boolean(mediaSrc(d.portrait));
-  const hasPhoto = hasCutout || hasPortrait;
   const story = strings(d.story);
   const focus = strings(d.focus);
-  const interests = strings(d.interests);
-  const toolbox = strings(d.toolbox);
-  const currently = strings(d.currently);
-  const timeline = Array.isArray(d.timeline)
+  const roles: AboutRole[] = Array.isArray(d.timeline)
     ? d.timeline.filter((item: any) => item && typeof item.text === "string" && item.text.trim())
     : [];
 
   return (
     <div className="mx-auto max-w-wide px-5 pb-16 pt-14 sm:px-8 sm:pb-24 sm:pt-20 lg:px-12">
-      <header className="grid items-start gap-10 lg:grid-cols-[1.3fr_0.85fr] lg:gap-20">
-        <div>
-          <Kicker>a little more than the work</Kicker>
-          <h1 className="mt-5 font-display text-[clamp(2.75rem,6.5vw,5.96rem)] font-semibold tracking-tight">
-            Hi, I&apos;m <span className="relative inline-block">Hilman.<span aria-hidden className="absolute -bottom-3 left-0 right-0 overflow-hidden"><HandDrawnReveal variant="underline2" fluid strokeWidth={4} /></span></span>
-          </h1>
-          {d.lede && <p className="mt-10 max-w-2xl text-pretty text-xl font-medium leading-relaxed sm:text-2xl">{d.lede}</p>}
-          {story.length > 0 && (
-            <div className="mt-6 max-w-2xl space-y-5 text-[1.0625rem] leading-relaxed text-soft sm:text-lg">
-              {story.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-            </div>
-          )}
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Button href="/connect">Let&apos;s make something</Button>
-            <Button href="/works" variant="ghost">Explore my work</Button>
-          </div>
-        </div>
-
-        <aside className="mx-auto w-full max-w-md lg:pt-4" aria-label="A personal note">
-          {hasCutout ? (
-            /* A cut-out of me, stuck to the page like a sticker: the photo has
-               its background removed and a paper edge around it, so it
-               stands on the notebook, not in a frame. The note beside it
-               points the way. */
-            <figure className="flex items-center justify-center gap-3 sm:gap-5">
-              {d.personal_note && (
-                <figcaption className="flex max-w-[9rem] -rotate-3 flex-col items-end text-right font-hand text-2xl leading-tight text-soft sm:max-w-[11rem] sm:text-[1.7rem]">
-                  {d.personal_note}
-                  <span aria-hidden className="mt-2">
-                    <HandDrawnReveal variant="arrow" width={64} strokeWidth={2.5} delay={900} />
-                  </span>
-                </figcaption>
-              )}
-              <Pic
-                src={d.portrait_cutout}
-                alt={d.portrait_alt || "Hilman"}
-                width={592}
-                height={1792}
-                sizes="(max-width: 640px) 150px, (max-width: 1024px) 170px, 190px"
-                loading="eager"
-                className="h-[28rem] w-auto -rotate-2 drop-shadow-[0_18px_22px_rgba(0,0,0,0.35)] sm:h-[32rem] lg:h-[36rem]"
-              />
-            </figure>
-          ) : hasPortrait ? (
-            <figure className="relative bg-cream p-3 pb-5 text-cream-ink shadow-lift sm:rotate-1">
-              <span aria-hidden className="absolute -top-2 left-1/2 z-10 h-5 w-20 -translate-x-1/2 -rotate-3 bg-hl" />
-              <Pic
-                src={d.portrait}
-                alt={d.portrait_alt || "Hilman"}
-                width={900}
-                height={1100}
-                sizes="(max-width: 1024px) 90vw, 420px"
-                priority
-                className="aspect-[4/5] w-full object-cover"
-              />
-              {d.portrait_caption && <figcaption className="px-2 pt-4 font-hand text-xl leading-snug text-cream-soft">{d.portrait_caption}</figcaption>}
-            </figure>
-          ) : (
-            <div className="relative rounded-sm bg-cream p-7 text-cream-ink shadow-lift sm:rotate-1 sm:p-9">
-              <span aria-hidden className="absolute -top-2 right-9 h-5 w-16 -rotate-6 bg-hl" />
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-cream-soft">A few things I gravitate towards</p>
-              <p className="mt-7 font-display text-3xl font-medium leading-[1.12] tracking-tight sm:text-4xl">
-                Design.<br />Code.<br /><span className="italic">And everything<br />in between.</span>
-              </p>
-              {interests.length > 0 && (
-                <ul className="mt-7 flex flex-wrap gap-x-3 gap-y-2 border-t border-cream-line pt-5 text-sm text-cream-soft">
-                  {interests.map((interest, index) => (
-                    <li key={index} className="flex items-center gap-3"><span aria-hidden className="text-cream-soft">✦</span>{interest}</li>
-                  ))}
-                </ul>
-              )}
-              {d.personal_note && <p className="mt-6 font-hand text-xl leading-snug text-cream-soft">{d.personal_note}</p>}
-            </div>
-          )}
-          {hasPortrait && !hasCutout && d.personal_note && <p className="mt-7 px-2 font-hand text-xl leading-relaxed text-soft">{d.personal_note}</p>}
-          {hasPhoto && interests.length > 0 && (
-            <div className={`mt-6 flex flex-wrap gap-2 ${hasCutout ? "justify-center" : ""}`} aria-label="Personal interests">
-              {interests.map((interest, index) => <Tag key={index}>{interest}</Tag>)}
-            </div>
-          )}
-        </aside>
+      {/* The old About Me page's title: a yellow rule running into it. */}
+      <header className="flex items-center gap-5 sm:gap-8">
+        <span aria-hidden className="h-[3px] min-w-8 flex-1 bg-hl" />
+        <h1 className="shrink-0 font-display text-[2.75rem] font-bold leading-none tracking-tight text-pen sm:text-6xl">About me</h1>
       </header>
 
+      <AboutSheet
+        name={text(d.name) ?? "Hilman"}
+        summary={text(d.summary)}
+        photo={aboutPhoto(d)}
+        caption={text(d.portrait_caption)}
+        email={text(d.contact_email)}
+        instagram={text(d.instagram)}
+        phone={text(d.phone)}
+        details={strings(d.details)}
+        interests={strings(d.interests)}
+        note={text(d.personal_note)}
+        roles={roles}
+        tools={strings(d.toolbox)}
+      />
+
+      {(d.lede || story.length > 0) && (
+        <section className="pb-14 pt-16 sm:pb-16 sm:pt-24" aria-labelledby="story-heading">
+          <div className="grid gap-7 lg:grid-cols-[0.85fr_1.3fr] lg:gap-20">
+            <div>
+              <Kicker>a little more than the work</Kicker>
+              <h2 id="story-heading" className="mt-4 font-display text-[clamp(2.5rem,5vw,3.815rem)] font-semibold leading-[1.05] tracking-tight">
+                Hi, I&apos;m <span className="relative inline-block">Hilman.<span aria-hidden className="absolute -bottom-2.5 left-0 right-0 overflow-hidden"><HandDrawnReveal variant="underline2" fluid strokeWidth={3.5} trigger="view" /></span></span>
+              </h2>
+            </div>
+            <div className="lg:pt-10">
+              {d.lede && <p className="max-w-2xl text-pretty text-xl font-medium leading-relaxed sm:text-2xl">{d.lede}</p>}
+              {story.length > 0 && (
+                <div className={`${d.lede ? "mt-6" : ""} max-w-2xl space-y-5 text-[1.0625rem] leading-relaxed text-soft sm:text-lg`}>
+                  {story.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+                </div>
+              )}
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Button href="/connect">Let&apos;s make something</Button>
+                <Button href="/works" variant="ghost">Explore my work</Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {focus.length > 0 && (
-        <section className="mt-16 border-y border-line-strong py-7 sm:mt-20" aria-labelledby="focus-heading">
+        <section className="border-y border-line-strong py-7" aria-labelledby="focus-heading">
           <div className="grid gap-5 lg:grid-cols-[0.7fr_2fr] lg:gap-12">
             <h2 id="focus-heading" className="font-hand text-2xl text-pen">Where my curiosity goes</h2>
             <ul className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
@@ -156,43 +116,6 @@ export default async function AboutPage() {
       )}
 
       <PersonalMoments moments={d.moments} />
-
-      {(timeline.length > 0 || toolbox.length > 0 || currently.length > 0) && (
-        <section className="mt-10 grid gap-12 border-t border-line-strong pt-12 lg:grid-cols-2 lg:gap-20" aria-label="Experience and current interests">
-          {timeline.length > 0 && (
-            <div>
-              <h2 className="font-display text-2xl font-medium">A few chapters so far</h2>
-              <ol className="mt-7 border-l border-line-strong pl-6">
-                {timeline.map((item: { year?: string; text: string }, index: number) => (
-                  <li key={index} className="relative pb-7 last:pb-0">
-                    <span aria-hidden className="absolute -left-[29px] top-2 h-2 w-2 rounded-full bg-pen" />
-                    {item.year && <span className="font-mono text-xs text-pen">{item.year}</span>}
-                    <p className="mt-1 text-soft">{item.text}</p>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-          {(toolbox.length > 0 || currently.length > 0) && (
-            <div className="space-y-9">
-              {currently.length > 0 && (
-                <div>
-                  <h2 className="font-display text-2xl font-medium">On my mind lately</h2>
-                  <ul className="mt-5 space-y-3 text-soft">
-                    {currently.map((item, index) => <li key={index} className="flex gap-3"><span aria-hidden className="text-pen">→</span><span>{item}</span></li>)}
-                  </ul>
-                </div>
-              )}
-              {toolbox.length > 0 && (
-                <div>
-                  <h2 className="font-mono text-xs uppercase tracking-widest text-soft">Tools I work with</h2>
-                  <div className="mt-4 flex flex-wrap gap-2">{toolbox.map((tool, index) => <Tag key={index}>{tool}</Tag>)}</div>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      )}
 
       <section className="mt-16 rounded-lg border border-line-strong bg-surface px-6 py-9 sm:mt-20 sm:px-10 sm:py-12" aria-labelledby="about-connect-heading">
         <div className="flex flex-col justify-between gap-7 lg:flex-row lg:items-center">

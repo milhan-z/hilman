@@ -123,6 +123,10 @@
   --cream-ink: #1a1713;
   --cream-soft: #5a5346;
   --cream-line: rgba(120, 104, 78, 0.3);
+  /* red handwriting on the paper (About's sheet): 5.8:1 on --cream */
+  --cream-red: #b5162b;
+  /* the weave of that sheet's linen paper */
+  --cream-weave: rgba(120, 104, 78, 0.07);
 
   /* neutrals 50–950 (dark-scaled) */
   --n-50: #121212;
@@ -177,6 +181,8 @@
   --cream-ink: #1f1b15;
   --cream-soft: #564e41;
   --cream-line: rgba(120, 104, 78, 0.3);
+  --cream-red: #b5162b;
+  --cream-weave: rgba(120, 104, 78, 0.07);
 
   --n-50: #faf7f0;
   --n-100: #f1ece0;
@@ -481,6 +487,14 @@
       var(--line) 31px,
       var(--line) 32px
     );
+  }
+  /* linen paper — the sheet of the old About Me page, woven in the paper's
+     own line colour so it reads as texture rather than a pattern */
+  .paper-linen {
+    background-color: var(--cream);
+    background-image:
+      repeating-linear-gradient(0deg, var(--cream-weave) 0 1px, transparent 1px 4px),
+      repeating-linear-gradient(90deg, var(--cream-weave) 0 1px, transparent 1px 4px);
   }
   .graphpaper {
     background-image:
