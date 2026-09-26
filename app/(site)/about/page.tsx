@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { AboutSheet, aboutPhoto, type AboutRole } from "@/components/about-sheet";
 import { ContentUnavailablePage } from "@/components/content-unavailable";
-import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { SectionReveal } from "@/components/motion";
 import { PersonalMoments } from "@/components/personal-moments";
 import { ArrowLink, Button, Kicker } from "@/components/ui";
@@ -46,47 +45,18 @@ export default async function AboutPage() {
       </header>
 
       <AboutSheet
-        name={text(d.name) ?? "Hilman"}
-        summary={text(d.summary)}
         photo={aboutPhoto(d)}
         caption={text(d.portrait_caption)}
-        email={text(d.contact_email)}
-        instagram={text(d.instagram)}
-        phone={text(d.phone)}
-        details={strings(d.details)}
+        lede={text(d.lede)}
         interests={strings(d.interests)}
+        story={story}
         note={text(d.personal_note)}
         roles={roles}
         tools={strings(d.toolbox)}
       />
 
-      {(d.lede || story.length > 0) && (
-        <section className="pb-14 pt-16 sm:pb-16 sm:pt-24" aria-labelledby="story-heading">
-          <div className="grid gap-7 lg:grid-cols-[0.85fr_1.3fr] lg:gap-20">
-            <div>
-              <Kicker>a little more than the work</Kicker>
-              <h2 id="story-heading" className="mt-4 font-display text-[clamp(2.5rem,5vw,3.815rem)] font-semibold leading-[1.05] tracking-tight">
-                Hi, I&apos;m <span className="relative inline-block">Hilman.<span aria-hidden className="absolute -bottom-2.5 left-0 right-0 overflow-hidden"><HandDrawnReveal variant="underline2" fluid strokeWidth={3.5} trigger="view" /></span></span>
-              </h2>
-            </div>
-            <div className="lg:pt-10">
-              {d.lede && <p className="max-w-2xl text-pretty text-xl font-medium leading-relaxed sm:text-2xl">{d.lede}</p>}
-              {story.length > 0 && (
-                <div className={`${d.lede ? "mt-6" : ""} max-w-2xl space-y-5 text-[1.0625rem] leading-relaxed text-soft sm:text-lg`}>
-                  {story.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-                </div>
-              )}
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Button href="/connect">Let&apos;s make something</Button>
-                <Button href="/works" variant="ghost">Explore my work</Button>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
       {focus.length > 0 && (
-        <section className="border-y border-line-strong py-7" aria-labelledby="focus-heading">
+        <section className="mt-16 border-y border-line-strong py-7 sm:mt-20" aria-labelledby="focus-heading">
           <div className="grid gap-5 lg:grid-cols-[0.7fr_2fr] lg:gap-12">
             <h2 id="focus-heading" className="font-hand text-2xl text-pen">Where my curiosity goes</h2>
             <ul className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
@@ -103,7 +73,9 @@ export default async function AboutPage() {
           <section id="people" className="scroll-mt-24 py-16 sm:py-20" aria-labelledby={d.community_heading ? "community-heading" : undefined} aria-label={d.community_heading ? undefined : "People and community"}>
             <div className="grid gap-7 lg:grid-cols-[0.85fr_1.3fr] lg:gap-20">
               <div>
-                <Kicker>the people are part of the story</Kicker>
+                {/* Not "the people are part of the story": the note that
+                    ends the sheet, just above, says that already. */}
+                <Kicker>a little more than the work</Kicker>
                 {d.community_heading && <h2 id="community-heading" className="mt-4 max-w-md font-display text-3xl font-medium tracking-tight sm:text-4xl">{d.community_heading}</h2>}
               </div>
               <div className="lg:pt-8">

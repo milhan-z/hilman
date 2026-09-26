@@ -15,32 +15,26 @@ export const PROFILE_DEFAULTS: Record<string, Record<string, any>> = {
     // (Cloudinary; the full-length cut-out is hilman/about-portrait-sticker).
     portrait_cutout: "hilman/about-portrait-card",
     portrait_alt: "Hilman from the waist up, in a white shirt, looking at the camera.",
-    // Everything on the card and the sheet is Hilman's own, from that page.
-    name: "M Hilman Azhar",
-    summary: "Informatics student with over 3 years of experience in video editing and graphic design. Skilled in creative content production and media management.",
-    contact_email: "hilmanazhar03@gmail.com",
-    instagram: "hilman_azhar",
-    // Its phone number and date of birth are left off: this page is public.
-    // Both can be added back in the Studio (Phone, Handwritten details).
-    details: [
-      "Muhammad Hilman Azhar",
-      "Education: Informatics (S1), Sepuluh Nopember Institute of Technology",
+    // On the card, under "Hi, I’m Hilman.": it carries on from the greeting
+    // instead of saying the name again.
+    lede: "An Informatics student at ITS, with a soft spot for the creative side of things.",
+    interests: ["Design", "Film & photo", "Motion", "Code", "Meeting people"],
+    // Handwritten on the sheet, under the card.
+    story: [
+      "My days move between graphic design, video editing, motion, photography, and code. I like exploring how they can work together — an idea might become an image, a moving story, or something you can actually interact with.",
+      "This notebook brings those parts of me together. The things I make, the thinking behind them, and the little discoveries I want to keep.",
     ],
-    personal_note: "I am an Informatics student with a strong passion for photography, videography, and graphic design. With over three years of experience in these creative fields, I excel in capturing and crafting visual stories that resonate. My work in media coordination and graphic design reflects my commitment to producing high-quality, impactful content.",
+    // In red at the end of the story, just above the people section — whose
+    // kicker therefore no longer says the same thing.
+    personal_note: "The people are part of the story, too.",
+    // Hilman's own, from his old About Me page.
     timeline: [
       { year: "July 2023 – July 2024", text: "Coordinator of Daarul Rahman III Media", place: "PonPes Daarul Rahman III Depok" },
       { year: "July 2023 – July 2024", text: "Islamic Religious Education Teacher", place: "PonPes Daarul Rahman III Depok" },
       { year: "June 2021 – June 2023", text: "Graphic Design and Editing", place: "Daarul Rahman III Media" },
     ],
     toolbox: ["Photoshop", "Illustrator", "Premiere Pro", "After Effects", "Lightroom", "Canva", "Figma"],
-    // Under the sheet, "Hi, I’m Hilman." opens the story. There is no lede by
-    // default: the card and the handwriting have just said what one would.
-    story: [
-      "My days move between graphic design, video editing, motion, photography, and code. I like exploring how they can work together — an idea might become an image, a moving story, or something you can actually interact with.",
-      "This notebook brings those parts of me together. The things I make, the thinking behind them, and the little discoveries I want to keep.",
-    ],
     focus: ["Graphic design & visual communication", "Video editing & motion", "Photography & storytelling", "Web & creative coding"],
-    interests: ["Design", "Film & photo", "Motion", "Code", "Meeting people"],
     community_heading: "Good things happen together.",
     community_story: "Through organisations and ITS Global Engagement, I get to meet people, collaborate, and share experiences. Those connections matter to me just as much as the things we make.",
   },

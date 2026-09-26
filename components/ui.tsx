@@ -15,6 +15,8 @@ const buttonVariants = {
   ghost: "border border-line-strong text-ink hover:border-pen hover:text-pen",
   hl: "bg-hl text-hl-ink hover:brightness-[0.97] shadow-card hover:shadow-glow",
   red: "bg-red text-[#220603] hover:brightness-110 shadow-card",
+  // ghost, drawn on the cream paper (About's card), which is light in both themes
+  paper: "border border-cream-ink text-cream-ink hover:bg-cream-ink hover:text-cream",
 } as const;
 
 export function Button({

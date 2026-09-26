@@ -44,7 +44,7 @@ primitives per page. Every page is inside it.
 | Home | The brush swept under "Hilman"; the lines under the title arriving in turn; section headings arriving as they scroll in; the pen under "together."; the cards | 3 |
 | Works, Journal | The line under the title; the cards (on Journal, an entry's cover peeks out from behind its card as you point at it) | 2–3 |
 | A work, a journal entry | The details around the title (never the title); the reader count; previous and next, lifted cards with the page they lead to peeking out from behind them; a Stack gallery's prints settling onto the desk as it comes into view, when the author chose a Stack | 2–3, and the pile |
-| About | The marker behind the sheet's two headings and the line under "Hilman.", each as it comes into view; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 1–2 |
+| About | The pen under the signed "Hilman." on the card as the page opens; the marker behind the sheet's two headings as they come into view; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 1–2 |
 | Lab, Connect | The line under the title | 1 |
 | Studio | Nothing — feedback only, 150 ms or less. (It downloads bits.css with the rest of the stylesheet; nothing there uses it.) | 0 |
 

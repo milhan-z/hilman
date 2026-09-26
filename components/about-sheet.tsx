@@ -1,62 +1,53 @@
 import type { CSSProperties, ReactNode } from "react";
 import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { Pic } from "@/components/cld-image";
+import { Button } from "@/components/ui";
 import { mediaSrc } from "@/lib/cloudinary";
-import { classifyLink, linkAttrs } from "@/lib/links";
 
 /**
- * About's first screen, drawn after Hilman's old About Me page: a card
- * clipped to a sheet of linen paper. The card holds the photo — cut out, on a
- * yellow block — the name with its last word signed in red, a summary and
- * the contacts. The sheet holds the rest in the same places the old page kept
- * them: red handwritten details and a handwritten paragraph under the card,
- * the work experience and the software beside it.
+ * About's first screen, in the style of Hilman's old About Me page — a card
+ * clipped to a sheet of linen paper — and filled with the notebook's own
+ * About: nothing on it is said twice, and nothing is copied from the old
+ * page's CV.
  *
- * A server component, like the page: it ships no JavaScript. The two
- * highlighted headings are HandDrawnReveal's marker, which waits for the
- * screen through InView like every other line in the notebook.
+ * The card holds the photo (cut out, on a yellow block), the greeting with
+ * "Hilman." signed in red, the introduction, the things he gravitates
+ * towards in the old page's boxed style, and the way on. The sheet holds his
+ * story in handwriting under the card, ending on his note in red, and beside
+ * it the work experience and the software.
+ *
+ * A server component, like the page: it ships no JavaScript. The pen under
+ * the signature draws as the page opens; the two highlighted headings are
+ * HandDrawnReveal's marker, which waits for the screen through InView.
  */
 
 export type AboutRole = { year?: string; text: string; place?: string };
 
 /** The card and the sheet, from the About page's resolved content. */
 export function AboutSheet({
-  name,
-  summary,
   photo,
   caption,
-  email,
-  instagram,
-  phone,
-  details,
+  lede,
   interests,
+  story,
   note,
   roles,
   tools,
 }: {
-  name: string;
-  summary?: string;
   /** A cut-out stands on the yellow block; a plain portrait fills it. */
   photo: { src: string; alt: string; cutout: boolean } | null;
   caption?: string;
-  email?: string;
-  instagram?: string;
-  phone?: string;
-  details: string[];
+  lede?: string;
   interests: string[];
+  story: string[];
   note?: string;
   roles: AboutRole[];
   tools: string[];
 }) {
-  const contacts = contactLinks({ email, instagram, phone });
-  // The last word is signed in red, and never parted from the one before it.
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  const signed = words.length > 1 ? words.pop() : undefined;
-  const beside = signed ? words.pop() : undefined;
-  const handwritten = [...details, ...(interests.length ? [`Interests: ${interests.join(" · ")}`] : [])];
+  const intro = lede ? afterGreeting(lede) : "";
 
   return (
-    <section aria-labelledby="about-name" className="paper-linen relative mt-14 rounded-[3px] text-cream-ink shadow-lift sm:mt-16 lg:mt-20">
+    <section aria-labelledby="about-hello" className="paper-linen relative mt-14 rounded-[3px] text-cream-ink shadow-lift sm:mt-16 lg:mt-20">
       <div className="grid lg:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)]">
         <div className="min-w-0">
           {/* The card, clipped on over the sheet's top-left corner. */}
@@ -82,60 +73,50 @@ export function AboutSheet({
                   {caption && <figcaption className="mt-2 text-center font-hand text-lg leading-snug text-cream-soft">{caption}</figcaption>}
                 </figure>
               )}
-              {/* Sized by its own column (cqi), so the name keeps to one
+              {/* Sized by its own column (cqi), so the greeting keeps to one
                   line on a card that is narrower at some widths than a
                   phone's. */}
               <div className="min-w-0 pt-6 [container-type:inline-size] sm:flex-1 sm:pt-7">
-                <h2 id="about-name" className="font-body text-[clamp(2.1rem,15.5cqi,2.75rem)] font-extrabold leading-[0.95] tracking-[-0.045em] sm:text-[clamp(2.1rem,15.5cqi,3.25rem)]">
-                  {words.join(" ")}
-                  {words.length > 0 && signed && " "}
-                  {signed && (
-                    <span className="whitespace-nowrap">
-                      {beside}{" "}
-                      <span className="relative -ml-[0.42em] inline-block -rotate-6 translate-y-[0.32em] font-hand text-[0.82em] font-bold tracking-normal text-cream-red">
-                        {signed}
-                      </span>
+                <h2 id="about-hello" className="whitespace-nowrap font-body text-[clamp(2rem,14cqi,2.75rem)] font-extrabold leading-[0.95] tracking-[-0.045em] sm:text-[clamp(2rem,14cqi,3.25rem)]">
+                  Hi, I&apos;m{" "}
+                  <span className="relative inline-block -rotate-3 translate-y-[0.08em] font-hand text-[1.02em] font-bold tracking-normal text-cream-red">
+                    Hilman.
+                    <span aria-hidden className="absolute -bottom-[0.1em] left-0 right-[4%] overflow-hidden">
+                      <HandDrawnReveal variant="underline2" tone="hl" fluid strokeWidth={3} delay={450} />
                     </span>
-                  )}
+                  </span>
                 </h2>
-                {summary && <p className="mt-7 max-w-md text-[0.95rem] leading-relaxed text-cream-soft">{summary}</p>}
-                {contacts.length > 0 && (
+                {intro && <p className="mt-6 max-w-md text-pretty text-base leading-relaxed text-cream-soft sm:text-[1.0625rem]">{intro}</p>}
+                {interests.length > 0 && (
                   <div className="mt-5 border-2 border-cream-ink px-4 py-3">
-                    <h3 className="text-[0.95rem] font-bold tracking-tight">Contact &amp; Social Media</h3>
-                    <ul className="mt-1 text-sm">
-                      {contacts.map((contact) => (
-                        <li key={contact.kind}>
-                          <a
-                            href={contact.href}
-                            {...linkAttrs(classifyLink(contact.href))}
-                            className="group inline-flex min-h-11 max-w-full items-center gap-2.5 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cream-ink sm:min-h-9"
-                          >
-                            <ContactIcon kind={contact.kind} />
-                            <span className="sr-only">{contact.label}: </span>
-                            <span className="truncate underline decoration-cream-line underline-offset-4 transition-colors duration-fast group-hover:decoration-cream-ink">
-                              {contact.text}
-                            </span>
-                          </a>
+                    <h3 className="text-[0.95rem] font-bold tracking-tight">A few things I gravitate towards</h3>
+                    <ul className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1.5 text-sm">
+                      {interests.map((interest, index) => (
+                        <li key={index} className="flex items-center gap-1.5">
+                          <span aria-hidden className="text-cream-red">✦</span>
+                          {interest}
                         </li>
                       ))}
                     </ul>
                   </div>
                 )}
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Button href="/connect">Let&apos;s make something</Button>
+                  <Button href="/works" variant="paper">Explore my work</Button>
+                </div>
               </div>
             </div>
           </div>
 
-          {(handwritten.length > 0 || note) && (
+          {(story.length > 0 || note) && (
             <div className="px-6 pb-4 pt-10 sm:px-10 lg:pb-14 lg:pl-12 lg:pr-4 lg:pt-12">
-              {handwritten.length > 0 && (
-                <ul className="space-y-1 font-hand text-[1.45rem] font-semibold leading-snug text-cream-red sm:text-[1.6rem] lg:text-[1.4rem]">
-                  {handwritten.map((line, index) => <li key={index}>{line}</li>)}
-                </ul>
+              {story.length > 0 && (
+                <div className="max-w-[36rem] space-y-4 font-hand text-[1.35rem] leading-[1.7] text-cream-ink sm:text-[1.45rem]">
+                  {story.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+                </div>
               )}
               {note && (
-                <p className={`${handwritten.length ? "mt-8" : ""} max-w-[36rem] whitespace-pre-line font-hand text-[1.35rem] leading-[1.75] text-cream-ink sm:text-[1.45rem]`}>
-                  {note}
-                </p>
+                <p className={`${story.length ? "mt-6" : ""} max-w-[36rem] font-hand text-[1.5rem] font-semibold leading-snug text-cream-red sm:text-[1.6rem]`}>{note}</p>
               )}
             </div>
           )}
@@ -166,6 +147,18 @@ export function AboutSheet({
       </div>
     </section>
   );
+}
+
+/**
+ * The introduction as it reads under "Hi, I'm Hilman.": an opening "I'm
+ * Hilman." has just been said by the greeting, so it is not said again. (The
+ * About copy saved before the card existed opens that way.) Anything else is
+ * shown as written, and an introduction that was only the name is not shown.
+ */
+export function afterGreeting(text: string): string {
+  const rest = text.replace(/^\s*I['’]m Hilman(?:[.!,]|\s+[—–-])\s*/i, "");
+  if (rest === text) return text.trim();
+  return rest.charAt(0).toUpperCase() + rest.slice(1).trimEnd();
 }
 
 /** A heading with the marker pressed flat behind it, as on the old page. */
@@ -261,66 +254,6 @@ function FigmaMark() {
       <path fill="#ff7262" d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" />
       <path fill="#f24e1e" d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" />
       <path fill="#a259ff" d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" />
-    </svg>
-  );
-}
-
-/* ── contacts ─────────────────────────────────────────────── */
-
-type ContactKind = "email" | "whatsapp" | "instagram";
-type Contact = { kind: ContactKind; label: string; text: string; href: string };
-
-/**
- * The card's contacts, each checked before it becomes a link: an address
- * that is not one, or a handle with a space in it, is left off rather than
- * sent somewhere wrong. The number is written as it was typed and dialled
- * through WhatsApp, as the old page did.
- */
-export function contactLinks({ email, instagram, phone }: { email?: string; instagram?: string; phone?: string }): Contact[] {
-  const out: Contact[] = [];
-  const address = email?.trim();
-  if (address && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
-    out.push({ kind: "email", label: "Email", text: address, href: `mailto:${address}` });
-  }
-  const number = phone?.trim();
-  const digits = number?.replace(/\D/g, "").replace(/^0/, "62");
-  if (number && digits && digits.length >= 8) {
-    out.push({ kind: "whatsapp", label: "WhatsApp", text: number, href: `https://wa.me/${digits}` });
-  }
-  const handle = instagram
-    ?.trim()
-    .replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i, "")
-    .replace(/^@/, "")
-    .replace(/[/?#].*$/, "");
-  if (handle && /^[A-Za-z0-9._]{1,30}$/.test(handle)) {
-    out.push({ kind: "instagram", label: "Instagram", text: `@${handle}`, href: `https://www.instagram.com/${handle}/` });
-  }
-  return out;
-}
-
-function ContactIcon({ kind }: { kind: ContactKind }) {
-  const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, className: "shrink-0" } as const;
-  if (kind === "email") {
-    return (
-      <svg {...common}>
-        <rect x="3" y="5" width="18" height="14" rx="1.5" />
-        <path d="m3.5 6 8.5 7 8.5-7" />
-      </svg>
-    );
-  }
-  if (kind === "whatsapp") {
-    return (
-      <svg {...common}>
-        <path d="M4.5 19.5 5.6 16A8 8 0 1 1 8.4 18.7z" />
-        <path d="M9.2 8.6c.3-.6.9-.6 1.1 0l.6 1.4c.1.3 0 .6-.2.8l-.5.5a5.6 5.6 0 0 0 2.6 2.6l.5-.5c.2-.2.5-.3.8-.2l1.4.6c.6.2.6.8 0 1.1-1 .7-2.3.6-3.6-.1a8.4 8.4 0 0 1-2.9-2.9c-.7-1.3-.8-2.6-.1-3.6z" />
-      </svg>
-    );
-  }
-  return (
-    <svg {...common}>
-      <rect x="3.5" y="3.5" width="17" height="17" rx="4.5" />
-      <circle cx="12" cy="12" r="3.9" />
-      <circle cx="17.1" cy="6.9" r="0.6" fill="currentColor" stroke="none" />
     </svg>
   );
 }

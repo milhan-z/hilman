@@ -394,7 +394,8 @@ test("a hand-drawn accent can size itself to the word it underlines", () => {
   assert.match(accent, /fluid\s*\?\s*"100%"\s*:\s*width/, "it can fill its holder");
   assert.match(accent, /preserveAspectRatio=\{fluid \? "none" : undefined\}/, "stretching, not cropping");
 
-  const about = readFileSync(new URL("../app/(site)/about/page.tsx", import.meta.url), "utf8");
+  // Under the signed "Hilman." on About's card.
+  const about = readFileSync(new URL("../components/about-sheet.tsx", import.meta.url), "utf8");
   assert.match(about, /<HandDrawnReveal[^>]*fluid/, "and About uses it");
 });
 
