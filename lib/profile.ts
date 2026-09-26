@@ -33,7 +33,6 @@ export const PROFILE_DEFAULTS: Record<string, Record<string, any>> = {
       { year: "July 2023 – July 2024", text: "Islamic Religious Education Teacher", place: "PonPes Daarul Rahman III Depok" },
       { year: "June 2021 – June 2023", text: "Graphic Design and Editing", place: "Daarul Rahman III Media" },
     ],
-    toolbox: ["Photoshop", "Illustrator", "Premiere Pro", "After Effects", "Lightroom", "Canva", "Figma"],
     focus: ["Graphic design & visual communication", "Video editing & motion", "Photography & storytelling", "Web & creative coding"],
     community_heading: "Good things happen together.",
     community_story: "Through organisations and ITS Global Engagement, I get to meet people, collaborate, and share experiences. Those connections matter to me just as much as the things we make.",

@@ -83,7 +83,7 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
     slug: "about",
     title: "About",
     blurb:
-      "Styled after your old About Me page: your photo on a card clipped to a sheet of paper. The card holds your introduction and the things you gravitate towards; your story is handwritten under it, ending on your note, with your work experience and software beside it. The people around you and your moments follow. Anything left empty is simply left out.",
+      "The whole page is a sheet of cream paper, styled after your old About Me page. Your photo is on a card clipped to it, with your introduction and the things you gravitate towards; your story is handwritten under it, ending on your note; where your curiosity goes and your work experience sit beside it. The people around you and your moments follow. Anything left empty is simply left out.",
     fields: [
       {
         kind: "media",
@@ -123,6 +123,13 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
         hint: "One short line in your own voice, written in red at the end of your story.",
       },
       {
+        kind: "stringList",
+        key: "focus",
+        label: "Focus areas",
+        itemLabel: "Focus",
+        hint: "What you actually want to be hired for, beside your story under “Where my curiosity goes”. Keep it to three or four.",
+      },
+      {
         kind: "objectList",
         key: "timeline",
         label: "Work experience",
@@ -133,20 +140,6 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
           { key: "text", label: "Role", multiline: true },
           { key: "place", label: "Where", placeholder: "Organisation or place" },
         ],
-      },
-      {
-        kind: "stringList",
-        key: "toolbox",
-        label: "Software",
-        itemLabel: "Tool",
-        hint: "Tools you genuinely use. Photoshop, Illustrator, Premiere Pro, After Effects, Lightroom, InDesign, Canva and Figma get their icon; anything else is shown as a tag.",
-      },
-      {
-        kind: "stringList",
-        key: "focus",
-        label: "Focus areas",
-        itemLabel: "Focus",
-        hint: "What you actually want to be hired for. Keep it to three or four.",
       },
       {
         kind: "text",

@@ -488,10 +488,12 @@
       var(--line) 32px
     );
   }
-  /* linen paper — the sheet of the old About Me page, woven in the paper's
-     own line colour so it reads as texture rather than a pattern */
+  /* linen paper — About is one sheet of it, after the old About Me page:
+     the paper's own colour, woven in its line colour so it reads as texture
+     rather than a pattern. About carries the light theme (data-theme on the
+     page), so this is the light theme's paper there in both themes. */
   .paper-linen {
-    background-color: var(--cream);
+    background-color: var(--paper);
     background-image:
       repeating-linear-gradient(0deg, var(--cream-weave) 0 1px, transparent 1px 4px),
       repeating-linear-gradient(90deg, var(--cream-weave) 0 1px, transparent 1px 4px);

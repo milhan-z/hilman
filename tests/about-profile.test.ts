@@ -10,9 +10,10 @@ import { mockPages } from "../lib/mock";
 import { PROFILE_DEFAULTS, resolveProfileData } from "../lib/profile";
 
 /**
- * About, in the style of Hilman's old About Me page — a card clipped to a
- * sheet of linen paper, his photo on a yellow block — and filled with the
- * notebook's own About, each thing said once.
+ * About, in the style of Hilman's old About Me page — the whole page one
+ * sheet of cream linen paper, a card clipped to it with his photo on a
+ * yellow block — and filled with the notebook's own About, each thing said
+ * once.
  *
  * The first version of it copied the old page's words as well as its look:
  * a CV summary and contacts on the card, then the notebook's own greeting
@@ -43,8 +44,8 @@ const sheet = (d: Record<string, any> = live, props: Partial<Parameters<typeof A
       interests: d.interests,
       story: d.story,
       note: d.personal_note,
+      focus: d.focus,
       roles: d.timeline,
-      tools: d.toolbox,
       ...props,
     })
   );
@@ -92,21 +93,36 @@ test("the card: the photo on its yellow block, the greeting signed in red, and t
   assert.match(out, /<a class="[^"]*border-cream-ink text-cream-ink[^"]*" href="\/works">Explore my work<\/a>/, "a ghost button drawn for the paper");
 });
 
-test("the sheet: the story in handwriting, the note in red, the experience and the software", () => {
+test("on the paper: the story in handwriting, the note in red, curiosity and experience beside them", () => {
   const out = sheet();
-  assert.match(out, /<section aria-labelledby="about-hello" class="paper-linen /, "linen paper, named by the card");
+  assert.match(out, /<section aria-labelledby="about-hello" class="[^"]*grid/, "named by the card");
   assert.match(out, /<div class="[^"]*font-hand[^"]*text-cream-ink[^"]*"><p>My days move between/);
   assert.match(out, /<p class="[^"]*font-hand[^"]*text-cream-red[^"]*">The people are part of the story, too\.<\/p>/);
   assert.match(out, /<h3 id="about-experience"[^>]*><span aria-hidden="true" class="absolute[^"]*-z-10"><span class="bits-draw-holder"><span aria-hidden="true" data-trigger="view" class="bits-brush bits-marker text-hl"/, "the marker, waiting for the screen");
   assert.match(out, /<p class="text-sm italic text-cream-soft">July 2023 – July 2024<\/p>/);
   assert.match(out, /Coordinator of Daarul Rahman III Media<\/p><p class="mt-0\.5 text-\[0\.95rem\] text-cream-soft">PonPes Daarul Rahman III Depok<\/p>/);
-  for (const [mark, name] of [["Ps", "Photoshop"], ["Ai", "Illustrator"], ["Pr", "Premiere Pro"], ["Ae", "After Effects"], ["Lr", "Lightroom"]]) {
-    assert.match(out, new RegExp(`<span aria-hidden="true">${mark}</span><span class="sr-only">${name}</span>`), `${name} is a tile with its name for a screen reader`);
-  }
-  assert.match(out, /title="Figma"[^>]*><span aria-hidden="true"><svg viewBox="0 0 38 57"/, "Figma wears its mark");
-  const withCode = sheet(live, { tools: ["Adobe Photoshop", "Next.js"] });
-  assert.match(withCode, /<span class="sr-only">Adobe Photoshop<\/span>/, "an Adobe-prefixed name still finds its tile");
-  assert.match(withCode, /<ul aria-label="More software"[^>]*><li[^>]*>Next\.js<\/li><\/ul>/, "anything without a tile is a tag");
+  assert.match(out, /<h3 id="focus-heading"[^>]*><span aria-hidden="true" class="absolute[^"]*-z-10"><span class="bits-draw-holder"><span aria-hidden="true" data-trigger="view" class="bits-brush bits-marker text-hl"/);
+  assert.match(out, /<ul aria-labelledby="focus-heading"[^>]*>(<li[^>]*><span aria-hidden="true" class="text-pen">↗<\/span><span>[^<]+<\/span><\/li>){4}<\/ul>/, "where his curiosity goes, four ways");
+  assert.ok(out.indexOf('id="focus-heading"') < out.indexOf('id="about-experience"'), "the notebook's own words first");
+});
+
+test("no software", () => {
+  assert.ok(!("toolbox" in about), "no default");
+  assert.ok(!PAGE_SCHEMAS.about.fields.some((f) => f.key === "toolbox"), "no field");
+  assert.ok(!/Software|Photoshop|Figma/.test(sheet(about)), "nothing on the page");
+});
+
+test("the whole page is one sheet of cream paper, in both themes", () => {
+  // The light theme's tokens on the page itself: ink on paper, whichever
+  // theme the rest of the site is in.
+  assert.match(page, /<div data-theme="light" className="paper-linen -mb-16 text-ink">/);
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.paper-linen \{\s*background-color: var\(--paper\);\s*background-image:\s*repeating-linear-gradient\(0deg, var\(--cream-weave\)/, "linen: the paper, woven");
+  assert.match(css, /\[data-theme="light"\] \{/, "a theme any element can carry, not only the root");
+  // It runs to the footer: -mb-16 takes up exactly the footer's top margin.
+  const footer = readFileSync(new URL("../components/site-footer.tsx", import.meta.url), "utf8");
+  assert.match(footer, /<footer className="mt-16 /);
+  assert.ok(!/dark:/.test(readFileSync(new URL("../components/about-sheet.tsx", import.meta.url), "utf8") + page), "no dark: variant, which would still match the site's dark root");
 });
 
 test("the old page lent its look, not its CV", () => {
@@ -124,14 +140,14 @@ test("the old page lent its look, not its CV", () => {
 test("the page: the old title, the sheet, then the rest of the notebook's About", () => {
   assert.match(page, /<h1[^>]*text-pen[^>]*>About me<\/h1>/);
   assert.match(page, /<span aria-hidden className="h-\[3px\] min-w-8 flex-1 bg-hl" \/>/, "the yellow rule running into it");
-  const order = ["<AboutSheet", 'id="focus-heading"', 'id="people"', "<PersonalMoments", 'id="about-connect-heading"'].map((mark) => page.indexOf(mark));
+  const order = ["<header", "<AboutSheet", 'id="people"', "<PersonalMoments", 'id="about-connect-heading"'].map((mark) => page.indexOf(mark));
   assert.ok(order.every((at) => at > 0), String(order));
   assert.deepEqual([...order].sort((a, b) => a - b), order, "in that order");
 });
 
 test("the Studio edits every part of it", () => {
   const fields = new Map(PAGE_SCHEMAS.about.fields.map((f) => [f.key, f]));
-  for (const key of ["portrait_cutout", "lede", "interests", "story", "personal_note", "timeline", "toolbox", "focus", "community_story", "moments"]) {
+  for (const key of ["portrait_cutout", "lede", "interests", "story", "personal_note", "focus", "timeline", "community_story", "moments"]) {
     assert.ok(fields.has(key), key);
   }
   assert.match(fields.get("lede")?.hint ?? "", /no need to say your name again/);
@@ -145,10 +161,10 @@ test("the seeded demo copy still gives way to these defaults, and the Studio sti
   const shown = resolveProfileData("about", seed);
   assert.equal(shown.lede, about.lede);
   assert.deepEqual(shown.timeline, about.timeline);
-  assert.deepEqual(shown.toolbox, about.toolbox);
+  assert.equal(shown.toolbox, undefined, "the seed's invented toolbox is screened out, and nothing replaces it");
   assert.equal(shown.portrait_cutout, about.portrait_cutout);
   assert.notEqual(shown.portrait, seed.portrait, "the seed's stock portrait is screened out");
-  const custom = resolveProfileData("about", { toolbox: ["Figma"], portrait_cutout: "" });
-  assert.deepEqual(custom.toolbox, ["Figma"], "a toolbox written in the Studio replaces the default");
+  const custom = resolveProfileData("about", { focus: ["Type design"], portrait_cutout: "" });
+  assert.deepEqual(custom.focus, ["Type design"], "focus written in the Studio replaces the default");
   assert.equal(custom.portrait_cutout, "", "and a cut-out removed there stays removed");
 });
