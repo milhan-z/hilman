@@ -430,3 +430,29 @@
     translate: 0 0;
   }
 }
+
+/* ── NotebookMoment (components/bits/notebook-moment.tsx) ──────────────
+   A Lottie drawing (public/lottie), played once and then held on its still.
+   The box is a square the server sends at its full size — the width from
+   the component, the height from the aspect ratio — so the drawing arriving
+   moves nothing. Its cap is zero-specificity, so a page can tighten it (the
+   404 keeps it inside 70vw). Lottie draws and moves its own SVG inside the
+   box; nothing here animates the drawing. The one thing this sheet adds is
+   for a moment whose still is not its last frame (the sent note leaves the
+   frame at the end): it goes back to the still and fades in on it, and only
+   with no motion preference. Reduced motion never plays at all. */
+.bits-moment {
+  display: block;
+  aspect-ratio: 1 / 1;
+}
+:where(.bits-moment) {
+  max-width: 100%;
+}
+.bits-moment > svg {
+  display: block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bits-moment[data-bits-moment="settled"] > svg {
+    animation: bits-fade 200ms var(--motion-ease-out);
+  }
+}

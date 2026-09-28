@@ -65,10 +65,13 @@ test("only the pieces that need the browser are client components", () => {
   // in-view: an IntersectionObserver. tally: the roll runs as a number
   // changes in front of you. photo-stack-hands: puts a print back, opens the
   // lightbox (the pile itself, photo-stack.tsx, is a server component).
+  // notebook-moment: fetches a Lottie drawing and its player after the page,
+  // and plays it once (the server sends only the empty box).
   const allowed = new Set([
     "components/bits/in-view.tsx",
     "components/bits/tally.tsx",
     "components/bits/photo-stack-hands.tsx",
+    "components/bits/notebook-moment.tsx",
   ]);
   for (const file of sources) {
     const client = /^["']use client["'];?/m.test(read(file));

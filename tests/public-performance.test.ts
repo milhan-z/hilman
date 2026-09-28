@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
 /**
@@ -21,6 +21,12 @@ const code = (path: string) =>
   source(path)
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+/** Every script under a directory, as a path from the repository root. */
+const scriptsIn = (dir: string): string[] =>
+  readdirSync(new URL(`../${dir}`, import.meta.url), { recursive: true, encoding: "utf8" })
+    .filter((path) => /\.(tsx?|jsx?|mjs)$/.test(path))
+    .map((path) => `${dir}/${path.split("\\").join("/")}`);
 
 /* ── what every public page downloads ─────────────────────── */
 
@@ -45,6 +51,44 @@ test("the site shell ships no animation library", () => {
   ]) {
     assert.ok(!code(path).includes("framer-motion"), `${path} does not import framer-motion`);
   }
+});
+
+test("Lottie is fetched by one component, after the page, and only where it draws", () => {
+  // lottie-web's light player is 46 KB gzipped. The one component that draws
+  // an illustrated moment fetches it, with the drawing, when a moment mounts:
+  // on /connect after a message is sent, and on the 404 page. Nothing else
+  // may import it, and that component never statically — a static import
+  // would put the player in the page's own JavaScript, or in a chunk every
+  // page shares (docs/HILMAN-BITS.md, "Lottie: illustrated moments").
+  const moment = "components/bits/notebook-moment.tsx";
+  for (const path of ["app", "components", "lib"].flatMap(scriptsIn)) {
+    if (path !== moment) assert.ok(!code(path).includes("lottie-web"), `${path} does not import lottie-web`);
+  }
+  const src = code(moment);
+  const uses = [...src.matchAll(/lottie-web[^"']*/g)];
+  assert.ok(uses.length > 0, "the moment loads the player");
+  for (const use of uses) {
+    const before = src.slice(0, use.index);
+    assert.match(before, /\bimport\(\s*["']$/, `${moment}: lottie-web only through import(), never a static import`);
+    assert.equal(use[0], "lottie-web/build/player/lottie_light", "the light SVG player, not the full build");
+  }
+  assert.match(src, /Promise\.all\(\[\s*import\("lottie-web\/build\/player\/lottie_light"\),\s*fetch\(src\)/, "inside the component, with the drawing");
+
+  // Only Connect's success and the 404 page mount a moment; the shell
+  // every page is drawn in knows nothing about them.
+  const users = ["app", "components", "lib"]
+    .flatMap(scriptsIn)
+    .filter((path) => path !== moment && code(path).includes("notebook-moment"));
+  assert.deepEqual(users.sort(), ["app/not-found.tsx", "components/connect-form.tsx"]);
+  for (const path of ["app/layout.tsx", "app/(site)/layout.tsx", "components/site-nav.tsx", "components/site-footer.tsx"]) {
+    assert.ok(!/lottie|NotebookMoment/i.test(code(path)), `${path} knows nothing about Lottie`);
+  }
+
+  // One new dependency, pinned; the .lottie files and their players stay out.
+  const pkg = JSON.parse(source("package.json"));
+  assert.equal(pkg.dependencies["lottie-web"], "5.13.0", "lottie-web is pinned to the version that was measured");
+  const all = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
+  assert.deepEqual(all.filter((name) => /lottie/i.test(name)), ["lottie-web"], "no dotLottie player alongside it");
 });
 
 test("the explorers load the animation engine after the list, not before it", () => {

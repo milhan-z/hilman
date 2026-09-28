@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { sendMessage, type ConnectState } from "@/app/(site)/connect/actions";
+import { NotebookMoment } from "@/components/bits/notebook-moment";
 
 const labelCls = "mb-1.5 block font-mono text-2xs uppercase tracking-widest text-faint";
 const inputCls =
@@ -30,6 +31,11 @@ export function ConnectForm() {
   if (state.status === "success") {
     return (
       <div className="rounded-md border border-line bg-surface p-8 text-center shadow-card">
+        {/* The note, signed and sent: a drawing on a scrap of the notebook's
+            cream paper, which is light in either theme. */}
+        <div className="portrait-paper mx-auto mb-6 w-fit max-w-full">
+          <NotebookMoment src="/lottie/sent-note.json" stillFrame={{ marker: "static" }} size={200} playOn="mount" />
+        </div>
         <p className="font-display text-2xl font-semibold">Got it. Thanks!</p>
         <p className="mt-2 text-soft">Your note is on my desk — I’ll get back to you soon.</p>
         <p className="mt-3 font-hand text-lg text-faint">probably with too many follow-up questions</p>

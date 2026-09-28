@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NotebookMoment } from "@/components/bits/notebook-moment";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
 /**
@@ -8,10 +9,29 @@ import { DEFAULT_SETTINGS } from "@/lib/types";
  * the only way on used to be the one button back to the cover. Somebody who
  * followed an old link to a project usually wants the projects, not the home
  * page, so the main sections are offered as well.
+ *
+ * Next renders this file in two ways. For a URL with no route at all it is
+ * the page itself, and gets a page's props. But a copy of it, finished, is
+ * also sent inside every other page, ready for the moment that page calls
+ * notFound() — and a client component in that copy is downloaded by every
+ * page whether it is ever shown or not. Measured: the card from the drawer
+ * in that copy put 4.5 KB of gzipped JavaScript on Home, Works, Journal,
+ * About and the Lab (the component, and a second copy of the link code with
+ * it). So the card is only drawn where this is the page; a missing work or
+ * journal entry gets the same page without it.
  */
-export default function NotFound() {
+export default function NotFound({ params }: { params?: Promise<unknown> }) {
+  const isPage = params !== undefined;
   return (
     <div className="dotgrid flex min-h-screen flex-col items-center justify-center px-5 py-16 text-center">
+      {/* The card pulled from the drawer, drawn on the notebook's cream paper
+          (light in either theme). At most 70% of a phone's width, so the
+          title below stays on the first screen. */}
+      {isPage && (
+        <div className="portrait-paper mb-8 max-w-full">
+          <NotebookMoment src="/lottie/page-not-filed.json" stillFrame="last" size={240} playOn="view" className="max-w-[70vw]" />
+        </div>
+      )}
       <p className="font-mono text-2xs uppercase tracking-[0.3em] text-faint">Error 404 / page not filed</p>
       <p className="mt-5 font-hand text-2xl text-faint">flipped through every page…</p>
       <h1 className="mt-2 font-display text-4xl font-bold sm:text-5xl">

@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { EditorialReveal, revealStagger } from "../components/bits/editorial-reveal";
 import { HandDrawnReveal, PEN_SHAPES } from "../components/bits/hand-drawn-reveal";
 import { ImagePeek, cssUrl } from "../components/bits/image-peek";
+import { NotebookMoment } from "../components/bits/notebook-moment";
 import { PaperCard, paperTilt } from "../components/bits/paper-card";
 import { PhotoStack } from "../components/bits/photo-stack";
 import { Tally, tallyRuns } from "../components/bits/tally";
@@ -16,6 +17,7 @@ import { BlockRenderer } from "../components/blocks/renderer";
 import { settleDelay } from "../components/bits/pile";
 import { PersonalMoments, momentItems } from "../components/personal-moments";
 import { PrevNext } from "../components/prev-next";
+import NotFound from "../app/not-found";
 import { formatReaders } from "../lib/readers";
 import type { Block } from "../lib/types";
 
@@ -551,4 +553,75 @@ test("previous and next are lifted cards, with the next page's photograph behind
   assert.match(works, /image: p\.thumbnail_public_id/);
   assert.match(journal, /image: p\.cover_public_id/);
   assert.match(readFileSync(new URL("../components/journal-card.tsx", import.meta.url), "utf8"), /<ImagePeek src=\{post\.cover_public_id\} \/>/);
+});
+
+/* ── NotebookMoment ───────────────────────────────────────── */
+
+const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+
+test("a moment is sent as an empty square: its place kept, and nothing to read or focus", () => {
+  assert.equal(
+    html(h(NotebookMoment, { src: "/lottie/sent-note.json", stillFrame: { marker: "static" }, size: 200, playOn: "mount" })),
+    '<div aria-hidden="true" role="presentation" class="bits-moment" style="width:200px"></div>'
+  );
+  assert.equal(
+    html(h(NotebookMoment, { src: "/lottie/page-not-filed.json", stillFrame: "last", size: 240, playOn: "view", className: "max-w-[70vw]" })),
+    '<div aria-hidden="true" role="presentation" class="bits-moment max-w-[70vw]" style="width:240px"></div>'
+  );
+});
+
+test("the square holds its height before the drawing arrives, and only the sent note's return fades", () => {
+  const css = read("components/bits/bits.css");
+  const section = css.slice(css.indexOf("/* ── NotebookMoment"));
+  assert.match(section, /\.bits-moment \{\s*display: block;\s*aspect-ratio: 1 \/ 1;/, "a square from the first paint");
+  assert.match(section, /:where\(\.bits-moment\) \{\s*max-width: 100%;/, "never wider than its sheet, and a page may cap it further");
+  assert.match(
+    section,
+    /@media \(prefers-reduced-motion: no-preference\) \{\s*\.bits-moment\[data-bits-moment="settled"\] > svg \{\s*animation: bits-fade 200ms var\(--motion-ease-out\);/,
+    "the fade back onto the still is motion, and waits for no-preference"
+  );
+});
+
+test("a moment plays once, never loops, and is taken down with its page", () => {
+  const src = read("components/bits/notebook-moment.tsx");
+  assert.match(src, /renderer: "svg",\s*loop: false,\s*autoplay: false,/);
+  assert.match(src, /rendererSettings: \{ preserveAspectRatio: "xMidYMid meet", progressiveLoad: true \}/);
+  assert.match(src, /goToAndStop\(current\.still, true\)/, "reduced motion is shown the still, never the film");
+  assert.match(src, /return \(\) => \{[^}]*animation\.destroy\(\)/, "destroyed on unmount");
+});
+
+test("the drawings rest where the component expects them to", () => {
+  // The sent note leaves the frame at the end, so its still is a marker
+  // inside it; the card from the drawer ends on its still.
+  const note = JSON.parse(read("public/lottie/sent-note.json"));
+  const still = note.markers?.find((marker: { cm?: string }) => marker.cm === "static");
+  assert.ok(still && still.tm > note.ip && still.tm < note.op - 1, "the sent note's still is its `static` marker, before the end");
+  const card = JSON.parse(read("public/lottie/page-not-filed.json"));
+  assert.ok(card.op - card.ip > 1 && !card.markers?.length, "the card from the drawer rests on its last frame");
+  for (const drawing of [note, card]) {
+    assert.equal(drawing.w, drawing.h, "square, like the box it is drawn in");
+  }
+});
+
+test("the sent note appears only with the real answer from the server, above the words it illustrates", () => {
+  const form = read("components/connect-form.tsx");
+  const success = form.slice(form.indexOf('if (state.status === "success")'), form.indexOf("<form"));
+  assert.match(
+    success,
+    /<div className="portrait-paper mx-auto mb-6 w-fit max-w-full">\s*<NotebookMoment src="\/lottie\/sent-note\.json" stillFrame=\{\{ marker: "static" \}\} size=\{200\} playOn="mount" \/>\s*<\/div>\s*<p className="font-display text-2xl font-semibold">Got it\. Thanks!<\/p>/
+  );
+  assert.equal((form.match(/<NotebookMoment/g) ?? []).length, 1, "and nowhere else on the page");
+});
+
+test("the 404 draws its card only where it is the page, never in the copy every page carries", () => {
+  // Next sends a finished not-found inside every page, for a page that calls
+  // notFound(); a client component there is downloaded by all of them.
+  const copy = html(h(NotFound, {}));
+  assert.ok(!copy.includes("bits-moment"), "the copy inside every page has no drawing");
+  assert.match(copy, /^<div class="dotgrid[^"]*"><p class="font-mono[^"]*">Error 404 \/ page not filed<\/p>/);
+  const page = html(h(NotFound, { params: Promise.resolve({}) }));
+  assert.match(
+    page,
+    /^<div class="dotgrid[^"]*"><div class="portrait-paper mb-8 max-w-full"><div aria-hidden="true" role="presentation" class="bits-moment max-w-\[70vw\]" style="width:240px"><\/div><\/div><p class="font-mono[^"]*">Error 404 \/ page not filed<\/p>/
+  );
 });

@@ -45,7 +45,9 @@ primitives per page. Every page is inside it.
 | Works, Journal | The line under the title; the cards (on Journal, an entry's cover peeks out from behind its card as you point at it) | 2–3 |
 | A work, a journal entry | The details around the title (never the title); the reader count; previous and next, lifted cards with the page they lead to peeking out from behind them; a Stack gallery's prints settling onto the desk as it comes into view, when the author chose a Stack | 2–3, and the pile |
 | About | The pen under the signed "Hilman." on the card as the page opens; the marker behind the page's two headings as they come into view; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 1–2 |
-| Lab, Connect | The line under the title | 1 |
+| Lab | The line under the title | 1 |
+| Connect | The line under the title; after sending, the sent note (Lottie) | 2 |
+| 404 | The card pulled from the drawer (Lottie) | 1 |
 | Studio | Nothing — feedback only, 150 ms or less. (It downloads bits.css with the rest of the stylesheet; nothing there uses it.) | 0 |
 
 `WorkTransition` is not in the counts: it moves *between* two pages, while
@@ -118,6 +120,57 @@ not do, on purpose or by measurement:
     placeholder default. Randomness comes from a `seed`. No global side
     effects. `as` and `className` where they make sense. A prop exists
     because somebody needs to change it, not because it could be changed.
+
+## Lottie: illustrated moments
+
+HILMAN BITS is the interface's own motion: a line drawing itself under a
+title, a card lifting off the desk, a number rolling over. A few moments are
+illustrations instead — a small drawing acting something out, which CSS
+keyframes are the wrong tool for. Those are Lottie files in `public/lottie/`,
+drawn in the notebook's hand, and one component plays them: `NotebookMoment`
+(`components/bits/notebook-moment.tsx`). There are two.
+
+| Where | What it draws | Plays | Rests on |
+|---|---|---|---|
+| Connect, once a message has really been sent | A note written, highlighted and signed, then sent off out of the frame (`sent-note.json`, 2 s) | As it appears | The signed note: its `static` marker |
+| The 404 page | A drawer of index cards searched — "hm…" — and a card pulled out with a red "?" on it (`page-not-filed.json`, 1.8 s) | The first time it is on screen (straight away if it already is) | Its last frame |
+
+- **Both play once.** Like every entrance in the notebook, a moment never
+  loops, replays or runs backwards. That is why `page-not-filed-loop` is not
+  used (rule 10: no frame loops on public pages), and `filed-idea` waits for a
+  page with room for it (Home has its three). The drawings keep their own
+  timing, a little longer than the interface's 1.2 s: they are played as
+  drawn, never re-exported or re-timed.
+- **The player comes with the moment, and only there.** lottie-web's light
+  SVG build (5.13.0, pinned; 46 KB gzipped) and the drawing's JSON (under
+  2 KB gzipped) are fetched with `import()` and `fetch()` inside the component
+  when a moment mounts: on /connect after a successful send, and on the 404
+  page. Nothing about Lottie is in the site layout, the nav, the footer or a
+  chunk another page shares, and `tests/public-performance.test.ts` holds
+  that. (A page with a link to /connect prefetches that page's own chunk,
+  and the component comes with it: under a kilobyte, never the player.) No
+  page loads the `.lottie` files.
+- **Reduced motion holds the still.** A moment never plays: the drawing is
+  shown on its still, and a preference that turns on halfway through jumps
+  straight there. Where the last frame is not the finished drawing — the sent
+  note has left the frame by then — the moment goes back to its still when it
+  ends and fades in on it: 200 ms, and only with no motion preference.
+- **Decoration.** The box is `aria-hidden` with `role="presentation"`, holds
+  no text, takes no focus and moves no focus: the words beside it say what
+  happened, as they did before. It is a fixed square in the HTML, so nothing
+  shifts when the drawing arrives, and it is never the page's LCP element (an
+  inline SVG of paths is not a candidate). With no JavaScript, or when the
+  drawing fails to load, it stays an empty square.
+- **On cream.** A moment is drawn on the notebook's cream paper
+  (`.portrait-paper`), which is light in both themes.
+
+One exception, measured: the 404 draws its card only where the not-found
+file is the page — a URL with no route at all. Next also sends a finished
+copy of the not-found inside every other page, ready for a page that calls
+`notFound()`, and every page downloads the client code in that copy whether
+it is shown or not. With the card in it, Home, Works, Journal, About and the
+Lab each carried 4.5 KB more gzipped JavaScript. So a missing work or journal
+entry gets the same 404 without the card.
 
 ## Adding a primitive
 
