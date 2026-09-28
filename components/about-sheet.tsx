@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
+import { InkDoodle } from "@/components/bits/ink-doodle";
 import { Pic } from "@/components/cld-image";
 import { Button } from "@/components/ui";
 import { mediaSrc } from "@/lib/cloudinary";
@@ -118,6 +119,8 @@ export function AboutSheet({
             {note && (
               <p className={`${story.length ? "mt-6" : ""} max-w-[36rem] font-hand text-[1.5rem] font-semibold leading-snug text-cream-red sm:text-[1.6rem]`}>{note}</p>
             )}
+            {/* The pencil that wrote it, finishing with a line of highlighter. */}
+            <InkDoodle name="pencil-scribble" className="mt-4 w-36 sm:w-40" />
           </div>
         )}
       </div>

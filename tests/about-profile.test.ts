@@ -82,7 +82,7 @@ test("the card: the photo on its yellow block, the greeting signed in red, and t
   assert.match(out, /fetchPriority="high" loading="eager"/, "the page's LCP at every width: asked for first, never lazily");
   assert.match(out, /object-contain object-bottom/, "a cut-out stands on the block rather than being cropped to it");
   assert.match(sheet(live, { photo: { src: "https://images.example/p.jpg", alt: "Hilman", cutout: false } }), /object-cover/, "a plain portrait fills it");
-  assert.ok(!sheet(live, { photo: null }).includes("<img"), "and with no photo the card is words alone");
+  assert.ok(!/<img alt="Hilman/.test(sheet(live, { photo: null })), "and with no photo the card is words alone");
   assert.equal(aboutPhoto({ portrait_cutout: "https://images.example/c.png", portrait: "https://images.example/p.jpg" })?.cutout, true);
   assert.equal(aboutPhoto({}), null);
 
@@ -98,6 +98,7 @@ test("on the paper: the story in handwriting, the note in red, curiosity and exp
   assert.match(out, /<section aria-labelledby="about-hello" class="[^"]*grid/, "named by the card");
   assert.match(out, /<div class="[^"]*font-hand[^"]*text-cream-ink[^"]*"><p>My days move between/);
   assert.match(out, /<p class="[^"]*font-hand[^"]*text-cream-red[^"]*">The people are part of the story, too\.<\/p>/);
+  assert.match(out, /<\/p><span aria-hidden="true" class="bits-doodle[^"]*"[^>]*><img class="bits-doodle-poster" src="\/lottie\/pencil-scribble\.svg" alt=""/, "and the pencil that wrote it, on the same paper");
   assert.match(out, /<h3 id="about-experience"[^>]*><span aria-hidden="true" class="absolute[^"]*-z-10"><span class="bits-draw-holder"><span aria-hidden="true" data-trigger="view" class="bits-brush bits-marker text-hl"/, "the marker, waiting for the screen");
   assert.match(out, /<p class="text-sm italic text-cream-soft">July 2023 – July 2024<\/p>/);
   assert.match(out, /Coordinator of Daarul Rahman III Media<\/p><p class="mt-0\.5 text-\[0\.95rem\] text-cream-soft">PonPes Daarul Rahman III Depok<\/p>/);

@@ -22,6 +22,7 @@ that blurs in letter by letter, a page that scrolls itself.
 | `WorkTransition` | A card's photograph carried into the cover of the work it opens | React `<ViewTransition>` over the browser's View Transitions, compositor only | Wave 2 |
 | `PhotoStack` | A pile of prints, one on top with its words, the rest underneath; put the top one back to see the next | A server-drawn pile (CSS grid, one cell) + `InView`; its hands — put back, look closer — load after the page (Web Animations API for the lift) | Wave 2 |
 | `ImagePeek` | A photograph tucked behind a card, its top peeking out over the card's edge while you point at the card or focus it | CSS only: the picture is a `background-image` that only the hover and focus rules set, so it is fetched when first wanted and never on a phone. It does not follow the pointer | Wave 2 |
+| `InkDoodle` | A small ink drawing that draws itself once as it comes into view — Lottie files made for the notebook (`public/lottie/`) | The drawing's last frame is a plain SVG image in the HTML; where motion is welcome and scripts run, lottie-web's light SVG player (~46 KB gzip, its own chunk) is fetched when the doodle nears the screen and draws over it. Reduced motion, no script and print keep the image and never fetch the player | Wave 3 |
 | `ChapterMark` | An archive tab that changes with the chapter | One IntersectionObserver + CSS | Wave 3 |
 | `MarginNote` | A handwritten note in the margin | SVG + CSS (needs a Studio block) | Wave 3 |
 | MagneticNote, CursorReaction, PaperFloat | Ambient, always moving | — | Lab only |
@@ -41,11 +42,12 @@ primitives per page. Every page is inside it.
 
 | Page | What moves | Primitives |
 |---|---|---|
-| Home | The brush swept under "Hilman"; the lines under the title arriving in turn; section headings arriving as they scroll in; the pen under "together."; the cards | 3 |
+| Home | The brush swept under "Hilman"; the lines under the title arriving in turn; section headings arriving as they scroll in; the pen under "together."; the cards; a note card written on between the hero and the work, alone on its screen | 4 — the doodle is the one exception, below the first screen |
 | Works, Journal | The line under the title; the cards (on Journal, an entry's cover peeks out from behind its card as you point at it) | 2–3 |
 | A work, a journal entry | The details around the title (never the title); the reader count; previous and next, lifted cards with the page they lead to peeking out from behind them; a Stack gallery's prints settling onto the desk as it comes into view, when the author chose a Stack | 2–3, and the pile |
-| About | The pen under the signed "Hilman." on the card as the page opens; the marker behind the page's two headings as they come into view; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 1–2 |
-| Lab, Connect | The line under the title | 1 |
+| About | The pen under the signed "Hilman." on the card as the page opens; the marker behind the page's two headings as they come into view; the pencil that finishes the handwritten story; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 2–3 |
+| Lab, Connect | The line under the title; on Connect, once a note is sent, a paper plane drawn and flown on the thank-you slip | 1–2 |
+| Not found (404) | The notebook leafed through, a red question mark left on the page | 1 |
 | Studio | Nothing — feedback only, 150 ms or less. (It downloads bits.css with the rest of the stylesheet; nothing there uses it.) | 0 |
 
 `WorkTransition` is not in the counts: it moves *between* two pages, while

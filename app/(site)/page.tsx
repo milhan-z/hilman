@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { EditorialReveal } from "@/components/bits/editorial-reveal";
 import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
+import { InkDoodle } from "@/components/bits/ink-doodle";
 import { Pic } from "@/components/cld-image";
 import { JournalCard } from "@/components/journal-card";
 import { ProjectCard } from "@/components/project-card";
@@ -88,6 +89,9 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+      {/* An interlude between the hero and the work: a note card put down on
+          the desk and written on, once, as it comes into view. */}
+      <InkDoodle name="notebook-doodle" className="relative z-10 mx-auto -mb-6 w-40 sm:-mb-8 sm:w-48" />
       <section id="selected-work" className="scroll-mt-24 border-t border-line-strong pt-9" aria-label={showcase.length ? "Selected work" : "Creative interests"}>
         <EditorialReveal trigger="view"><SectionHeading index="01" title={showcase.length ? "A few things I’ve made" : "The things I love exploring"} href={showcase.length ? "/works" : undefined} hrefLabel="All work" /></EditorialReveal>
         {!projectsRes.ok ? <ContentUnavailable what="the work" compact /> : showcase.length ? (

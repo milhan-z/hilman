@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { InkDoodle } from "@/components/bits/ink-doodle";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
 /**
@@ -12,6 +13,7 @@ import { DEFAULT_SETTINGS } from "@/lib/types";
 export default function NotFound() {
   return (
     <div className="dotgrid flex min-h-screen flex-col items-center justify-center px-5 py-16 text-center">
+      <InkDoodle name="notebook-flip" className="mb-6 w-44 sm:w-52" />
       <p className="font-mono text-2xs uppercase tracking-[0.3em] text-faint">Error 404 / page not filed</p>
       <p className="mt-5 font-hand text-2xl text-faint">flipped through every page…</p>
       <h1 className="mt-2 font-display text-4xl font-bold sm:text-5xl">
