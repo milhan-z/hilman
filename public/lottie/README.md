@@ -8,6 +8,7 @@ There is at most one of these per screen, each plays **once**, and none is used 
 |---|---|---|
 | `sent-note` | Connect | only after the message was really sent |
 | `page-not-filed` | 404 (`app/not-found.tsx`) | on load |
+| `page-not-filed-loop` | 404, looping variant (see the note in its section) | on load, loops |
 | `notebook-doodle` | static illustration only (Home is at 3/3 primitives). Can move, animated, to Journal | — |
 
 Each asset comes in two forms:
@@ -21,6 +22,7 @@ The three are also uploaded to LottieFiles (workspace "milzhar's Workspace", Dra
 
 - Sent Note — https://app.lottiefiles.com/animation/8d821702-7626-4fe8-ad1f-86fdb1e97a6a
 - Page Not Filed — https://app.lottiefiles.com/animation/231c6aa5-707c-4270-be3a-13a8d21feb46
+- Page Not Filed (loop) — https://app.lottiefiles.com/animation/7fa7f980-6408-4cab-8e80-50312efb1ea1
 - Notebook Doodle v3 — https://app.lottiefiles.com/animation/a62af5ab-9f96-40de-b3b8-2eae787e1530
 
 ## Shared spec
@@ -41,6 +43,7 @@ The three are also uploaded to LottieFiles (workspace "milzhar's Workspace", Dra
 |---|---|---|---|---|---|---|---|
 | sent-note | 30 | 39 | 1.3 s | 7 (1 null + 6) | ink, cream, stabilo, red | 14.6 KB | 2.4 KB |
 | page-not-filed | 30 | 54 | 1.8 s | 7 | ink, cream, stabilo, red | 13.7 KB | 2.0 KB |
+| page-not-filed-loop | 30 | 96 | 3.2 s loop | 7 | ink, cream, stabilo, red | 12.8 KB | 2.1 KB |
 | notebook-doodle | 30 | 48 | 1.6 s | 7 (1 null + 6) | ink, cream, stabilo | 10.3 KB | 2.2 KB |
 
 ## sent-note — Connect success
@@ -68,6 +71,25 @@ An archive drawer is searched. The marked card is pulled up, and it is empty: "h
 | 0.87–1.40 s | 26–42 | "hmm…" is written in ink to its left |
 | 1.30–1.70 s | 39–51 | a red-pen "?" and its dot on the empty card |
 | 1.70–1.80 s | 51–54 | hold |
+
+## page-not-filed-loop — 404, seamless loop
+
+This is the same drawer as `page-not-filed`, but it never finishes. The drawer is always drawn. The search happens, then everything goes back where it was. Frame 96 is identical to frame 0, so it loops with no seam. Its dotLottie manifest says `loop: true`.
+
+| time | frames | what happens |
+|---|---|---|
+| 0.00–0.33 s | 0–10 | drawer at rest: three cards with tabs, label |
+| 0.33–0.53 s | 10–16 | stabilo swipe on the middle card's tab |
+| 0.50–0.87 s | 15–26 | the card is pulled up; it is empty |
+| 0.87–1.40 s | 26–42 | "hmm…" is written beside it |
+| 1.30–1.70 s | 39–51 | a red-pen "?" and its dot |
+| 1.70–2.10 s | 51–63 | hold. Marker **`static`** at frame 60 is the still to show for reduced motion |
+| 2.10–2.47 s | 63–74 | "?" and "hmm…" lift off the paper, in the order they were written |
+| 2.40–2.80 s | 72–84 | the card slides back into the drawer |
+| 2.73–2.93 s | 82–88 | the stabilo lifts off the tab |
+| 2.93–3.20 s | 88–96 | at rest → frame 0 |
+
+**Note.** Rule 10 of `docs/HILMAN-BITS.md` says "No frame loops on public pages", and 404 is a public page. If this variant ships, it needs a rule exception written down in the doc. It should also be paused off screen and never run under `prefers-reduced-motion`; show the `static` frame instead. Stopping after a few loops (for example 3) keeps it close to the rule. The one-shot `page-not-filed` needs no exception.
 
 ## notebook-doodle — v3 of "Hilman Bits - Notebook Doodle"
 
