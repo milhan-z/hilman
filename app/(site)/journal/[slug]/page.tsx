@@ -11,6 +11,9 @@ import { ContentUnavailablePage } from "@/components/content-unavailable";
 import { mediaSrc } from "@/lib/cloudinary";
 import { DEFAULT_SHARE_IMAGE, SITE_NAME } from "@/lib/site";
 import { formatDate } from "@/lib/utils";
+import { VoiceNotePlayer } from "@/components/journal/voice-note-player";
+import { r2PublicUrl } from "@/lib/r2-policy";
+import { publicVoiceNote } from "@/lib/voice-note";
 
 export const revalidate = 60;
 
@@ -70,6 +73,10 @@ export default async function JournalEntryPage(props: { params: Promise<{ slug: 
   const older = idx >= 0 && idx < all.length - 1 ? all[idx + 1] : null;
   const toItem = (p: typeof newer) => (p ? { href: `/journal/${p.slug}`, title: p.title, image: p.cover_public_id } : null);
 
+  // Only a recording the site can actually serve; anything else is dropped
+  // quietly, and the entry is simply text only. See lib/voice-note.ts.
+  const voiceNote = publicVoiceNote(post.voice_note);
+
   return (
     <article
       /* The one attribute that makes a journal entry read differently from a
@@ -106,6 +113,14 @@ export default async function JournalEntryPage(props: { params: Promise<{ slug: 
             </div>
           )}
         </EditorialReveal>
+        {/* Outside the reveal on purpose: a recording is not decoration, and
+            it is there — playable — before any script has run. */}
+        {voiceNote && (
+          <VoiceNotePlayer
+            src={r2PublicUrl(voiceNote.src, process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "")}
+            duration={voiceNote.duration_seconds}
+          />
+        )}
         <hr className="mt-8 border-t-2 border-ink" />
       </header>
 
