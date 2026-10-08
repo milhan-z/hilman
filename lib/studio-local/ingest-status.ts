@@ -11,16 +11,17 @@
  * because a video is slow enough that its absence reads as a freeze.
  */
 
+import type { PendingMediaKind } from "./media";
 import type { IngestProgress, MediaReport } from "./media-optimize";
 
 /** What to show while `phase` is in progress. */
 export function ingestLabel(
   progress: IngestProgress | null,
-  kind: "image" | "loop-clip" = "image"
+  kind: PendingMediaKind = "image"
 ): string {
   if (!progress) return "Keeping…";
 
-  const noun = kind === "loop-clip" ? "clip" : "photo";
+  const noun = kind === "loop-clip" ? "clip" : kind === "voice-note" ? "recording" : "photo";
 
   switch (progress.phase) {
     case "inspecting":

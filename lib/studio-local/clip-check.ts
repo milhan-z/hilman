@@ -45,7 +45,7 @@ const ALLOWED_EXTENSION = /\.mp4$/i;
 /** A "short clip", not a video. Long enough for a real demo, short enough that nobody mistakes it for one. */
 export const MAX_CLIP_SECONDS = 60;
 
-/** Matches MAX_CLIP_BYTES in app/api/r2/sign/route.ts. Kept in a comment, not an import — see that file. */
+/** Matches the loop-clip maxBytes in lib/r2-policy.ts, which the signing route enforces. */
 export const MAX_CLIP_BYTES = 50 * 1024 * 1024;
 
 const readableMB = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

@@ -165,3 +165,66 @@ export function PendingClip({
     </figure>
   );
 }
+
+/**
+ * A voice note that only exists on this phone.
+ *
+ * The same row as a photo or a clip — `usePendingPhoto()` does not care what
+ * kind it reads — drawn as what it is: a player the author can check, and
+ * the plain fact of where it is. No waveform; the recording is the point.
+ */
+export function PendingRecording({
+  recordingRef,
+  className,
+  onDiscard,
+}: {
+  recordingRef: string;
+  className?: string;
+  onDiscard?: () => void;
+}) {
+  const { entry, url } = usePendingPhoto(recordingRef);
+
+  if (!entry) {
+    return (
+      <p className={cn("text-sm text-soft", className)}>
+        This recording is no longer on this device.
+      </p>
+    );
+  }
+
+  return (
+    <figure className={cn("rounded-md border border-hl bg-raise", className)}>
+      <div className="px-3 pt-3">
+        <p className="truncate text-sm font-semibold text-ink">{entry.name}</p>
+        {url && (
+          // The author checking their own reading; the entry's text is its transcript.
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <audio src={url} controls preload="metadata" className="mt-2 block w-full" />
+        )}
+      </div>
+      <figcaption className="flex items-center justify-between gap-2 px-3 py-2">
+        <span className="inline-flex items-center gap-1.5 font-mono text-2xs uppercase tracking-wide text-soft">
+          <span
+            aria-hidden
+            className={cn("h-2 w-2 rounded-full", entry.blocked ? "bg-red" : "animate-pulse bg-hl")}
+          />
+          {entry.blocked ? "Upload refused" : "Saved on this device — waiting to upload"}
+        </span>
+        {onDiscard && (
+          <button
+            type="button"
+            onClick={onDiscard}
+            className="min-h-11 px-1 text-sm text-red transition-opacity hover:opacity-80"
+          >
+            Remove
+          </button>
+        )}
+      </figcaption>
+      {entry.blocked && entry.lastError && (
+        <p role="alert" className="px-3 pb-2 text-sm text-red">
+          {entry.lastError}
+        </p>
+      )}
+    </figure>
+  );
+}

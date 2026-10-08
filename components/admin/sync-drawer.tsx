@@ -19,7 +19,7 @@ import {
   storageReport,
   type PendingMedia,
 } from "@/lib/studio-local/media";
-import { PendingClip, PendingPhoto } from "./pending-media";
+import { PendingClip, PendingPhoto, PendingRecording } from "./pending-media";
 import { cn } from "@/lib/utils";
 
 /**
@@ -252,7 +252,14 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             {/* The heading names whatever is actually here — a queue holding
                 only loop clips should not be headed "Photos". */}
             <h3 id="sync-photos" className="mb-2 text-sm font-semibold text-ink">
-              {mediaNoun === "photo" ? "Photos" : mediaNoun === "clip" ? "Clips" : "Files"} on this
+              {mediaNoun === "photo"
+                ? "Photos"
+                : mediaNoun === "clip"
+                  ? "Clips"
+                  : mediaNoun === "recording"
+                    ? "Recordings"
+                    : "Files"}{" "}
+              on this
               phone
             </h3>
             <p className="mb-2.5 text-sm text-soft">
@@ -267,6 +274,13 @@ export function SyncDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                       for a file that was uploading perfectly well. */}
                   {photo.kind === "loop-clip" ? (
                     <PendingClip clipRef={photo.ref} onDiscard={() => void dropPhoto(photo.ref)} />
+                  ) : photo.kind === "voice-note" ? (
+                    /* No Remove here. A voice note is a field of its entry, and
+                       dropping the bytes from this list would leave the entry
+                       naming a recording that no longer exists — its whole save
+                       held back for ever. It is removed from the entry's
+                       Details, which clears the field in the same step. */
+                    <PendingRecording recordingRef={photo.ref} />
                   ) : (
                     <PendingPhoto photoRef={photo.ref} onDiscard={() => void dropPhoto(photo.ref)} />
                   )}

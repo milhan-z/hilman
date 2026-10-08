@@ -27,6 +27,7 @@ import {
 } from "../lib/studio-local/media-policy";
 import { ingestLabel, savingNote } from "../lib/studio-local/ingest-status";
 import { MAX_CLIP_BYTES, MAX_CLIP_SECONDS } from "../lib/studio-local/clip-check";
+import { R2_POLICIES, planR2Upload } from "../lib/r2-policy";
 
 /**
  * Smart media ingest: inspect, decide, optimize only if useful, validate.
@@ -301,8 +302,10 @@ test("a source too large to decode safely is refused rather than attempted", () 
 
 test("the final clip ceiling is still the one the server enforces", () => {
   assert.equal(MAX_CLIP_BYTES, 50 * 1024 * 1024);
-  const route = readFileSync(new URL("../app/api/r2/sign/route.ts", import.meta.url), "utf8");
-  assert.match(route, /50 \* 1024 \* 1024/, "the server cap is unchanged and independent");
+  // The signing route's limits live in lib/r2-policy.ts now; asked, not grepped.
+  assert.equal(R2_POLICIES["loop-clip"].maxBytes, MAX_CLIP_BYTES, "the server cap is unchanged");
+  const plan = planR2Upload({ contentType: "video/mp4", size: MAX_CLIP_BYTES + 1 }, () => "x");
+  assert.equal(plan.ok, false, "and the server refuses one byte more");
 });
 
 test("the duration ceiling is unchanged", () => {

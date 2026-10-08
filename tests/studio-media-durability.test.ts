@@ -81,6 +81,10 @@ function goodUploader() {
       calls.push(`clip:${name}`);
       return { url: "https://clips.example/one.mp4" };
     },
+    async voiceNote(_blob, contentType, assetId) {
+      calls.push(`voice-note:${contentType}`);
+      return { key: `voice-notes/${assetId}.m4a` };
+    },
   };
   return { uploader, calls };
 }
@@ -268,6 +272,9 @@ test("a file that uploaded but was not catalogued says so, durably", async () =>
     async clip() {
       throw new Error("not used");
     },
+    async voiceNote() {
+      throw new Error("not used");
+    },
   };
 
   const report = await flushPendingMedia(uploader);
@@ -353,6 +360,9 @@ test("a retried upload asks for the identity it asked for last time", async () =
       throw new UploadError("Cloudinary is briefly unavailable.", 503, "transfer");
     },
     async clip() {
+      throw new Error("not used");
+    },
+    async voiceNote() {
       throw new Error("not used");
     },
   };

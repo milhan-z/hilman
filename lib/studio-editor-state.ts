@@ -160,7 +160,11 @@ const REMOVE_PROMPTS: EditorAction = { id: "remove-prompts", label: "Remove them
  * `"file"` is the honest answer when a photo and a clip are both waiting: it
  * covers both without claiming the queue is one or the other.
  */
-export type UploadNoun = "photo" | "clip" | "file";
+export type UploadNoun = "photo" | "clip" | "recording" | "file";
+
+/** "Photo problem", "Recording uploading" — the noun as the first word of a status. */
+const capitalNoun = (noun: UploadNoun) =>
+  noun === "file" ? "Upload" : `${noun[0].toUpperCase()}${noun.slice(1)}`;
 
 const DEFAULT_NOUN: UploadNoun = "photo";
 
@@ -210,7 +214,7 @@ export function describeEditor(
   if (snapshot.failure === "MEDIA_FAILED" || (snapshot.uploads?.failed ?? 0) > 0) {
     const failed = snapshot.uploads?.failed ?? 1;
     const noun = snapshot.uploads?.noun ?? DEFAULT_NOUN;
-    const label = `${noun === "photo" ? "Photo" : noun === "clip" ? "Clip" : "Upload"} problem`;
+    const label = `${capitalNoun(noun)} problem`;
     return {
       state: "MEDIA_ERROR",
       publishLabel,
@@ -306,7 +310,7 @@ export function describeEditor(
       : uploading
         ? pendingUploads > 1
           ? `${pendingUploads} ${many(pendingUploads, noun)} uploading`
-          : `${noun === "photo" ? "Photo" : noun === "clip" ? "Clip" : "Upload"} uploading`
+          : `${capitalNoun(noun)} uploading`
         : snapshot.syncing
           ? "Syncing…"
           : savedOn(device);

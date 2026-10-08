@@ -2,6 +2,7 @@
 
 import { recordMedia } from "@/app/admin/actions";
 import { PENDING_PREFIX } from "../studio-media-refs";
+import { isVoiceNoteKey, voiceNoteMimeForKey, type VoiceNoteMimeType } from "../voice-note";
 import { checkClipFile } from "./clip-check";
 import { dbDelete, dbGetAll, dbPut } from "./db";
 import {
@@ -18,6 +19,7 @@ import {
 import { SIGN_TIMEOUT_MS, UPLOAD_TIMEOUT_MS, fetchWithTimeout } from "./net";
 import { classifyUploadFailure, UploadError } from "./retry-policy";
 import { newMutationId } from "./save";
+import { checkVoiceFile } from "./voice-check";
 
 /**
  * Media that exists only on this phone, so far.
@@ -52,7 +54,12 @@ import { newMutationId } from "./save";
  * and a clip taken offline would end up surviving differently.
  */
 
-export type PendingMediaKind = "image" | "loop-clip";
+export type PendingMediaKind = "image" | "loop-clip" | "voice-note";
+
+/** Everything below that branches on kind ends in this, so a new kind is a type error until it is handled. */
+export function unhandledKind(kind: never): never {
+  throw new Error(`No handling for media kind "${String(kind)}".`);
+}
 
 export interface PendingMedia {
   /** `pending:<uuid>` — the key, and the string blocks actually hold. */
@@ -72,8 +79,17 @@ export interface PendingMedia {
 }
 
 export type StashResult =
-  | { ok: true; ref: string; report?: MediaReport }
+  | { ok: true; ref: string; report?: MediaReport; voice?: StashedVoice }
   | { ok: false; reason: string };
+
+/** What a voice note's field needs to describe the recording before it uploads. */
+export interface StashedVoice {
+  mime: VoiceNoteMimeType;
+  /** Null when neither the file nor the browser could say. Never a refusal. */
+  duration: number | null;
+  bytes: number;
+  name: string;
+}
 
 /**
  * How much of the browser's storage allowance we are willing to hold.
@@ -149,6 +165,10 @@ const readable = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
  * but now on the way out rather than the way in. A MOV that the optimizer
  * managed to normalize into an MP4 passes it; one that could not be normalized
  * meets exactly the refusal it always did.
+ *
+ * A voice note skips optimization entirely — the recording is stored exactly
+ * as the author made it — and is gated by `checkVoiceFile()` instead, on the
+ * way in: container, codec, size. See lib/studio-local/voice-check.ts.
  */
 export async function stashMedia(
   file: File,
@@ -169,31 +189,57 @@ export async function stashMedia(
      and across the network, so it is the one the limits are about. */
   let kept = file;
   let optimization: MediaReport | undefined;
+  let voice: StashedVoice | undefined;
 
-  try {
-    const outcome = await optimizeForIngest(file, kind, onProgress);
-    kept = outcome.file;
-    optimization = outcome.report;
-  } catch (error) {
-    // The only failure worth refusing over: a source too big to process
-    // without taking the tab down. Everything else fell back to the original
-    // inside the optimizer and never reaches here.
-    if (error instanceof MediaTooLargeError) {
-      return { ok: false, reason: error.message };
+  if (kind !== "voice-note") {
+    try {
+      const outcome = await optimizeForIngest(file, kind, onProgress);
+      kept = outcome.file;
+      optimization = outcome.report;
+    } catch (error) {
+      // The only failure worth refusing over: a source too big to process
+      // without taking the tab down. Everything else fell back to the original
+      // inside the optimizer and never reaches here.
+      if (error instanceof MediaTooLargeError) {
+        return { ok: false, reason: error.message };
+      }
     }
   }
 
-  if (kind === "loop-clip") {
-    // Still the gate it always was, now applied to the finished clip — so a
-    // MOV that was normalized into an MP4 passes, and one that could not be
-    // gets exactly the refusal it got before.
-    const clip = await checkClipFile(kept);
-    if (!clip.ok) return { ok: false, reason: clip.reason! };
-  } else if (kept.size > MAX_FILE_BYTES) {
-    return {
-      ok: false,
-      reason: `That file is ${readable(kept.size)}. Keeping something that large on the phone risks pushing your drafts out of storage — upload it from a computer instead.`,
-    };
+  switch (kind) {
+    case "loop-clip": {
+      // Still the gate it always was, now applied to the finished clip — so a
+      // MOV that was normalized into an MP4 passes, and one that could not be
+      // gets exactly the refusal it got before.
+      const clip = await checkClipFile(kept);
+      if (!clip.ok) return { ok: false, reason: clip.reason! };
+      break;
+    }
+    case "voice-note": {
+      onProgress?.({ phase: "validating" });
+      const check = await checkVoiceFile(kept);
+      if (!check.ok) return { ok: false, reason: check.reason };
+      voice = {
+        mime: check.mime,
+        // Whatever the file itself says. An MP3 has no index to read a length
+        // from; the field asks the browser afterwards, so storing never waits
+        // on a probe that some browsers take their time over.
+        duration: check.duration,
+        bytes: kept.size,
+        name: kept.name || (check.mime === "audio/mpeg" ? "recording.mp3" : "recording.m4a"),
+      };
+      break;
+    }
+    case "image":
+      if (kept.size > MAX_FILE_BYTES) {
+        return {
+          ok: false,
+          reason: `That file is ${readable(kept.size)}. Keeping something that large on the phone risks pushing your drafts out of storage — upload it from a computer instead.`,
+        };
+      }
+      break;
+    default:
+      return unhandledKind(kind);
   }
 
   const report = await storageReport();
@@ -211,8 +257,10 @@ export async function stashMedia(
     ref,
     kind,
     blob: kept,
-    name: kept.name || (kind === "loop-clip" ? "clip.mp4" : "photo"),
-    type: kept.type || "application/octet-stream",
+    name: voice?.name ?? (kept.name || (kind === "loop-clip" ? "clip.mp4" : "photo")),
+    // A voice note's type is the one its bytes were judged to be, normalised
+    // (audio/x-m4a → audio/mp4): it is what gets signed and served.
+    type: voice?.mime ?? (kept.type || "application/octet-stream"),
     size: kept.size,
     folder: folder.trim() || "hilman",
     capturedAt: new Date().toISOString(),
@@ -226,7 +274,7 @@ export async function stashMedia(
     };
   }
 
-  return { ok: true, ref, report: optimization };
+  return { ok: true, ref, report: optimization, ...(voice ? { voice } : {}) };
 }
 
 export async function listPendingMedia(): Promise<PendingMedia[]> {
@@ -362,31 +410,43 @@ export async function uploadAsset(
 }
 
 /**
- * Signed upload, R2's shape:
- * 1. ask our server to presign one PUT for this exact size and content-type
- * 2. PUT the bytes straight to that URL
+ * Signed upload to R2, for the kinds that live there: Loop Clips and voice
+ * notes. No media-library bookkeeping for either in v1, because nothing yet
+ * asks to browse or reuse one.
  *
- * There is no step 3. R2 only stores files — no transform pipeline, and no
- * media-library bookkeeping for v1, because nothing yet asks to browse or
- * reuse a previously uploaded clip. What comes back is the finished public
- * URL, not an id a display-time helper still has to resolve: unlike a
- * Cloudinary `public_id`, this is already the value `<video src>` will use.
+ * The server decides where the file goes and what it may be — see the policy
+ * table in lib/r2-policy.ts. This only says which kind it is, what
+ * type, how big, and the placeholder's uuid, so a retry lands on the same
+ * object instead of making another.
+ *
+ * Returns both names for the object. A Loop Clip block stores the public URL,
+ * which is already what `<video src>` uses; a voice note stores the key and
+ * the page resolves it, so the database does not depend on the media domain.
  */
-async function uploadClip(
+/**
+ * Long enough for a large file on a weak signal: the usual deadline, or a
+ * second for every 64 KB, whichever is longer. A 25 MB recording at a flat
+ * two minutes needs 1.7 Mbit/s up, which a phone outdoors often does not
+ * have — and a deadline every attempt misses is an upload that never lands.
+ */
+export function uploadDeadline(bytes: number): number {
+  return Math.max(UPLOAD_TIMEOUT_MS, Math.ceil(bytes / (64 * 1024)) * 1000);
+}
+
+async function uploadToR2(
+  kind: "loop-clip" | "voice-note",
   file: Blob,
-  name: string,
-  folder = "clips",
+  contentType: string,
   assetId?: string
-): Promise<{ url: string }> {
+): Promise<{ key: string; publicUrl: string }> {
   const signRes = await fetchWithTimeout(
     "/api/r2/sign",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        folder,
-        filename: name,
-        contentType: "video/mp4",
+        kind,
+        contentType,
         size: file.size,
         ...(assetId ? { assetId } : {}),
       }),
@@ -397,18 +457,27 @@ async function uploadClip(
     const err = await signRes.json().catch(() => ({}));
     throw new UploadError(err.error ?? "Could not sign upload", signRes.status, "sign");
   }
-  const { uploadUrl, publicUrl } = await signRes.json();
+  const { uploadUrl, key, publicUrl } = await signRes.json();
+
+  // The key is about to become the only record of where these bytes went —
+  // the local copy is released once it is written down. A voice note's key
+  // must be one the database will accept, or the entry's save would be held
+  // for ever behind a recording that no longer exists anywhere. Refused as
+  // permanent, so the bytes stay and the author sees why.
+  if (kind === "voice-note" && !(isVoiceNoteKey(key) && voiceNoteMimeForKey(key) === contentType)) {
+    throw new UploadError("The server named a place for this recording that the site can't use.", 400, "sign");
+  }
 
   const res = await fetchWithTimeout(
     uploadUrl,
-    { method: "PUT", body: file, headers: { "Content-Type": "video/mp4" } },
-    UPLOAD_TIMEOUT_MS
+    { method: "PUT", body: file, headers: { "Content-Type": contentType } },
+    uploadDeadline(file.size)
   );
   if (!res.ok) {
     throw new UploadError(`Upload to R2 failed (${res.status}).`, res.status, "transfer");
   }
 
-  return { url: publicUrl };
+  return { key, publicUrl };
 }
 
 export interface MediaFlushReport {
@@ -439,11 +508,18 @@ export interface MediaFlushReport {
 export interface MediaUploader {
   image(file: Blob, name: string, folder: string, assetId?: string): Promise<UploadedAsset>;
   clip(file: Blob, name: string, folder: string, assetId?: string): Promise<{ url: string }>;
+  /** Resolves to the R2 key — what `voice_note.src` stores. */
+  voiceNote(file: Blob, contentType: string, assetId?: string): Promise<{ key: string }>;
 }
 
 const liveUploader: MediaUploader = {
   image: (file, name, folder, assetId) => uploadAsset(file, name, folder, assetId),
-  clip: (file, name, folder, assetId) => uploadClip(file, name, folder, assetId),
+  clip: async (file, _name, _folder, assetId) => ({
+    url: (await uploadToR2("loop-clip", file, "video/mp4", assetId)).publicUrl,
+  }),
+  voiceNote: async (file, contentType, assetId) => ({
+    key: (await uploadToR2("voice-note", file, contentType, assetId)).key,
+  }),
 };
 
 /**
@@ -481,6 +557,27 @@ export interface FlushIo {
  * Step 2 failing is survivable and step 3 is skipped when it does: the local
  * copy is then the only route back to that photograph, so it stays.
  */
+/** One stashed file to wherever its kind lives, and the reference that replaces its placeholder. */
+async function uploadOne(
+  uploader: MediaUploader,
+  item: PendingMedia
+): Promise<{ reference: string; unrecorded?: string }> {
+  // Records written before `kind` existed read back without one; they were photos.
+  const kind = item.kind ?? "image";
+  switch (kind) {
+    case "image": {
+      const asset = await uploader.image(item.blob, item.name, item.folder, assetIdOf(item.ref));
+      return { reference: asset.public_id, unrecorded: asset.unrecorded };
+    }
+    case "loop-clip":
+      return { reference: (await uploader.clip(item.blob, item.name, item.folder, assetIdOf(item.ref))).url };
+    case "voice-note":
+      return { reference: (await uploader.voiceNote(item.blob, item.type, assetIdOf(item.ref))).key };
+    default:
+      return unhandledKind(kind);
+  }
+}
+
 export async function flushPendingMedia(
   uploader: MediaUploader = liveUploader,
   io: FlushIo = {}
@@ -510,13 +607,7 @@ export async function flushPendingMedia(
     }
 
     try {
-      const outcome =
-        item.kind === "loop-clip"
-          ? { reference: (await uploader.clip(item.blob, item.name, item.folder, assetIdOf(item.ref))).url }
-          : await (async () => {
-              const asset = await uploader.image(item.blob, item.name, item.folder, assetIdOf(item.ref));
-              return { reference: asset.public_id, unrecorded: asset.unrecorded };
-            })();
+      const outcome = await uploadOne(uploader, item);
 
       const stored = await remember({
         ref: item.ref,

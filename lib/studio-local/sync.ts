@@ -221,10 +221,10 @@ const emit = (event: SyncEvent) => {
  */
 export function uploadNoun(media: PendingMedia[]): UploadNoun {
   if (media.length === 0) return "photo";
-  const clips = media.filter((m) => m.kind === "loop-clip").length;
-  if (clips === 0) return "photo";
-  if (clips === media.length) return "clip";
-  return "file";
+  const kinds = new Set(media.map((m) => m.kind ?? "image"));
+  if (kinds.size > 1) return "file";
+  const [kind] = kinds;
+  return kind === "loop-clip" ? "clip" : kind === "voice-note" ? "recording" : "photo";
 }
 
 export async function refreshSyncState(): Promise<SyncState> {

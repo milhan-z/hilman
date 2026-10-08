@@ -233,3 +233,28 @@ What the review checked:
 - A CHECK violation (23514) maps to "rejected", not to a retry loop.
 
 Tests: `tests/journal-voice-note.test.ts` (42 tests). The full suite is 876 pass, plus the 2 known Windows failures in `bits-contract` and the 57 real-Postgres skips. Typecheck is clean.
+
+### Pass 2: media pipeline and R2
+
+What changed:
+- **Media kind.** `voice-note` is now a third `PendingMediaKind`. Every dispatch over kinds is an exhaustive `switch`, so a voice note cannot reach Cloudinary.
+- **Ingest check.** `lib/studio-local/voice-check.ts` decides from the file's own bytes; the label only turns away files that are plainly not audio.
+  - M4A: it walks the MP4 boxes to `moov` to read the codec and duration. ALAC, a video track, an unknown codec, and a missing index are all refused with actionable copy.
+  - MP3: it looks for two consecutive valid frame headers after any ID3 tags.
+  - No transcoding, and no new dependency.
+- **Signing.** `lib/r2-policy.ts` is the server-side table that maps a kind to its folder, allowed types, size limit and file extension. The client's `folder` is ignored. A request without `kind` is treated as a Loop Clip.
+- **Proxy.** `lib/r2-serve.ts` serves `clips/*.mp4` and `voice-notes/<uuid>.m4a|.mp3`. It supports Range, 206, 416 and HEAD. It always serves the allowlisted Content-Type, never the stored one.
+- **Upload deadline.** It now grows with file size, at about 64 KB/s, so a 25 MB recording is not timed out on weak signal.
+
+The opus review found no P0 or P1. I fixed these P2s before committing:
+1. A valid file with an unusual label (`audio/aac`, `video/mp4`) is now judged by its bytes.
+2. The MP3 check tolerates padding and stacked ID3 tags.
+3. The proxy no longer serves the stored Content-Type, which a presigned PUT does not bind.
+4. A voice-note key from the server is validated before the local bytes are released.
+5. The sync drawer no longer offers Remove for recordings. Removing one there would have left the entry naming a recording that no longer exists.
+6. Storing a file no longer waits on a browser duration probe.
+7. A truncated file is told apart from one this reader cannot parse.
+
+**Open risk, to settle in the approved real smoke test:** presigned URLs from `@aws-sdk` 3.1134 carry `x-amz-checksum-crc32` of an empty body. If R2 enforces it, every non-empty PUT fails with 400, and that would already affect Loop Clips. I did not change the shared client without evidence. If the smoke test shows the failure, set `requestChecksumCalculation: "WHEN_REQUIRED"` in `lib/r2-server.ts`.
+
+Tests: `tests/voice-note-media.test.ts` (93). `media-optimize` now asks the policy table for the clip limit instead of grepping the route file. The full suite is 969 pass, with only the 2 known `bits-contract` failures, plus 57 skips.

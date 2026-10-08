@@ -16,7 +16,7 @@ import type { JournalVoiceNote } from "./types";
  * so the rules can be tested on their own.
  */
 
-/** Largest recording Studio will keep or send. Mirrored in 0014 and /api/r2/sign. */
+/** Largest recording Studio will keep or send. Mirrored in 0014; lib/r2-policy.ts signs against it. */
 export const MAX_VOICE_NOTE_BYTES = 25 * 1024 * 1024;
 
 /** Longer than any narration this site will carry; a guard against nonsense, not an editorial limit. */
