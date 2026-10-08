@@ -11,6 +11,7 @@ import type { EditorDoc, EditorPatch } from "./editor-doc";
 import { STREAMS } from "@/lib/types";
 import type { TagRow } from "@/lib/types";
 import { slugify } from "@/lib/utils";
+import { VoiceNoteField } from "./voice-note-field";
 
 /**
  * The desktop settings panel.
@@ -143,6 +144,12 @@ export function MetaBar({ kind, doc, patch, allTags, published, readingMinutes }
               onSelectAsset={(id) => patch({ coverPublicId: id })}
             />
           </div>
+
+          {!isProject && (
+            <div className="sm:col-span-2">
+              <VoiceNoteField value={doc.voiceNote} onChange={(voiceNote) => patch({ voiceNote })} />
+            </div>
+          )}
 
           {isProject ? (
             <>

@@ -7,6 +7,7 @@ import { MobileSheet } from "../mobile-sheet";
 import { CheckRow, Field, Select, TextArea, TextInput } from "../fields";
 import { MediaField } from "../block-editors";
 import { TagField } from "../tag-field";
+import { VoiceNoteField } from "../voice-note-field";
 import { PublishBadge } from "./status-line";
 import type { EditorDoc, EditorPatch } from "../editor-doc";
 import { STREAMS, type Stream } from "@/lib/types";
@@ -165,6 +166,10 @@ export function MetadataSheet({
             onSelectAsset={(id) => patch({ coverPublicId: id })}
           />
         </div>
+
+        {!isProject && (
+          <VoiceNoteField value={doc.voiceNote} onChange={(voiceNote) => patch({ voiceNote })} />
+        )}
 
         {isProject && (
           <div>
