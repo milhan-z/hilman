@@ -1,7 +1,8 @@
 # Backup and restore
 
 Git holds the code. It does not hold a single word of the site's content — that
-lives in Supabase, and the images live in Cloudinary. Losing either one loses the
+lives in Supabase, the images live in Cloudinary, and Loop Clips and Journal
+voice notes live in Cloudflare R2. Losing any one of them loses part of the
 archive, and a backup you have never restored is not a backup.
 
 ## What has to be backed up
@@ -10,6 +11,7 @@ archive, and a backup you have never restored is not a backup.
 |---|---|---|
 | Supabase Postgres | projects, journal, pages, blocks, tags, settings, messages, media registry | none |
 | Cloudinary | every image and file | none |
+| Cloudflare R2 | Loop Clips (`clips/`) and Journal voice notes (`voice-notes/`) | none |
 | Git | code, migrations, design tokens | full |
 
 ## Supabase
@@ -50,6 +52,28 @@ npx cloudinary-cli download --folder hilman --output ./backups/media
 
 The `media` table and Cloudinary must be restored together: a database row whose
 `public_id` no longer exists renders as a broken image.
+
+## Cloudflare R2
+
+Nothing backs R2 up automatically, and there is no media-library row for its
+objects: the database holds the reference (a Loop Clip block's URL, a journal
+entry's `voice_note.src` key) and R2 holds the bytes. Copy the bucket with any
+S3-compatible tool, using an R2 API token with read access:
+
+```bash
+rclone copy r2:<bucket>/clips ./backups/r2/clips
+rclone copy r2:<bucket>/voice-notes ./backups/r2/voice-notes
+```
+
+Restore both halves together, as with Cloudinary.
+
+**Orphans are expected.** Studio never deletes from R2. Replacing or removing a
+voice note leaves the old file in `voice-notes/`, unreferenced — on purpose, so
+a failed save can never cost a recording. To find them for a later cleanup,
+list `voice-notes/` and compare against
+`select voice_note->>'src' from journal_posts where voice_note is not null`.
+Anything listed by the bucket and not by the query is unreferenced. Removed
+recordings stay reachable by anyone who has their exact URL until then.
 
 ## Restore — rehearse it, don't trust it
 
