@@ -3,10 +3,12 @@ import { PaperCard } from "./bits/paper-card";
 import { Stamp, Tag } from "./ui";
 import { formatDateParts } from "@/lib/dates";
 import { ReaderTally } from "./reader-tally";
+import { publicVoiceNote } from "@/lib/voice-note";
 import type { JournalPost } from "@/lib/types";
 
 export function JournalCard({ post }: { post: JournalPost }) {
   const { day, month, year } = formatDateParts(post.published_at);
+  const hasVoiceNote = publicVoiceNote(post.voice_note) !== null;
   return (
     <PaperCard
       href={`/journal/${post.slug}`}
@@ -26,6 +28,14 @@ export function JournalCard({ post }: { post: JournalPost }) {
       <div className="min-w-0">
         <div className="flex items-center gap-2 font-mono text-2xs uppercase tracking-wider text-faint tnum">
           <span>{post.reading_minutes} min read</span>
+          {hasVoiceNote && (
+            <>
+              <span aria-hidden className="text-line-strong">
+                /
+              </span>
+              <span>voice note</span>
+            </>
+          )}
           <ReaderTally kind="journal" id={post.id} reads={post.reads} separator />
           {post.featured && (
             <span className="ml-auto">
