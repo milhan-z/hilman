@@ -1,0 +1,215 @@
+# System evaluation and Journal Voice Notes — Pass 0
+
+Date: 8 October 2026. Branch `feature/journal-voice-notes`, created from `origin/master` at `29dc2df`. This pass was read-only: no feature code, no migrations applied, no uploads, no production access.
+
+Scope, as agreed: this evaluation exists to understand what Voice Notes depend on and to find blockers. Unrelated issues are logged in §6, not fixed.
+
+## 1. Baseline
+
+| Item | Value |
+| --- | --- |
+| Baseline commit | `29dc2df` feat(bits): two Lottie moments … (= `origin/master`) |
+| Local `master` | `5ac595d`, 38 commits behind `origin/master` — not used as a base |
+| Branch upstream | removed, so a bare `git push` cannot target `master` |
+| `npm test` (baseline) | 893 tests: 834 pass, **2 fail**, 57 skip. Duration about 39 seconds. |
+
+The 2 failures and 57 skips are unrelated to Voice Notes:
+- **Failures:** both are in `tests/bits-contract.test.ts:48,78`. The test expects POSIX path separators and fails on Windows.
+- **Skips:** these are real-Postgres tests that need `HILMAN_TEST_PG`. The PGlite tests do run.
+
+### `codex/ui-ux-evaluation` vs `origin/master`
+
+Six local commits are not on master:
+
+| Commit | Summary | Needed by Voice Notes? |
+| --- | --- | --- |
+| `32e90f3` | Journal search reset and sticky-header scroll offsets | No |
+| `22fcf14` | Studio dialog focus hook, desktop drawer focus, media picker keyboard | No. Master fixed the sheet-typing bug independently in `3687e1f`, and the two fixes overlap in `mobile-sheet.tsx`. |
+| `0195feb` | Audit doc | No |
+| `e122c70` | Mobile control sizes, page navigation | No |
+| `3e05412` | Homepage story and `journal-card.tsx` copy | No. It does touch `journal-card.tsx`, which Voice Notes also edits, so the two would conflict if both are merged later. |
+| `984abac` | Audit doc | No |
+
+Nothing was cherry-picked or merged. If those commits are wanted later, they need their own review and rebase onto master.
+
+## 2. Architecture map (what Voice Notes touch)
+
+```
+Studio editor (EditorDoc)            components/admin/editor-doc.ts
+  └ fieldsFor("journal")  ──────────► payload.fields
+local-first save                     lib/studio-local/save.ts, outbox.ts (IndexedDB)
+  └ hasPendingRefs gate (client)     lib/studio-local/sync.ts:291   (sendDirect :573 has none)
+media stash  pending:<uuid>          lib/studio-local/media.ts (kinds: image | loop-clip)
+  └ flushPendingMedia → uploader     image → Cloudinary, loop-clip → R2 (/api/r2/sign)
+  └ applyResolutions                 rewrites pending refs in queue/drafts/conflicts (field-agnostic)
+/api/studio/sync                     normaliseJournalFields allowlist (lib/studio-content.ts:82)
+  └ save_content_synced (0009)       digest/idempotency wrapper, passes p_data through
+      └ save_journal_post (0012)     explicit column list; every listed column overwritten
+public read                          lib/data.ts JOURNAL_SELECT = "*" + tags; RLS status='published'
+  └ /journal/[slug] (server comp.)   header: meta → title → excerpt → tags → <hr> → blocks
+  └ JournalCard                      "N min read · readers" mono line (journal-card.tsx:27-29)
+R2 public                            /api/r2/media/[...path] — clips/*.mp4 only, Range/206/416, HEAD
+```
+
+## 3. Findings that block or shape Voice Notes
+
+These come from the reliability-reviewer audit. I re-verified every P1 by reading the code.
+
+| ID | Sev | Finding | Consequence for the plan |
+| --- | --- | --- | --- |
+| VN-1 | P1 | `normaliseJournalFields` is a strict allowlist, and `save_journal_post` lists its columns explicitly. A `voice_note` key would be silently dropped. | Add the field deliberately in both places. |
+| VN-2 | P1 | The RPC overwrites every listed column on each save. Payloads without the new key will persist after deploy: queued outbox entries, old open tabs or PWA bundles, and restored recovery drafts. | **An absent key means keep. Explicit `null` means remove. An object means set.** This is the same rule `published_at` already uses. |
+| VN-3 | P1 | Nothing on the server refuses `pending:` refs. `sendDirect`, the fallback used when the outbox write fails (for example on quota), skips the client check. Storing 25 MB of audio locally makes quota failures more likely. | Add a server-side pending guard in the sync route, a SQL CHECK on `voice_note`, and a check in `sendDirect`. |
+| VN-4 | P1 | Media dispatch is binary: anything that is not `loop-clip` is treated as an image. A voice note would be "optimised" as an image and uploaded to Cloudinary. | Make every kind dispatch an exhaustive `switch` with a `never` check, and give voice notes their own path. |
+| VN-5 | P1 | The R2 sign route is hard-wired to `video/mp4`, 50 MB and `.mp4`, and **the folder is chosen by the client**. The proxy allows only `clips/*.mp4`. | Move to a server-side policy table keyed by kind, which sets prefix, MIME, size and extension. The proxy uses the same allowlist. |
+| VN-6 | P2 | `describeConflict` compares values with `String(a)`, so two different objects look identical. Project `meta` already has this bug. | Compare structurally. |
+| VN-7 | P2 | Recovery and dirty checks compare serialised `EditorDoc`s. A new key that is always present would make every old recovery copy look different. | Leave `voiceNote` out of the doc when there is no note, the same way `newTags` works. |
+| VN-8 | P2 | R2 objects are public by URL and cached as `immutable` for a year. With no deletion in V1, a removed note stays fetchable by anyone who has its URL. | Accepted by design for V1. Studio copy will say so honestly, and orphans are documented. |
+| VN-9 | P2 | R2 has no backup story (`docs/BACKUP.md` covers only Supabase and Cloudinary). | Document it. |
+| VN-10 | P2 | No test covers the sign route or the media proxy. | Add tests for both in Pass 2. |
+
+The audit also confirmed these properties, with no change needed:
+- **Deletion:** nothing in the repo deletes or lists R2 objects, and there is no cron, so a referenced note cannot be auto-deleted.
+- **Retries and replacement:** a retry reuses the same UUID key, so it is idempotent. A replacement gets a new key, so it never overwrites the old file.
+- **Pending refs:** the walkers and `applyResolutions` already cover nested objects such as `voice_note.src`.
+- **Public reads:** queries use `*`, so the new column flows through, and the anon RLS policy still hides drafts.
+- **Service worker:** it never intercepts `/api/`.
+- **Test harness:** it applies the latest migration automatically and includes an idempotency test, so migration 0014 is exercised without extra wiring.
+
+## 4. Proposed design
+
+### 4.1 Data model
+
+```ts
+// lib/types.ts
+export interface JournalVoiceNote {
+  src: string;                    // R2 key: "voice-notes/<uuid>.m4a" | "voice-notes/<uuid>.mp3"
+  mime_type: "audio/mp4" | "audio/mpeg";
+  duration_seconds: number | null; // null when it could not be read; never a blocker
+  bytes?: number;
+}
+// JournalPost
+voice_note?: JournalVoiceNote | null;
+```
+
+- **`src` holds the R2 key, not a URL.** The public URL is resolved on the server at render time from the existing R2 config, the same way the sign route chooses between the proxy and the custom domain. Storing a key keeps the DB valid if the media domain changes, and lets SQL validate the shape strictly.
+- **`audio/x-m4a` is normalised to `audio/mp4` before signing.** `audio/mp4` is the standard type and is what R2 will serve.
+
+### 4.2 Migration `0014_journal_voice_note.sql` (prepared and tested locally only)
+
+The migration will:
+- `alter table journal_posts add column if not exists voice_note jsonb;`
+- add a CHECK constraint, `journal_voice_note_shape`. It requires that `voice_note` is either null, or an object where:
+  - `src` matches `^voice-notes/[0-9a-f-]{36}\.(m4a|mp3)$`, which also rules out `pending:`;
+  - `mime_type` is `audio/mp4` or `audio/mpeg`;
+  - `duration_seconds` is null or a number between 0 and 7200;
+  - `bytes` is null or a number between 0 and 26214400.
+- restate `save_journal_post` from 0012 with exactly one change. On insert it stores the object, or null when the key is absent. On update:
+  ```sql
+  voice_note = case
+    when not (p_data ? 'voice_note')                     then voice_note   -- absent: keep
+    when jsonb_typeof(p_data -> 'voice_note') = 'null'   then null         -- explicit remove
+    else p_data -> 'voice_note' end
+  ```
+- restate the grants from 0012 and run `notify pgrst, 'reload schema'`. Every statement is idempotent.
+- leave `save_content_synced` untouched.
+
+### 4.3 Save path
+
+- **`EditorDoc.voiceNote?: JournalVoiceNote | null`.** It is omitted when there is no note.
+  - `docFromInitial` sets it only when the row has a note.
+  - Remove sets it to `null`.
+  - `fieldsFor("journal")` sends the key only when it is not `undefined`.
+- **`normaliseJournalFields`.** An absent key stays absent. `null` stays `null`. A valid object passes through. An invalid object, or one with a `pending:` src, is refused as a 400, never silently dropped.
+- **Sync route.** A server guard refuses any payload whose fields or blocks contain `pending:<uuid>`.
+- **`sendDirect`.** It gets the same `hasPendingRefs` check as the queued path.
+- **`describeConflict`.** It compares values structurally.
+
+### 4.4 Media pipeline (one pipeline, extended)
+
+- **Kinds.** `PendingMediaKind = "image" | "loop-clip" | "voice-note"`, and every dispatch over it becomes an exhaustive switch.
+- **Ingest checks** live in a new `lib/studio-local/voice-check.ts`. They run before anything is stored:
+  1. Type: the file's MIME type, or its extension (`.m4a`, `.mp3`) when the MIME is empty.
+  2. Magic bytes: `ftyp` for M4A, ID3 or an MPEG frame sync for MP3.
+  3. Size: 25 MB or less.
+  4. A probe using the existing, lazily loaded `mediabunny`. It reads the codec and duration only; there is no transcoding.
+     - Allowed codecs are `aac` and `mp3`.
+     - **ALAC is refused.** iPhone Voice Memos records ALAC when its "Lossless" setting is on, and Chrome and Firefox do not play ALAC. Copy: *"This recording uses Apple Lossless, which most browsers can't play. In Voice Memos set Audio Quality to Compressed, or export it as M4A or MP3."*
+     - If the probe fails, the file is still accepted when the type and magic bytes passed, with `duration_seconds = null`.
+  5. Error copy is actionable, for example *"This recording is too large. Export it as M4A or MP3 under 25 MB."*
+- **Storage order.** The file goes into IndexedDB before any network attempt. It gets the existing quota check, a `pending:<uuid>` ref, and the existing retry policy, outbox and resolution map.
+- **Optimiser.** A passthrough for `voice-note`.
+- **Upload.** The R2 uploader is generalised from `uploadClip` into `uploadToR2(kind, blob, contentType, assetId)` and sends the real MIME type.
+- **Sign route.** It takes `kind: "loop-clip" | "voice-note"`, and the server derives folder, MIME, size and extension:
+  - loop clip: `clips/`, `video/mp4`, 50 MB, `.mp4`;
+  - voice note: `voice-notes/`, `audio/mp4` → `.m4a` or `audio/mpeg` → `.mp3`, 25 MB.
+
+  A request without `kind` behaves as a loop clip. The client-chosen folder is ignored, which is a hardening step; current bundles already send `clips`.
+- **Proxy.** It allows `(clips, .mp4)` and `(voice-notes, .m4a|.mp3)`, and falls back to a Content-Type based on the extension. Range, HEAD and 416 behaviour is unchanged.
+- **Resolver.** A new `lib/voice-note.ts` holds the key validation and the key → public URL resolver, and is shared by the renderer and the tests.
+
+### 4.5 Replace / remove (never delete first)
+
+- **Replace.** The old `voice_note` stays in the DB, and on the public site, until a save containing the new resolved key succeeds. The publish gate already blocks while `pending:` refs exist. The old object becomes an orphan candidate.
+- **Remove.** The editor sets `voiceNote = null`, and the save sends an explicit `null`. The object becomes an orphan candidate only after that save succeeds.
+- **No deletion code in V1.** There is no `DeleteObject` and no garbage collector. Orphans are documented, and the bucket can be listed against `journal_posts.voice_note` in a later cleanup phase.
+- **Removing a note that is still pending** discards its local bytes immediately, the same way Loop Clip does. Those bytes never reached the network, and the author explicitly removed them.
+
+### 4.6 Studio UI
+
+`VoiceNoteField` is a journal-only component placed in Details, both the desktop `meta-bar.tsx` and the mobile `metadata-sheet.tsx`. It is not in the block palette.
+
+- **No note.** Shows "VOICE NOTE · Optional", "Read this entry in your own voice." and an **Upload recording** button. The file input accepts `audio/mp4,audio/x-m4a,audio/mpeg,.m4a,.mp3`.
+- **Pending.** Shows "Recording saved on this device", then "Waiting to upload", or "Upload refused" plus the reason. These reuse the existing `PendingClip` and ingest-status language rather than adding a parallel status system.
+- **Synced.** Shows a native preview player, the file name (the size when known) and the duration, with **Replace** and **Remove** buttons. The overall save/publish state stays with the existing editor status.
+- **Layout.** Targets 390px first. Raw R2 keys are never shown.
+
+### 4.7 Public player
+
+**Component.** `components/journal/voice-note-player.tsx` is a small `"use client"` island. It is rendered only when `voice_note` is valid, between the tags and the `<hr>`, inside the `max-w-3xl` reading column.
+
+**Server shell.** It shows the "VOICE NOTE" label, "Hilman reads this entry" and the duration in mono, and is visible without JavaScript. A `<noscript>` holds a native `<audio controls preload="metadata">` as the no-JS fallback.
+
+**Controls:**
+- a real play/pause `<button>` (`aria-label` "Play voice note" / "Pause voice note");
+- seeking with an `<input type="range">` that has an `aria-valuetext`;
+- elapsed and total time, which is not `aria-live`;
+- a rate button cycling 1× → 1.25× → 1.5×.
+
+**Behaviour:**
+- `preload="metadata"`, no autoplay, and no animation-frame loop; progress updates come from `timeupdate`.
+- The audio pauses and releases its source on unmount.
+- A small red dot shows while playing and does not pulse.
+
+**Look.** Paper surface, dark ink, a single yellow stroke, and a handwritten "read by h." in the existing handwriting font. No waveform, gradient or glass.
+
+**Size.** The client island should be about 3 KB. Entries without a note ship nothing.
+
+### 4.8 Journal card
+
+`JournalCard` adds "voice note" to the existing mono meta line when `post.voice_note` is present. The public query already selects `*`, so there is no extra query; the only cost is a few bytes of JSON per row.
+
+## 5. Implementation plan
+
+Each pass is one commit. Each worker gets exact files and completion criteria.
+
+| Pass | Work | Who | Opus review |
+| --- | --- | --- | --- |
+| 1 | Types, `JournalVoiceNote` validation (`lib/voice-note.ts`), migration 0014, `normaliseJournalFields`, `EditorDoc`/`fieldsFor`, server pending guard, `sendDirect` guard, `describeConflict`. Tests: absent=keep, null=remove, object=set, malformed/pending refused (TS and SQL), migration idempotent, upgrade from 0007/0012, old payloads keep the note. | Leader writes the code; `test-writer` writes tests from my case list | **Yes** |
+| 2 | Media kind `voice-note`, `voice-check.ts`, passthrough optimiser, generalised R2 uploader, sign-route policy table, proxy allowlist. Tests with mocked R2: signing per kind, path validation, Range/206/416/HEAD, MIME and size rejection, ALAC refusal, offline stash survives, resolution replaces pending, failed upload keeps old note. | Leader; `test-writer` | **Yes** |
+| 3 | `VoiceNoteField` in desktop and mobile Details | Leader; `ux-qa` at 390/430/768/1440 (**needs your login**) | No |
+| 4 | Public player and its placement | Leader; `ux-qa` covering keyboard, reduced motion, JS-off and widths | No |
+| 5 | Card marker | `scoped-implementer` | No |
+| 6 | Regression run (`npm test`, `typecheck`, `build`), bundle check, accessibility pass, final report, `docs/BACKUP.md` R2 note | Leader, `ux-qa` | **Yes, final** |
+
+## 6. Unrelated issues (logged, not fixed)
+
+| Sev | Issue |
+| --- | --- |
+| P1 | `bulkDeleteItems` (`app/admin/actions.ts:372-398`) still deletes blocks and then rows in two separate statements. This is the non-atomic pattern that 0012 fixed for single deletes. It should call `delete_content`. |
+| P2 | `tests/bits-contract.test.ts` fails on Windows because of path separators. |
+| P2 | A stale comment in `app/api/r2/sign/route.ts:43-48` refers to a constant, `MAX_LOOP_CLIP_BYTES`, that does not exist. |
+| P2 | `describeConflict` hides differences in project `meta`. This is fixed as a side effect of VN-6. |
+| P2 | Removing a pending Loop Clip discards its bytes immediately. If a recovery copy still references that ref, its save is held back indefinitely, and nothing detects the orphaned ref. |
+| P2 | R2 objects have no backup or restore procedure. |
+| Process | Local `master` is 38 commits behind `origin/master`. |
