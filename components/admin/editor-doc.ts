@@ -1,7 +1,8 @@
-import type { Block, JournalPost, Project, TagRow } from "@/lib/types";
+import type { Block, JournalPost, JournalVoiceNote, Project, TagRow } from "@/lib/types";
 import { readTimeMinutesNow } from "./read-time";
 import { authorDateInput, isoFromAuthorDate, sameAuthorDay } from "@/lib/dates";
 import { settleNewTags } from "@/lib/tags";
+import { checkVoiceNote } from "@/lib/voice-note";
 
 /**
  * Everything one project or journal entry is, while it is being edited.
@@ -77,6 +78,20 @@ export interface EditorDoc {
    * exactly as it did before this field existed.
    */
   newTags?: string[];
+  /**
+   * The journal entry's recording. Three states, and the save boundary keeps
+   * them apart (see voiceNote() in lib/studio-content.ts):
+   *
+   *   absent   the entry has no recording, or this document predates the
+   *            field. Nothing is sent, and the server keeps what it has.
+   *   null     the author removed it. Sent as an explicit removal.
+   *   object   the recording — `src` is `pending:<uuid>` until it uploads.
+   *
+   * Left out rather than null when there is none, like `newTags`: recovery
+   * copies and the dirty check compare serialised documents, and one written
+   * before this field existed has to compare equal to one written after.
+   */
+  voiceNote?: JournalVoiceNote | null;
   blocks: Block[];
 }
 
@@ -100,7 +115,17 @@ export function docFromInitial(initial: (Project & JournalPost) | null): EditorD
     publishedAt: initial?.published_at ?? null,
     tagIds: (initial?.tags ?? []).map((tag) => tag.id),
     blocks: initial?.blocks ?? [],
+    // Last, and in canonical key order: a recording added during the session
+    // is patched onto the end of the document too, and recovery compares
+    // serialised documents, so both have to come out byte-identical.
+    ...(initial?.voice_note ? { voiceNote: canonicalVoiceNote(initial.voice_note) } : {}),
   };
+}
+
+/** The stored recording with its keys in one fixed order, whatever order jsonb returned them in. */
+export function canonicalVoiceNote(note: JournalVoiceNote): JournalVoiceNote {
+  const check = checkVoiceNote(note, { allowPending: true });
+  return check.ok && check.value ? check.value : note;
 }
 
 /** The `meta` column, or an empty object while the JSON is mid-edit. */
@@ -170,6 +195,8 @@ export function fieldsFor(
     reading_minutes:
       readingMinutes ?? readTimeMinutesNow({ excerpt: doc.excerpt, blocks: doc.blocks }),
     ...publishedAtField(doc),
+    // Absent unless the document has an opinion; see EditorDoc.voiceNote.
+    ...(doc.voiceNote !== undefined ? { voice_note: doc.voiceNote } : {}),
   };
 }
 

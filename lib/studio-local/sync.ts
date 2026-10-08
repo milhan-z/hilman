@@ -571,6 +571,16 @@ async function applyOutcome(outcome: SyncOutcome, batch: QueuedMutation[]) {
  * "this could not be saved".
  */
 export async function sendDirect(mutation: SyncMutation): Promise<SyncOutcome | null> {
+  // The queue holds a save like this back until its upload finishes; this
+  // path has no queue to hold it in, so it says so instead of sending a
+  // placeholder the site could never resolve. The server refuses it too.
+  if (hasPendingRefs(mutation.payload)) {
+    const message =
+      "A photo or recording in this save is still only on this device and couldn't be stored here, so nothing was sent. Free up some space, or try again once it has uploaded.";
+    setState({ lastError: message });
+    return { status: "rejected", mutationId: mutation.mutationId, localId: mutation.localId, message };
+  }
+
   let response: Response;
   try {
     response = await fetchWithTimeout(

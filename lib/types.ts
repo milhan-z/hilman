@@ -125,12 +125,23 @@ export interface JournalPost {
   featured: boolean;
   reading_minutes: number;
   published_at: string | null;
+  /** The author reading this entry aloud, or null. See lib/voice-note.ts. */
+  voice_note?: JournalVoiceNote | null;
   created_at?: string;
   updated_at?: string;
   tags?: TagRow[];
   blocks?: Block[];
   /** How many people have read it — public reads only; see lib/readers.ts. */
   reads?: number;
+}
+
+export interface JournalVoiceNote {
+  /** An R2 key, `voice-notes/<uuid>.m4a|.mp3` — or, only before it uploads, `pending:<uuid>`. */
+  src: string;
+  mime_type: "audio/mp4" | "audio/mpeg";
+  /** Null when the browser could not read it; never a reason to refuse a recording. */
+  duration_seconds: number | null;
+  bytes?: number;
 }
 
 export interface PageRow {

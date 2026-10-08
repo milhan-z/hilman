@@ -9,6 +9,7 @@ import { readTimeMinutes } from "@/lib/read-time";
 import { resolveTagIds, tagFailureIsPermanent, type TagStore } from "@/lib/tags";
 import {
   describeMalformedMutation,
+  describeUnresolvedMedia,
   type ServerDocument,
   type SyncEntity,
   type SyncMutation,
@@ -105,6 +106,9 @@ async function applyMutation(
 
   if (malformed)
     return { status: "rejected", mutationId, localId, reason: "MALFORMED", message: malformed };
+
+  const unresolved = describeUnresolvedMedia(mutation.payload);
+  if (unresolved) return { status: "rejected", mutationId, localId, message: unresolved };
 
   const entity: SyncEntity = mutation.entity;
   const fields = normaliseFields(entity, mutation.payload.fields);

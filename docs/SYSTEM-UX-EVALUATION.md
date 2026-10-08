@@ -213,3 +213,23 @@ Each pass is one commit. Each worker gets exact files and completion criteria.
 | P2 | Removing a pending Loop Clip discards its bytes immediately. If a recovery copy still references that ref, its save is held back indefinitely, and nothing detects the orphaned ref. |
 | P2 | R2 objects have no backup or restore procedure. |
 | Process | Local `master` is 38 commits behind `origin/master`. |
+| P2 | When a direct send (the no-storage path) is rejected, `live-editor.tsx:628` still advances the "kept" snapshot, so the editor no longer looks dirty. The text stays on screen, the error is shown, and the leave-page warning still fires. Pre-existing; found in the Pass 1 review. |
+
+## 7. Progress log
+
+### Pass 1: data model, migration, save path
+
+The opus reliability review found no P0 or P1. I fixed these P2s before committing:
+- **Missing `mime_type`.** The CHECK accepted a note with no `mime_type`, because NULL passes a CHECK. Fixed with `coalesce(…, false)`.
+- **Unreadable duration or size.** These are now dropped (duration becomes null, size is omitted) instead of refusing the whole save, so the author's writing still syncs.
+- **Rejection message.** The pending-media rejection said the save would go automatically; it now tells the author to press Retry.
+- **Conflict screen.** It no longer lists keys that the save does not send.
+- **Key order.** A recording loaded from the DB and one patched in during the session now serialise identically, so there is no spurious recovery offer.
+
+What the review checked:
+- 0014's `save_journal_post` differs from 0012 only in `voice_note`.
+- Absent = keep holds end to end, including mutation-id replay through `save_content_synced`.
+- No other writer drops or clears the column.
+- A CHECK violation (23514) maps to "rejected", not to a retry loop.
+
+Tests: `tests/journal-voice-note.test.ts` (42 tests). The full suite is 876 pass, plus the 2 known Windows failures in `bits-contract` and the 57 real-Postgres skips. Typecheck is clean.

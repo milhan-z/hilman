@@ -1,5 +1,7 @@
 import { isRealCalendarDay } from "./dates";
+import type { JournalVoiceNote } from "./types";
 import { slugify } from "./utils";
+import { checkVoiceNote } from "./voice-note";
 
 /**
  * What a project row and a journal row are made of.
@@ -90,7 +92,31 @@ export function normaliseJournalFields(raw: Record<string, unknown>): ContentPay
     featured: flag(raw.featured),
     reading_minutes: text(raw.reading_minutes),
     ...publishedAt(raw.published_at),
+    ...voiceNote(raw),
   };
+}
+
+/**
+ * The entry's recording, three ways — and the difference is load-bearing.
+ *
+ *   absent   no key. The RPC keeps whatever recording the row already has.
+ *            Saves made before this field existed, still queued on a phone or
+ *            sent from a tab that has not reloaded, look exactly like this,
+ *            and they must not wipe a recording out.
+ *   null     an explicit removal, sent only when the author pressed Remove.
+ *   object   a stored recording, copied down to its known keys.
+ *
+ * An invalid value yields no key rather than null, for the same reason as
+ * publishedAt() above: the route refuses such a save before it gets here
+ * (describeMalformedMutation), and if anything ever slipped past, "keep" is
+ * the outcome that cannot lose a recording.
+ */
+function voiceNote(raw: Record<string, unknown>): { voice_note?: JournalVoiceNote | null } {
+  if (!Object.prototype.hasOwnProperty.call(raw, "voice_note") || raw.voice_note === undefined) {
+    return {};
+  }
+  const check = checkVoiceNote(raw.voice_note);
+  return check.ok ? { voice_note: check.value } : {};
 }
 
 export function normaliseFields(

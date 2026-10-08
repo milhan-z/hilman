@@ -1,6 +1,8 @@
 import { firstBlockProblem } from "./block-contract";
+import { hasPendingRefs } from "./studio-media-refs";
 import { describeBadTagNames } from "./tags";
 import type { Block } from "./types";
+import { checkVoiceNote } from "./voice-note";
 
 /**
  * The shape of a save that travelled through a queue.
@@ -155,7 +157,29 @@ export function describeMalformedMutation(value: unknown): string | null {
   const title = String((payload.fields as Record<string, unknown>).title ?? "").trim();
   if (!title) return "A title is needed before this can be saved.";
 
+  // Shape only. A recording still on the device is a valid thing to *queue*;
+  // whether it may be *stored* is describeUnresolvedMedia()'s question.
+  const fields = payload.fields as Record<string, unknown>;
+  if (m.entity === "journal" && fields.voice_note !== undefined) {
+    const check = checkVoiceNote(fields.voice_note, { allowPending: true });
+    if (!check.ok) return check.reason;
+  }
+
   return null;
+}
+
+/**
+ * Refuses a save that still names media that only exists on a device.
+ *
+ * The outbox holds such a save back until the upload finishes, so this
+ * should never fire. It is here because "should never" is the client's
+ * promise, and the database is the one place a `pending:<uuid>` must never
+ * reach: the public site would render a photo or a recording nobody can
+ * fetch. This is the server's half of that rule.
+ */
+export function describeUnresolvedMedia(payload: SyncPayload): string | null {
+  if (!hasPendingRefs(payload.fields) && !hasPendingRefs(payload.blocks)) return null;
+  return "This save still points at a photo or recording that is only on a device, so nothing was saved. Press Retry once it has uploaded.";
 }
 
 /**
@@ -206,9 +230,10 @@ export function describeConflict(
 
   const keys = new Set([...Object.keys(mine.fields), ...Object.keys(theirs.fields)]);
   for (const key of keys) {
-    const a = mine.fields[key] ?? "";
-    const b = theirs.fields[key] ?? "";
-    if (String(a) !== String(b)) differences.push(key);
+    // A key this save does not carry is one it leaves alone (published_at,
+    // voice_note, and the server's own columns), so it is not a disagreement.
+    if (!(key in mine.fields)) continue;
+    if (!sameValue(mine.fields[key] ?? "", theirs.fields[key] ?? "")) differences.push(key);
   }
 
   if (JSON.stringify(mine.blocks.map(strippedBlock)) !== JSON.stringify(theirs.blocks.map(strippedBlock)))
@@ -228,4 +253,26 @@ export function describeConflict(
 /** Block ids are local bookkeeping — two identical bodies should compare equal. */
 function strippedBlock(block: Block) {
   return { type: block.type, data: block.data ?? {} };
+}
+
+/**
+ * Equal as the editor would see it: scalars by their text, objects by their
+ * contents. String() alone turns every object into "[object Object]", which
+ * hid any change to a project's `meta` or a journal's voice note.
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+  const isObject = (v: unknown) => v !== null && typeof v === "object";
+  if (isObject(a) || isObject(b)) return stableJson(a) === stableJson(b);
+  return String(a) === String(b);
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
