@@ -258,3 +258,36 @@ The opus review found no P0 or P1. I fixed these P2s before committing:
 **Open risk, to settle in the approved real smoke test:** presigned URLs from `@aws-sdk` 3.1134 carry `x-amz-checksum-crc32` of an empty body. If R2 enforces it, every non-empty PUT fails with 400, and that would already affect Loop Clips. I did not change the shared client without evidence. If the smoke test shows the failure, set `requestChecksumCalculation: "WHEN_REQUIRED"` in `lib/r2-server.ts`.
 
 Tests: `tests/voice-note-media.test.ts` (93). `media-optimize` now asks the policy table for the clip limit instead of grepping the route file. The full suite is 969 pass, with only the 2 known `bits-contract` failures, plus 57 skips.
+
+### Passes 3–5: Studio field, public player, card marker
+
+- **Pass 3 (Studio field).** Voice Note sits in Details, desktop and mobile, for Journal entries only.
+- **Pass 4 (public player).** The player renders between the tags and the divider. It is server-rendered as a native `<audio controls>`, so it plays without JavaScript, and hydration swaps in the custom controls.
+- **Pass 5 (card marker).** Cards show "voice note" in the existing meta row.
+
+Player QA used a temporary dev-only page, never committed:
+- **Behaviour:** play, keyboard seek, the 1×/1.25×/1.5× speed control, only one narration playing at a time, a broken source, an unknown duration, and server HTML with native controls and no autoplay.
+- **Geometry:** no overflow at 390/430/768/1440, the player stays within the reading column, and every tap target is at least 44px.
+- **Contrast:** at least 6.5:1 in both themes.
+- **Bug found and fixed:** the cleanup removed `src`, which broke playback after a React StrictMode remount.
+
+Build: `npm run build` passes. The player costs about 5.2 KB minified, about 2.2 KB gzip, on every Journal entry page. Next 16 does not code-split a client component that a Server Component imports dynamically, so there is no cheaper split.
+
+### Pass 6: final reliability review
+
+No P0, and a `pending:` ref cannot reach the database on any path. Fixed:
+- **P1, stuck queued save.** Replacing or removing a still-pending recording deleted its bytes even when a queued save named it, so that save could never be sent. The fix, `releaseIfUnreferenced`, releases the bytes only when no queued save or stored conflict names the recording. Otherwise the recording uploads and becomes an orphan. Tested.
+- **No way out of a missing recording.** A recording whose bytes are missing can now be removed, and "still loading" is told apart from "missing".
+- **Remove copy.** It now distinguishes a recording that never uploaded from a stored one, and states when a published entry actually changes.
+- **Wrong "not on the site" message.** Saves handed over before an upload finished now have their pending refs resolved too, so the editor no longer says the site didn't get the save.
+- **Early player errors.** The player notices a load error that happened before hydration.
+- **Cleanup guidance.** `docs/BACKUP.md` now says to clean up only objects that are old enough and not waiting on any device.
+
+Logged and not changed:
+- The same discard-immediately pattern in the photo and Loop Clip fields.
+- `applyResolutions` reads and rewrites the queue in two steps instead of one transaction.
+- A 25 MB upload makes text saves wait.
+- An MP3's duration arrives after the save, which marks the document unsaved.
+- The player does not handle iOS lock-screen controls.
+
+Full suite: 974 pass, plus the 2 known `bits-contract` failures and 57 skips.

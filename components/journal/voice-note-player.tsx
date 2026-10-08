@@ -90,6 +90,9 @@ export function VoiceNotePlayer({
     el.addEventListener("error", onError);
     window.addEventListener(PLAY_EVENT, onOther);
     onMeta();
+    // A source that failed before this ran — a quick 404 — has already fired
+    // its error event, and would otherwise look playable until pressed.
+    if (el.error) onError();
 
     return () => {
       el.removeEventListener("timeupdate", onTime);

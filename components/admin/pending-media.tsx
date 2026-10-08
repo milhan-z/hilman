@@ -20,8 +20,12 @@ import { cn } from "@/lib/utils";
 export function usePendingPhoto(ref: string | null | undefined) {
   const [entry, setEntry] = useState<PendingMedia | null>(null);
   const [url, setUrl] = useState<string | null>(null);
+  // Whether the device has been asked yet: "not found" and "still looking"
+  // are different things to say to the author.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    setLoaded(false);
     if (!isPendingRef(ref)) {
       setEntry(null);
       setUrl(null);
@@ -33,7 +37,9 @@ export function usePendingPhoto(ref: string | null | undefined) {
 
     void listPendingMedia().then((all) => {
       const found = all.find((item) => item.ref === ref);
-      if (cancelled || !found) return;
+      if (cancelled) return;
+      setLoaded(true);
+      if (!found) return;
       setEntry(found);
       objectUrl = URL.createObjectURL(found.blob);
       setUrl(objectUrl);
@@ -47,7 +53,7 @@ export function usePendingPhoto(ref: string | null | undefined) {
     };
   }, [ref]);
 
-  return { entry, url };
+  return { entry, url, loaded };
 }
 
 export function PendingPhoto({
@@ -182,13 +188,25 @@ export function PendingRecording({
   className?: string;
   onDiscard?: () => void;
 }) {
-  const { entry, url } = usePendingPhoto(recordingRef);
+  const { entry, url, loaded } = usePendingPhoto(recordingRef);
 
   if (!entry) {
+    if (!loaded) return null;
+    // Without a way out, the entry would name a recording nothing can upload,
+    // and every save of it would wait for ever.
     return (
-      <p className={cn("text-sm text-soft", className)}>
-        This recording is no longer on this device.
-      </p>
+      <div className={cn("flex items-center justify-between gap-2 rounded-md border border-line bg-raise px-3 py-2", className)}>
+        <p className="text-sm text-soft">This recording is no longer on this device.</p>
+        {onDiscard && (
+          <button
+            type="button"
+            onClick={onDiscard}
+            className="min-h-11 shrink-0 px-1 text-sm text-red transition-opacity hover:opacity-80"
+          >
+            Remove
+          </button>
+        )}
+      </div>
     );
   }
 

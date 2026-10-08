@@ -495,6 +495,12 @@ export function LiveEditor({ kind, initial, allTags, readingMinutes: counted = 1
           // reaches inside a serialised snapshot unaided.
           setKept((prev) => replacePendingRefs(prev, event.resolved));
           setSynced((prev) => replacePendingRefs(prev, event.resolved));
+          // And the snapshots of saves already handed over: an acknowledgement
+          // moves `synced` to one of these, and a stale placeholder in it
+          // would report a finished save as one the site never received.
+          for (const [id, mine] of submitted.current) {
+            submitted.current.set(id, { ...mine, snapshot: replacePendingRefs(mine.snapshot, event.resolved) });
+          }
           return;
         }
         if (event.type === "applied") {

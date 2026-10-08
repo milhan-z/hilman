@@ -72,8 +72,12 @@ voice note leaves the old file in `voice-notes/`, unreferenced — on purpose, s
 a failed save can never cost a recording. To find them for a later cleanup,
 list `voice-notes/` and compare against
 `select voice_note->>'src' from journal_posts where voice_note is not null`.
-Anything listed by the bucket and not by the query is unreferenced. Removed
-recordings stay reachable by anyone who has their exact URL until then.
+Anything listed by the bucket and not by the query is unreferenced *by the
+database* — which is not the same as unwanted. A phone can hold a queued save
+or a recovery copy naming a recording that has uploaded but not been saved
+yet. Clean up only objects older than a few weeks, and only once every device
+that edits the site shows nothing waiting in Sync status. Removed recordings
+stay reachable by anyone who has their exact URL until then.
 
 ## Restore — rehearse it, don't trust it
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { discardPendingMedia, listPendingMedia, stashMedia } from "@/lib/studio-local/media";
+import { listPendingMedia, stashMedia } from "@/lib/studio-local/media";
+import { releaseIfUnreferenced } from "@/lib/studio-local/media-release";
 import { ingestLabel } from "@/lib/studio-local/ingest-status";
 import type { IngestProgress } from "@/lib/studio-local/media-optimize";
 import { readVoiceDuration } from "@/lib/studio-local/voice-check";
@@ -49,6 +50,8 @@ export function VoiceNoteField({
   const [progress, setProgress] = useState<IngestProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
+  // What the last Remove took away, so the sentence after it is true.
+  const [removed, setRemoved] = useState<"local" | "stored" | null>(null);
 
   // The latest value, for the length that is filled in after the fact: by the
   // time the browser has read it, the author may have replaced the recording.
@@ -85,9 +88,12 @@ export function VoiceNoteField({
       return;
     }
 
-    // A replacement that never left this device has nowhere else to go.
+    // A replacement that never left this device is let go of — unless a save
+    // already queued still names it, in which case it uploads and that save
+    // goes out as it was. See releaseIfUnreferenced().
     const previous = latest.current;
-    if (previous && isPendingRef(previous.src)) void discardPendingMedia(previous.src);
+    if (previous && isPendingRef(previous.src)) void releaseIfUnreferenced(previous.src);
+    setRemoved(null);
 
     // Keys in the same order checkVoiceNote() writes them, so this compares
     // equal to the same recording read back from the database.
@@ -110,7 +116,9 @@ export function VoiceNoteField({
   }
 
   function remove() {
-    if (value && isPendingRef(value.src)) void discardPendingMedia(value.src);
+    const local = Boolean(value && isPendingRef(value.src));
+    if (value && local) void releaseIfUnreferenced(value.src);
+    setRemoved(local ? "local" : "stored");
     setError(null);
     onChange(null);
   }
@@ -134,7 +142,9 @@ export function VoiceNoteField({
       {!hasNote && (
         <p className="mb-2.5 text-sm text-soft">
           {value === null
-            ? "Removed. The entry will be text only once you save. The file itself stays in storage until it is cleaned up."
+            ? removed === "local"
+              ? "Removed. The entry is text only again."
+              : "Removed. Saving takes it off this entry, and a published entry loses it when you update it live. The file itself stays in storage until it is cleaned up."
             : "Read this entry in your own voice. M4A or MP3, up to 25 MB."}
         </p>
       )}

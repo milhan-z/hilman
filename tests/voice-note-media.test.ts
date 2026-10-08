@@ -16,6 +16,9 @@ import {
   type PendingMedia,
 } from "../lib/studio-local/media";
 import { listResolutions } from "../lib/studio-local/media-resolution";
+import { releaseIfUnreferenced } from "../lib/studio-local/media-release";
+import { recordConflict } from "../lib/studio-local/conflicts";
+import { enqueue } from "../lib/studio-local/outbox";
 import { UploadError } from "../lib/studio-local/retry-policy";
 import { uploadNoun } from "../lib/studio-local/sync";
 import { ingestLabel } from "../lib/studio-local/ingest-status";
@@ -959,4 +962,92 @@ test("a voice note whose server-named key the site can't store keeps its bytes a
   assert.equal(kept?.ref, REF, "the recording is still on the device");
   assert.equal(kept?.blocked, true, "and held for the author to see, not retried for ever");
   assert.equal((await listResolutions()).length, 0, "and no mapping was written down");
+});
+
+/* ══ G. releasing a replaced or removed recording ══════════ */
+
+const SAVE_ID = "44444444-4444-4444-8444-444444444444";
+const ENTRY_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+/** A queued journal save whose voice note names `ref`, enqueued the way the editor does it. */
+async function queueSaveNaming(ref: string) {
+  await enqueue({
+    mutationId: SAVE_ID,
+    entity: "journal",
+    entityId: ENTRY_ID,
+    localId: `journal:${ENTRY_ID}`,
+    baseUpdatedAt: null,
+    payload: {
+      fields: { title: "An entry", voice_note: { src: ref } },
+      blocks: [],
+      tagIds: [],
+    },
+  });
+}
+
+/** A stored conflict whose own version of the entry names `ref`. */
+async function conflictNaming(ref: string) {
+  await recordConflict({
+    key: `journal:${ENTRY_ID}`,
+    entity: "journal",
+    id: ENTRY_ID,
+    mine: { fields: { title: "Mine", voice_note: { src: ref } }, blocks: [], tagIds: [] },
+    server: { id: ENTRY_ID, updatedAt: "x", fields: {}, blocks: [], tagIds: [] },
+    differences: ["voice_note"],
+    noticedAt: "2026-09-21T00:00:00.000Z",
+  });
+}
+
+test("a stashed voice note that nothing names is discarded and reported as released", async () => {
+  await dbPut("media", voiceRecord(REF));
+
+  const released = await releaseIfUnreferenced(REF);
+
+  assert.equal(released, true);
+  assert.equal((await listPendingMedia()).some((item) => item.ref === REF), false);
+});
+
+test("a stashed voice note named by a queued save is kept and reported as not released", async () => {
+  await dbPut("media", voiceRecord(REF));
+  await queueSaveNaming(REF);
+
+  const released = await releaseIfUnreferenced(REF);
+
+  assert.equal(released, false);
+  assert.equal((await listPendingMedia()).some((item) => item.ref === REF), true);
+});
+
+test("a stashed voice note named by a stored conflict is kept and reported as not released", async () => {
+  await dbPut("media", voiceRecord(REF));
+  await conflictNaming(REF);
+
+  const released = await releaseIfUnreferenced(REF);
+
+  assert.equal(released, false);
+  assert.equal((await listPendingMedia()).some((item) => item.ref === REF), true);
+});
+
+test("a queued save naming the placeholder in uppercase still keeps its bytes", async () => {
+  const lowerRef = `pending:${UPPER_ID.toLowerCase()}`;
+  await dbPut("media", voiceRecord(lowerRef));
+  await queueSaveNaming(`pending:${UPPER_ID}`);
+
+  const released = await releaseIfUnreferenced(lowerRef);
+
+  assert.equal(released, false);
+  assert.equal((await listPendingMedia()).some((item) => item.ref === lowerRef), true);
+});
+
+test("a queued save naming a different placeholder does not keep this one", async () => {
+  const otherRef = `pending:${FRESH_ID}`;
+  await dbPut("media", voiceRecord(REF));
+  await dbPut("media", voiceRecord(otherRef));
+  await queueSaveNaming(otherRef);
+
+  const released = await releaseIfUnreferenced(REF);
+
+  assert.equal(released, true);
+  const remaining = (await listPendingMedia()).map((item) => item.ref);
+  assert.equal(remaining.includes(REF), false);
+  assert.equal(remaining.includes(otherRef), true, "the placeholder the queued save names is untouched");
 });
