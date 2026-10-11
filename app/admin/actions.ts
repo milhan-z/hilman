@@ -377,24 +377,51 @@ export async function bulkDeleteItems(
   if (denied) return denied;
 
   const supabase = await createServerSupabase();
-  const table = kind === "project" ? "projects" : "journal_posts";
 
+  // One delete_content per item, never "every block, then every row": as two
+  // statements, a failure between them left articles with no body — the
+  // failure 0012 fixed for single deletes. Each call is its own transaction,
+  // so every item is either wholly deleted or wholly still there, and a
+  // problem part-way through says exactly how far it got.
+  let deleted = 0;
+  let alreadyGone = 0;
   try {
-    const { error: blockErr } = await supabase
-      .from("content_blocks")
-      .delete()
-      .eq("owner_type", kind)
-      .in("owner_id", ids);
-    if (blockErr) return fail(saveError(blockErr));
-
-    const { error } = await supabase.from(table).delete().in("id", ids);
-    if (error) return fail(saveError(error));
-
+    for (const id of ids) {
+      const { error } = await supabase.rpc("delete_content", { p_entity: kind, p_id: id });
+      // Already gone — deleted from another tab, say — is what was asked for.
+      if (error?.code === "P0002") {
+        alreadyGone++;
+        continue;
+      }
+      if (error) {
+        if (deleted > 0) revalidateSite();
+        const reason =
+          error.code === "PGRST202"
+            ? "The delete function is missing from the database. Apply supabase/migrations/0012_atomic_content_delete.sql."
+            : saveError(error);
+        return fail(
+          deleted > 0
+            ? `${partialDelete(deleted, alreadyGone, ids.length)}, then stopped: ${reason} The rest are untouched.`
+            : reason
+        );
+      }
+      deleted++;
+    }
     revalidateSite();
     return ok();
   } catch (e: any) {
-    return fail(e.message ?? "Bulk delete failed.");
+    if (deleted > 0) revalidateSite();
+    return fail(
+      deleted > 0
+        ? `${partialDelete(deleted, alreadyGone, ids.length)}, then stopped: ${e?.message ?? "an error"}. The rest are untouched.`
+        : e?.message ?? "Bulk delete failed."
+    );
   }
+}
+
+/** "Deleted 3 of 5", saying separately how many had already gone elsewhere. */
+function partialDelete(deleted: number, alreadyGone: number, total: number): string {
+  return `Deleted ${deleted} of ${total}${alreadyGone ? ` (${alreadyGone} more had already been deleted)` : ""}`;
 }
 
 /* ── taxonomy ──────────────────────────────────────────── */
