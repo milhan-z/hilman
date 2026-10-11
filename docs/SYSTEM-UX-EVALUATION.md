@@ -291,3 +291,12 @@ Logged and not changed:
 - The player does not handle iOS lock-screen controls.
 
 Full suite: 974 pass, plus the 2 known `bits-contract` failures and 57 skips.
+
+### Real R2 smoke test (owner-approved, 11 October 2026)
+
+One object was written with the application's own client (`lib/r2-server.ts`, default SDK checksum settings), to `voice-notes/_qa/294eed7a-055a-47b4-8c59-18ae1e7bfe2b/smoke.m4a`. It is a 4 KB body and is deliberately left in the bucket as a QA orphan.
+
+- **Checksum risk closed.** The presigned URL does carry `x-amz-checksum-crc32`, and its signed headers are `content-length;host`. R2 still accepted a non-empty PUT with **200**, so it does not enforce that checksum and `lib/r2-server.ts` needs no change.
+- **Stored metadata:** HEAD returned `audio/mp4`, 4096 bytes.
+- **Range:** `bytes=0-99` returned `Content-Range: bytes 0-99/4096`, 100 bytes.
+- **Public serving:** the configured public base is an `r2.dev` host, so `r2PublicUrl()` sends visitors through the site's own `/api/r2/media` proxy. That proxy serves the allowlisted Content-Type and passes Range through. The proxy is unit-tested; a real-file check through it remains a post-deploy item. If a custom domain is added later, R2 will serve whatever Content-Type it stored. That is the type the uploader sent, which the client always normalises.
