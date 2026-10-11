@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { isPendingRef } from "@/lib/studio-media-refs";
 import { listPendingMedia, type PendingMedia } from "@/lib/studio-local/media";
+import { listResolutions } from "@/lib/studio-local/media-resolution";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,9 +24,13 @@ export function usePendingPhoto(ref: string | null | undefined) {
   // Whether the device has been asked yet: "not found" and "still looking"
   // are different things to say to the author.
   const [loaded, setLoaded] = useState(false);
+  // Uploaded already, with the documents not yet pointed at it: the bytes
+  // have left the device on purpose, and this is not a missing file.
+  const [uploaded, setUploaded] = useState(false);
 
   useEffect(() => {
     setLoaded(false);
+    setUploaded(false);
     if (!isPendingRef(ref)) {
       setEntry(null);
       setUrl(null);
@@ -35,9 +40,10 @@ export function usePendingPhoto(ref: string | null | undefined) {
     let objectUrl: string | null = null;
     let cancelled = false;
 
-    void listPendingMedia().then((all) => {
+    void Promise.all([listPendingMedia(), listResolutions()]).then(([all, resolutions]) => {
       const found = all.find((item) => item.ref === ref);
       if (cancelled) return;
+      setUploaded(!found && resolutions.some((item) => item.ref.toLowerCase() === ref.toLowerCase()));
       setLoaded(true);
       if (!found) return;
       setEntry(found);
@@ -53,7 +59,49 @@ export function usePendingPhoto(ref: string | null | undefined) {
     };
   }, [ref]);
 
-  return { entry, url, loaded };
+  return { entry, url, loaded, uploaded };
+}
+
+/**
+ * A placeholder whose bytes are no longer on this device.
+ *
+ * Always with a way out: without one, the document would go on naming a file
+ * nothing can upload, and every save of it would wait for ever behind it.
+ */
+function MissingMedia({
+  noun,
+  uploaded,
+  className,
+  onDiscard,
+}: {
+  noun: "photo" | "clip" | "recording";
+  uploaded?: boolean;
+  className?: string;
+  onDiscard?: () => void;
+}) {
+  if (uploaded) {
+    // Not missing: sent, and about to replace its placeholder. No Remove —
+    // removing here would drop a file that is safely on the site's storage.
+    return (
+      <p className={cn("rounded-md border border-line bg-raise px-3 py-2 text-sm text-soft", className)}>
+        This {noun} has uploaded and is being put in place.
+      </p>
+    );
+  }
+  return (
+    <div className={cn("flex items-center justify-between gap-2 rounded-md border border-line bg-raise px-3 py-2", className)}>
+      <p className="text-sm text-soft">This {noun} is no longer on this device.</p>
+      {onDiscard && (
+        <button
+          type="button"
+          onClick={onDiscard}
+          className="min-h-11 shrink-0 px-1 text-sm text-red transition-opacity hover:opacity-80"
+        >
+          Remove
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function PendingPhoto({
@@ -65,14 +113,11 @@ export function PendingPhoto({
   className?: string;
   onDiscard?: () => void;
 }) {
-  const { entry, url } = usePendingPhoto(photoRef);
+  const { entry, url, loaded, uploaded } = usePendingPhoto(photoRef);
 
   if (!entry) {
-    return (
-      <p className={cn("text-sm text-soft", className)}>
-        This photo is no longer on this device.
-      </p>
-    );
+    if (!loaded) return null;
+    return <MissingMedia noun="photo" uploaded={uploaded} className={className} onDiscard={onDiscard} />;
   }
 
   return (
@@ -129,14 +174,11 @@ export function PendingClip({
   className?: string;
   onDiscard?: () => void;
 }) {
-  const { entry, url } = usePendingPhoto(clipRef);
+  const { entry, url, loaded, uploaded } = usePendingPhoto(clipRef);
 
   if (!entry) {
-    return (
-      <p className={cn("text-sm text-soft", className)}>
-        This clip is no longer on this device.
-      </p>
-    );
+    if (!loaded) return null;
+    return <MissingMedia noun="clip" uploaded={uploaded} className={className} onDiscard={onDiscard} />;
   }
 
   return (
@@ -188,26 +230,11 @@ export function PendingRecording({
   className?: string;
   onDiscard?: () => void;
 }) {
-  const { entry, url, loaded } = usePendingPhoto(recordingRef);
+  const { entry, url, loaded, uploaded } = usePendingPhoto(recordingRef);
 
   if (!entry) {
     if (!loaded) return null;
-    // Without a way out, the entry would name a recording nothing can upload,
-    // and every save of it would wait for ever.
-    return (
-      <div className={cn("flex items-center justify-between gap-2 rounded-md border border-line bg-raise px-3 py-2", className)}>
-        <p className="text-sm text-soft">This recording is no longer on this device.</p>
-        {onDiscard && (
-          <button
-            type="button"
-            onClick={onDiscard}
-            className="min-h-11 shrink-0 px-1 text-sm text-red transition-opacity hover:opacity-80"
-          >
-            Remove
-          </button>
-        )}
-      </div>
-    );
+    return <MissingMedia noun="recording" uploaded={uploaded} className={className} onDiscard={onDiscard} />;
   }
 
   return (

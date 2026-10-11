@@ -6,7 +6,7 @@ import { Field, Select, TextArea, TextInput } from "./fields";
 import { MediaCapture } from "./media-capture";
 import { PendingPhoto } from "./pending-media";
 import { isPendingRef } from "@/lib/studio-media-refs";
-import { discardPendingMedia } from "@/lib/studio-local/media";
+import { releaseIfUnreferenced } from "@/lib/studio-local/media-release";
 import { useMediaSelector } from "./media-library-context";
 import { mediaSrc } from "@/lib/cloudinary";
 import { DeferredLoading, DeferredUnavailable, useLoadedOr } from "./deferred";
@@ -186,7 +186,8 @@ export function MediaField({
           <PendingPhoto
             photoRef={value}
             onDiscard={() => {
-              void discardPendingMedia(value);
+              // Released only if no queued save still names it; see media-release.ts.
+              void releaseIfUnreferenced(value);
               onChange("");
             }}
           />

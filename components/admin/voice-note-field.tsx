@@ -61,8 +61,8 @@ export function VoiceNoteField({
   // What the last Remove took away, so the sentence after it is true.
   const [removed, setRemoved] = useState<"local" | "stored" | null>(null);
 
-  // The latest value, for the length that is filled in after the fact: by the
-  // time the browser has read it, the author may have replaced the recording.
+  // The latest value: by the time a picked file has been checked and stored,
+  // the field may already hold a different recording, the one being replaced.
   const latest = useRef(value);
   latest.current = value;
 
@@ -87,6 +87,15 @@ export function VoiceNoteField({
     setError(null);
     setProgress({ phase: "inspecting" });
 
+    // An MP3 carries no length of its own, so the browser is asked — before the
+    // file is stored, not after. Once it is in IndexedDB any flush may upload
+    // it, and if that happened before the field names it, the placeholder would
+    // be resolved with nobody holding it. Nor is it patched in later, which
+    // would mark the entry changed after the author had saved it. Capped,
+    // because some browsers never answer for a detached <audio>; the public
+    // player reads the length again for itself either way.
+    const probed = /mpeg|mp3/i.test(`${file.type} ${file.name}`) ? await readVoiceDuration(file, 3_000) : null;
+
     const result = await stashMedia(file, "voice-notes", "voice-note", setProgress);
     setBusy(false);
     setProgress(null);
@@ -95,6 +104,7 @@ export function VoiceNoteField({
       setError(result.ok ? "That recording couldn't be kept. Try again." : result.reason);
       return;
     }
+    const duration = result.voice.duration ?? probed;
 
     // A replacement that never left this device is let go of — unless a save
     // already queued still names it, in which case it uploads and that save
@@ -108,19 +118,12 @@ export function VoiceNoteField({
     const next: JournalVoiceNote = {
       src: result.ref,
       mime_type: result.voice.mime,
-      duration_seconds: result.voice.duration,
+      duration_seconds: duration,
       bytes: result.voice.bytes,
     };
     setName(result.voice.name);
     onChange(next);
     void flushOutbox();
-
-    if (next.duration_seconds == null) {
-      const seconds = await readVoiceDuration(file);
-      if (seconds != null && latest.current?.src === next.src) {
-        onChange({ ...next, duration_seconds: seconds });
-      }
-    }
   }
 
   function remove() {

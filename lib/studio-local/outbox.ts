@@ -1,6 +1,7 @@
 "use client";
 
 import { dbDelete, dbGetAll, dbPut, dbReadModifyWrite, dbReplaceAll } from "./db";
+import { replacePendingRefs } from "../studio-media-refs";
 import { rebaseQueued, type SyncEntity, type SyncMutation, type SyncPayload } from "../studio-sync-contract";
 
 /**
@@ -316,6 +317,27 @@ export async function rebaseAfterApplied(
     );
     return { result: null, put: changed, remove: [mutationId] };
   });
+}
+
+/**
+ * Points every queued save that names one of these placeholders at its
+ * uploaded file, in one transaction.
+ *
+ * It used to be "read the queue, rewrite it, write the whole queue back" —
+ * the clear-and-rewrite pattern above warns about: a save enqueued between
+ * the read and the write-back was erased. Here only the entries that changed
+ * are put, inside the same transaction as the read, so anything that arrives
+ * meanwhile is not touched.
+ */
+export async function rewriteQueuedPlaceholders(resolved: Record<string, string>): Promise<boolean> {
+  const outcome = await dbReadModifyWrite<QueuedMutation, boolean>("outbox", (queue) => {
+    const changed = queue
+      .map((entry) => ({ before: entry, after: replacePendingRefs(entry, resolved) }))
+      .filter(({ before, after }) => JSON.stringify(before) !== JSON.stringify(after))
+      .map(({ after }) => after);
+    return { result: true, put: changed };
+  });
+  return outcome.stored;
 }
 
 /**

@@ -252,6 +252,10 @@ export async function refreshSyncState(): Promise<SyncState> {
 /* ── the flush ────────────────────────────────────────────── */
 
 let inFlight: Promise<SyncState> | null = null;
+/** The one extra round promised to callers who asked mid-flush; see flushOutbox(). */
+let followUp: Promise<SyncState> | null = null;
+/** Whether the last round put the files off for the writing; see runFlush(). */
+let deferredLastRound = false;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let consecutiveFailures = 0;
 
@@ -263,16 +267,44 @@ let consecutiveFailures = 0;
  * the same queue in flight is how a double write gets invented.
  */
 export function flushOutbox(): Promise<SyncState> {
-  inFlight ??= runFlush().finally(() => {
+  if (inFlight) {
+    // The running flush has already read the queue and the stashed files. A
+    // photo or recording stored a moment ago, or a save made since, is not in
+    // what it is carrying — so one more round follows it, instead of the new
+    // work waiting for the next time the network or the tab wakes something.
+    // Everyone who asks meanwhile shares that one round, and waiting on this
+    // means waiting for it: their work, not just the round already running.
+    // Run after the current round however it ended: a round that threw must
+    // not leave every later caller holding its rejection.
+    followUp ??= inFlight
+      .catch(() => undefined)
+      .then(() => {
+        followUp = null;
+        return flushOutbox();
+      });
+    return followUp;
+  }
+  inFlight = runFlush().finally(() => {
     inFlight = null;
   });
   return inFlight;
 }
 
 async function runFlush(): Promise<SyncState> {
-  // Photographs go first. A save that still names a `pending:` placeholder is
-  // held back below, so uploading the bytes is what unblocks the writing.
-  const media = await sendStashedPhotos();
+  // Photographs go first, because a save that still names a `pending:`
+  // placeholder is held back below and uploading the bytes is what unblocks
+  // it. Unless writing is already waiting that names no placeholder at all:
+  // then it goes first, and the files follow in the round scheduled right
+  // after. A 25 MB recording on a weak signal can take minutes, and nothing
+  // about a typo fix in another entry should wait for it.
+  //
+  // One round at most. A text save the server keeps answering "retry" for —
+  // or one that keeps timing out — never becomes blocked, so if it could
+  // defer the files every round, no photo or recording would ever go up.
+  const textReady = (await listQueue()).some((entry) => !entry.blocked && !hasPendingRefs(entry.payload));
+  const mediaDeferred = !deferredLastRound && textReady && (await hasMediaToSend());
+  deferredLastRound = mediaDeferred;
+  const media = mediaDeferred ? { offline: false } : await sendStashedPhotos();
 
   const queue = (await listQueue()).filter((entry) => !entry.blocked);
   await refreshSyncState();
@@ -281,6 +313,9 @@ async function runFlush(): Promise<SyncState> {
     // sendStashedPhotos() may have raised the flag; nothing else will lower it.
     setState({ syncing: false, ...(media.offline ? { reachable: false } : {}) });
     if (media.offline) scheduleRetry();
+    // Another tab took the writing between the two reads above; the files
+    // put off for it still have to go.
+    else if (mediaDeferred) scheduleFrom({ kind: "applied" }, true);
     else cancelRetry();
     return state;
   }
@@ -387,7 +422,8 @@ async function runFlush(): Promise<SyncState> {
     if (worthRetrying) {
       scheduleFrom({ kind: "retry-outcome" }, true);
     } else {
-      scheduleFrom({ kind: "settled" }, false);
+      // Settled for the writing; files held back for it still have to go.
+      scheduleFrom({ kind: "settled" }, mediaDeferred);
     }
     return state;
   }
@@ -435,9 +471,15 @@ async function runFlush(): Promise<SyncState> {
       ? { kind: "applied" }
       : { kind: "settled" };
 
-  scheduleFrom(trip, remaining.length > 0 || waitingOnPhotos > 0);
+  scheduleFrom(trip, remaining.length > 0 || waitingOnPhotos > 0 || mediaDeferred);
 
   return state;
+}
+
+/** Whether a flush would have files to upload or paperwork to finish. */
+async function hasMediaToSend(): Promise<boolean> {
+  const [stashed, carried] = await Promise.all([listPendingMedia(), unfinishedResolutions()]);
+  return stashed.some((item) => !item.blocked) || carried.length > 0;
 }
 
 /**

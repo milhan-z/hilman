@@ -3,7 +3,7 @@
 import { listConflicts, recordConflict, type StoredConflict } from "./conflicts";
 import { dbDelete, dbGetAll, dbPut } from "./db";
 import { listDrafts, writeDraft, type LocalDraft } from "./drafts";
-import { listQueue, replaceQueue, type QueuedMutation } from "./outbox";
+import { listQueue, rewriteQueuedPlaceholders } from "./outbox";
 import { collectPendingRefs, replacePendingRefs } from "../studio-media-refs";
 import type { PendingMediaKind } from "./media";
 
@@ -117,12 +117,8 @@ export async function applyResolutions(
   if (resolutions.length === 0) return;
   const resolved = resolutionMap(resolutions);
 
-  // ── the queue ──
-  const queue = await listQueue();
-  const rewritten = queue.map((entry) => replacePendingRefs(entry, resolved));
-  if (JSON.stringify(queue) !== JSON.stringify(rewritten)) {
-    await replaceQueue(rewritten as QueuedMutation[]);
-  }
+  // ── the queue ── one transaction; see rewriteQueuedPlaceholders().
+  await rewriteQueuedPlaceholders(resolved);
 
   // ── recovery drafts ──
   const putDraft = io.writeDraft ?? writeDraft;

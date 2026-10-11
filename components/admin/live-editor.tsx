@@ -628,8 +628,10 @@ export function LiveEditor({ kind, initial, allTags, readingMinutes: counted = 1
         },
       });
 
-      // Whatever happens next, this version is written down somewhere.
-      setKept(sourceSnapshot);
+      // Only a stored or saved version is written down anywhere. A refused
+      // direct send (the browser that keeps nothing) is not, so the editor
+      // must go on showing these edits as not yet kept.
+      if (result.status === "stored" || result.status === "saved") setKept(sourceSnapshot);
 
       if (result.status === "stored") {
         // Recorded against the id the queue actually gave it, which is not

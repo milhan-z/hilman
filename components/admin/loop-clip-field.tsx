@@ -3,7 +3,7 @@
 import { Field } from "./fields";
 import { MediaCapture } from "./media-capture";
 import { PendingClip } from "./pending-media";
-import { discardPendingMedia } from "@/lib/studio-local/media";
+import { releaseIfUnreferenced } from "@/lib/studio-local/media-release";
 import { isPendingRef } from "@/lib/studio-media-refs";
 import { resolveLoopClipSrc } from "@/lib/loop-clip";
 
@@ -64,7 +64,8 @@ export function LoopClipField({
           <PendingClip
             clipRef={value}
             onDiscard={() => {
-              void discardPendingMedia(value);
+              // Released only if no queued save still names it; see media-release.ts.
+              void releaseIfUnreferenced(value);
               onChange("");
             }}
           />
