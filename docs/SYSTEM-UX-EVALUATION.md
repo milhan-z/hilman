@@ -300,3 +300,97 @@ One object was written with the application's own client (`lib/r2-server.ts`, de
 - **Stored metadata:** HEAD returned `audio/mp4`, 4096 bytes.
 - **Range:** `bytes=0-99` returned `Content-Range: bytes 0-99/4096`, 100 bytes.
 - **Public serving:** the configured public base is an `r2.dev` host, so `r2PublicUrl()` sends visitors through the site's own `/api/r2/media` proxy. That proxy serves the allowlisted Content-Type and passes Range through. The proxy is unit-tested; a real-file check through it remains a post-deploy item. If a custom domain is added later, R2 will serve whatever Content-Type it stored. That is the type the uploader sent, which the client always normalises.
+
+### Studio QA (owner-logged-in, R2 disabled, 11 October 2026)
+
+**Setup.** The dev server ran on `localhost:3011` against the owner's Supabase, with the R2 variables blanked, so `/api/r2/*` answered 503. I worked in the disposable draft "UX audit — disposable draft — mobile pass". I pressed neither Save nor Publish. Test files were built in the browser and injected into the file input.
+
+| Check | Result |
+| --- | --- |
+| Empty state, 390px | "Voice note · Optional", one-line hint, "Upload recording" at 48px tall, correct `accept` list, no overflow |
+| WAV | Refused with actionable copy. After QA the copy names the format: "This is a WAV recording…" |
+| ALAC M4A (labelled `audio/x-m4a`) | Refused: "uses Apple Lossless… set Audio Quality to Compressed…" |
+| AAC M4A | Stored on the device. Shows "Saved on this device — waiting to upload", the file name, and `M4A · 4:21`, with the length read from the file. The status pill reads "1 recording waiting to send". |
+| Network | Only `POST /api/r2/sign → 503`. Outbox has 0 entries, so no save was sent. |
+| Replace with MP3 | The old M4A was released, because nothing queued named it. Only the MP3 remains, stored as `audio/mpeg`. |
+| Remove | "Removed. The entry is text only again." The media and outbox stores are both empty. |
+| Keyboard | Tab moves "Choose from your photos" → "Upload recording" with a visible focus outline. The hidden file input is skipped. |
+| 430 / 768 / 1440 | Field contained, no overflow. On desktop it sits in the expanded Details grid. |
+| Clean-up | Discarded the local recovery copy the QA edits left; it held only the QA change. The draft on the server was never changed. |
+
+## 8. Final report — Journal Voice Notes Phase 1A
+
+- **Baseline:** `29dc2df` (`origin/master`, 8 October 2026).
+- **Branch:** `feature/journal-voice-notes`, local only. It has no upstream, has not been pushed, merged or deployed, and has not touched the production database.
+- **Commits:**
+  - `b60a511` Pass 0 audit
+  - `924eb59` Pass 1 data and save
+  - `ce682e5` Pass 2 media and R2
+  - `4a902d7` Pass 3 Studio field
+  - `b265f67` Pass 4 public player
+  - `0072baf` Pass 5 card marker
+  - `994dca4` backup docs
+  - `249de13` final-review fixes
+  - `4fcb7ca` R2 smoke test
+  - the Studio-QA fix commit after it
+- **Schema:** `supabase/migrations/0014_journal_voice_note.sql`, prepared and tested only in PGlite, including running it twice and upgrading from 0013. It adds `journal_posts.voice_note jsonb`, null meaning text only. The `journal_voice_note_shape` CHECK requires:
+  - an R2 key `voice-notes/<uuid>.m4a|.mp3`, never `pending:`
+  - a matching `audio/mp4` or `audio/mpeg` type
+  - a duration that is null or between 0 and 7200 seconds
+  - a size that is null or a whole number up to 25 MB
+  - no unknown keys
+
+  `save_journal_post` is restated from 0012 with one change: an absent key keeps the stored recording and an explicit null removes it. **It needs the owner's approval before it is applied to production.**
+- **Files changed:** 34 files, +3802 / −260 (`git diff --stat 29dc2df..HEAD`).
+- **Media architecture:** the existing local-first pipeline, extended rather than duplicated.
+  1. The file is stored in IndexedDB first, as `pending:<uuid>`.
+  2. The existing outbox, retry policy and resolution map send it.
+  3. A presigned PUT puts it under `voice-notes/<uuid>.<ext>`.
+  4. The placeholder is resolved to the R2 key.
+  5. The save goes through `/api/studio/sync` → `save_content_synced` → `save_journal_post`.
+
+  A `pending:` ref is refused at five layers: the outbox filter, `sendDirect`, the sync route, `normaliseFields` / `checkVoiceNote`, and the database CHECK. Nothing deletes from R2. Replace and remove leave documented orphans.
+- **Formats:**
+  - **Accepted:** M4A/AAC (`audio/mp4`; `audio/x-m4a` is normalised to it) and MP3 (`audio/mpeg`), up to 25 MB, decided from the file's bytes. Every target browser plays both natively, and Voice Memos and most recorders produce them.
+  - **Refused, with actionable copy:** Apple Lossless (Safari plays it, Chrome and Firefox do not), video, unknown codecs, recordings with no index, WAV, Ogg, FLAC and WebM.
+  - Nothing is transcoded, and there is no new dependency.
+- **Tests:** `tests/journal-voice-note.test.ts` (42) and `tests/voice-note-media.test.ts` (99). The full suite is 975 pass, 2 fail (the pre-existing Windows path issue in `bits-contract`), 57 skipped (need `HILMAN_TEST_PG`).
+- **Typecheck:** passes.
+- **Build:** `npm run build` passes.
+- **Mobile QA:** public player at 390/430/768/1440 and Studio field at 390/430/768/1440 (above). These are viewport checks, not device certification.
+- **Accessibility QA:**
+  - real buttons with their own names
+  - a seek slider with spoken `aria-valuetext`
+  - no per-second announcements
+  - visible focus, keyboard seek
+  - the native `<audio controls>` fallback without JavaScript, no autoplay
+  - contrast of at least 6.5:1 in both themes
+
+  A VoiceOver pass has not been done.
+- **Performance and bundle:**
+  - The player is about 5.2 KB minified, about 2.2 KB gzip, shipped with every Journal entry page; Next 16 cannot split it from a Server Component.
+  - `preload="metadata"`, Range streaming, no frame loop.
+  - Studio's ingest check reads only the box headers and the `moov` box.
+  - The card marker costs no extra query.
+- **Remaining risks:**
+  - The same discard-immediately pattern is still in the photo and Loop Clip fields.
+  - `applyResolutions` reads and rewrites the queue in two steps.
+  - A 25 MB upload delays queued text saves.
+  - A late MP3 duration marks the document unsaved.
+  - Visitors are served through the site proxy, because the public base is `r2.dev`, so audio streams through the hosting functions. A custom R2 domain is the long-term fix, and it would serve R2's stored Content-Type.
+  - Removed recordings stay reachable by exact URL until a cleanup.
+  - The QA orphan `voice-notes/_qa/294eed7a-…/smoke.m4a` is in the bucket.
+- **Needs real iPhone testing:**
+  - Voice Memos files, Compressed versus Lossless, and the file picker offering `.m4a`
+  - `readVoiceDuration` on iOS for MP3
+  - backgrounding or killing the app mid-upload, then resuming
+  - the offline publish → Replace → online sequence
+  - a 25 MB upload on weak signal
+  - Safari playback: gesture, playback rate, lock screen
+  - real playback through `/api/r2/media` after deploy
+- **Phase 1B recommendation (recording in Studio):** postpone. Chrome's MediaRecorder produces WebM/Opus, which V1 deliberately refuses. Safari produces fragmented MP4 whose `mvhd` duration is 0. Before building anything:
+  1. Measure the actual `MediaRecorder.isTypeSupported('audio/mp4')` output on the iPhone and on Chromium.
+  2. Decide whether a fragmented-MP4 recording needs its own validation path.
+  3. Design for interruption and screen lock.
+
+  Store recordings locally in chunks during recording, never only at Stop.
