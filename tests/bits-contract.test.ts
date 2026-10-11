@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import test from "node:test";
 
 /**
@@ -33,7 +33,9 @@ function filesIn(dir: string, pattern: RegExp): string[] {
     return [];
   }
   return entries.flatMap((entry) => {
-    const path = join(dir, entry);
+    // POSIX separators whatever the OS: these paths are compared with the
+    // rulebook's, which are written with "/".
+    const path = posix.join(dir, entry);
     if (statSync(join(ROOT, path)).isDirectory()) return filesIn(path, pattern);
     return pattern.test(entry) ? [path] : [];
   });
