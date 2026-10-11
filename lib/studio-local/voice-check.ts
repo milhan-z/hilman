@@ -75,10 +75,28 @@ export async function checkVoiceFile(file: Blob & { name?: string }): Promise<Vo
   if (fourcc(head, 4) === "ftyp") return checkMp4(file);
   if (await looksLikeMp3(file, head)) return { ok: true, mime: "audio/mpeg", duration: null };
 
+  // A format worth naming, because the author can act on the name.
+  const other = otherFormat(head);
+  if (other) {
+    return {
+      ok: false,
+      reason: `This is ${other} recording, and voice notes take M4A or MP3. Export it as one of those and try again.`,
+    };
+  }
+
   return {
     ok: false,
     reason: `This file doesn't look like an M4A or MP3 recording inside, whatever its name says. ${EXPORT_HINT}`,
   };
+}
+
+/** The common recording formats this does not take, by their first bytes. */
+function otherFormat(head: Uint8Array): string | null {
+  if (fourcc(head, 0) === "RIFF" && fourcc(head, 8) === "WAVE") return "a WAV";
+  if (fourcc(head, 0) === "OggS") return "an Ogg";
+  if (fourcc(head, 0) === "fLaC") return "a FLAC";
+  if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return "a WebM";
+  return null;
 }
 
 /* ── MP4 ─────────────────────────────────────────────────── */

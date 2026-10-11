@@ -32,7 +32,8 @@ import { flushOutbox } from "./studio-runtime";
 /** What the file input offers. The bytes decide in the end — see voice-check.ts. */
 const ACCEPT = "audio/mp4,audio/x-m4a,audio/mpeg,.m4a,.mp3";
 
-const mb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+const mb = (bytes: number) =>
+  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 const button =
   "inline-flex min-h-12 items-center justify-center gap-2 rounded-md border px-4 text-sm font-semibold transition-colors disabled:opacity-50";

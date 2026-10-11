@@ -274,6 +274,19 @@ test("a real WAV recording is refused and the reason names M4A or MP3", async ()
   assert.match(result.ok ? "" : result.reason, /M4A or MP3/);
 });
 
+test("a recording in another common format is named by that format", async () => {
+  const cases: Array<[Uint8Array, RegExp]> = [
+    [concat(ascii("RIFF"), u8(36, 0, 0, 0), ascii("WAVEfmt "), zeros(400)), /This is a WAV recording/],
+    [concat(ascii("OggS"), zeros(400)), /This is an Ogg recording/],
+    [concat(ascii("fLaC"), zeros(400)), /This is a FLAC recording/],
+    [concat(u8(0x1a, 0x45, 0xdf, 0xa3), zeros(400)), /This is a WebM recording/],
+  ];
+  for (const [bytes, expected] of cases) {
+    const result = await checkVoiceFile(fileOf(bytes, "memo", "audio/ogg"));
+    assert.match(result.ok ? "" : result.reason, expected);
+  }
+});
+
 test("an m4a a picker mislabelled is judged by its bytes", async () => {
   // Some pickers call an .m4a audio/aac or video/mp4; the bytes decide.
   for (const [name, type] of [["memo.m4a", "audio/aac"], ["memo.mp4", "video/mp4"], ["memo.wav", "audio/wav"]]) {
