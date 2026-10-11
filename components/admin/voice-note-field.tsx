@@ -29,8 +29,15 @@ import { flushOutbox } from "./studio-runtime";
  * next save. Neither deletes anything from storage.
  */
 
-/** What the file input offers. The bytes decide in the end — see voice-check.ts. */
-const ACCEPT = "audio/mp4,audio/x-m4a,audio/mpeg,.m4a,.mp3";
+/**
+ * What the file input offers. The bytes decide in the end — see voice-check.ts.
+ *
+ * `.mp4` / `video/mp4` are here on purpose. An iPhone recording passed through
+ * another app often arrives renamed `… .m4a.mp4`, labelled as video: the same
+ * AAC audio inside, but a picker filtering on audio types greys it out. A file
+ * that really is video is refused by the check, with a sentence saying so.
+ */
+const ACCEPT = "audio/mp4,audio/x-m4a,audio/mpeg,video/mp4,.m4a,.mp3,.mp4";
 
 const mb = (bytes: number) =>
   bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

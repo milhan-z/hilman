@@ -394,3 +394,12 @@ One object was written with the application's own client (`lib/r2-server.ts`, de
   3. Design for interruption and screen lock.
 
   Store recordings locally in chunks during recording, never only at Stop.
+
+### A real iPhone recording (owner-supplied, 11 October 2026)
+
+The file is `Jalan Marina Emas No. F117 8.m4a.mp4`, 48 KB. I read it as data only, and it was not added to the repo.
+- **Structure:** `ftyp(M4A, isom, mp42)`, then `mdat`, then `moov`. The index comes after the audio, which is typical of iPhone recordings. The codec is `mp4a` (AAC, the "Compressed" setting), there is no video track, and the length is 4.84 s.
+- **Studio check:** `checkVoiceFile` accepts it as `audio/mp4` with the 4.84 s duration under every label it could arrive with (`video/mp4`, `audio/mp4`, `audio/x-m4a`, none).
+- **Browser:** Chromium decodes and plays it, reading the same 4.84 s. `canPlayType('audio/mp4; codecs="alac"')` is empty, which confirms that refusing Apple Lossless is necessary.
+- **Problem found and fixed:** the `.m4a.mp4` name, which comes from sharing through another app, makes pickers label the file as video. The field's `accept` list now includes `video/mp4` and `.mp4`, so the file can be chosen. Real video is still refused by the byte check.
+- **Still to test on the device:** picking the original `.m4a` straight from Files or Voice Memos, and a Lossless recording.
