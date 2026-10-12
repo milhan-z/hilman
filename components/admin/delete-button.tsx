@@ -18,24 +18,24 @@ export function DeleteButton({
       <button
         type="button"
         onClick={() => setArming(true)}
-        className="text-sm text-red underline-offset-4 hover:underline"
+        className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 text-sm text-red underline-offset-4 hover:underline"
       >
         {label}
       </button>
     );
   }
   return (
-    <span className="inline-flex items-center gap-3 text-sm">
+    <span className="inline-flex flex-wrap items-center gap-3 text-sm">
       <span className="text-red">Sure? This can’t be undone.</span>
       <button
         type="button"
         disabled={pending}
         onClick={() => startTransition(() => onConfirm())}
-        className="rounded bg-red px-3 py-1.5 font-medium text-white disabled:opacity-50"
+        className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded bg-red px-3 py-1.5 font-medium text-white disabled:opacity-50"
       >
         {pending ? "Deleting…" : "Yes, delete"}
       </button>
-      <button type="button" onClick={() => setArming(false)} className="text-soft hover:text-ink">
+      <button type="button" onClick={() => setArming(false)} className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 text-soft hover:text-ink">
         Cancel
       </button>
     </span>

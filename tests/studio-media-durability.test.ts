@@ -219,7 +219,7 @@ test("the rewrite is safe to run twice", async () => {
 
 /* ══ 3. the mapping is kept only while it is needed ════════ */
 
-test("a mapping is forgotten once nothing refers to it any more", async () => {
+test("a completed mapping is retained without scheduling more work", async () => {
   await seedDocumentsHolding(REF);
   await rememberResolution({
     ref: REF,
@@ -231,13 +231,14 @@ test("a mapping is forgotten once nothing refers to it any more", async () => {
   await applyResolutions(await unfinishedResolutions());
 
   assert.equal(
-    (await listResolutions()).length,
+    (await unfinishedResolutions()).length,
     0,
-    "the bookkeeping does not accumulate for ever"
+    "a completed identity is not unfinished work"
   );
+  assert.equal((await listResolutions()).length, 1, "a background editor may still submit the old ref");
 });
 
-test("a mapping is kept while any document still holds the placeholder", async () => {
+test("a quota failure rolls back all rewrites and keeps the mapping unfinished", async (t) => {
   // The verification step: the rewrite is only finished if it is *visible*.
   await seedDocumentsHolding(REF);
   await rememberResolution({
@@ -247,14 +248,18 @@ test("a mapping is kept while any document still holds the placeholder", async (
     uploadedAt: "2026-09-21T00:00:00.000Z",
   });
 
-  await applyResolutions(await unfinishedResolutions(), {
-    // The draft store refuses the rewrite, so one document still names it.
-    writeDraft: async () => false,
+  const originalPut = IDBObjectStore.prototype.put;
+  t.mock.method(IDBObjectStore.prototype, "put", function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore["put"]>) {
+    if (this.name === "drafts") throw new DOMException("Quota exceeded", "QuotaExceededError");
+    return originalPut.apply(this, args);
   });
+  await applyResolutions(await unfinishedResolutions());
 
   const kept = await listResolutions();
   assert.equal(kept.length, 1, "still known, so it can be finished next time");
   assert.equal(kept[0].resolved, "hilman/uploaded-photo");
+  assert.equal(kept[0].rewrittenAt, undefined);
+  assert.equal(hasPendingRefs(await listQueue()), true, "queue rewrite was rolled back too");
 });
 
 /* ══ 4. the provider succeeded, the library did not ════════ */
@@ -327,8 +332,8 @@ test("nothing pending and nothing carried over is simply nothing", async () => {
 test("a placeholder left in a document opened later is still resolved", async () => {
   // The rewrite runs against whatever is in storage at the time. A draft
   // written after the upload — a second editor, a restored recovery copy —
-  // must still be caught on the next pass, which is why the mapping is kept
-  // until nothing refers to it.
+  // must still be caught on the next pass, even when no persisted document
+  // held the placeholder at the time the upload completed.
   await rememberResolution({
     ref: REF,
     resolved: "hilman/uploaded-photo",
@@ -336,13 +341,57 @@ test("a placeholder left in a document opened later is still resolved", async ()
     uploadedAt: "2026-09-21T00:00:00.000Z",
   });
   await applyResolutions(await unfinishedResolutions());
-  assert.equal((await listResolutions()).length, 0, "nothing held it, so it was forgotten");
+  assert.equal((await unfinishedResolutions()).length, 0, "nothing currently needs rewriting");
 
-  // And a document that shows up afterwards is the case this cannot fix, which
-  // is why the placeholder never reaches the site: the outbox holds it back.
   await seedDocumentsHolding(REF);
-  assert.equal(hasPendingRefs((await listQueue())[0]), true);
+  assert.equal((await unfinishedResolutions()).length, 1, "the late document reopens the mapping's work");
+  await applyResolutions(await unfinishedResolutions());
+  assert.equal(hasPendingRefs(await listQueue()), false);
+  assert.equal(hasPendingRefs(await listDrafts()), false);
+  assert.equal(hasPendingRefs(await listConflicts()), false);
   assert.equal((await listDrafts()).length, 1);
+});
+
+test("a concurrent autosave is never overwritten by a media rewrite", async (t) => {
+  await seedDocumentsHolding(REF);
+  const mapping: MediaResolution = { ref: REF, resolved: "hilman/photo", kind: "image", uploadedAt: "x" };
+  await rememberResolution(mapping);
+  const originalGetAll = IDBObjectStore.prototype.getAll;
+  let newer: Promise<boolean> | undefined;
+  t.mock.method(IDBObjectStore.prototype, "getAll", function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore["getAll"]>) {
+    const request = originalGetAll.apply(this, args);
+    if (this.name === "drafts" && !newer) {
+      request.addEventListener("success", () => {
+        if (newer) return;
+        newer = writeDraft({
+          key: `journal:${ROW}`, entity: "journal", entityId: ROW, localId: `journal:${ROW}`,
+          value: { snapshot: JSON.stringify({ title: "Typed while the upload finished", cover: REF }) },
+          baseUpdatedAt: null, editedAt: "2026-10-12T00:00:00.000Z",
+        });
+      }, { once: true });
+    }
+    return request;
+  });
+  await applyResolutions([mapping]);
+  assert.equal(await newer, true);
+  assert.match((await readDraft<{ snapshot: string }>(`journal:${ROW}`))!.value.snapshot, /Typed while the upload finished/);
+  await applyResolutions(await unfinishedResolutions());
+  assert.equal(hasPendingRefs(await listDrafts()), false, "the late reference is still resolvable");
+});
+
+test("an unreadable document store cannot retire the only media mapping", async (t) => {
+  await seedDocumentsHolding(REF);
+  const mapping: MediaResolution = { ref: REF, resolved: "hilman/photo", kind: "image", uploadedAt: "x" };
+  await rememberResolution(mapping);
+  const originalGetAll = IDBObjectStore.prototype.getAll;
+  const failure = t.mock.method(IDBObjectStore.prototype, "getAll", function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore["getAll"]>) {
+    if (this.name === "drafts") throw new DOMException("Storage unavailable", "UnknownError");
+    return originalGetAll.apply(this, args);
+  });
+  await applyResolutions([mapping]);
+  failure.mock.restore();
+  assert.equal((await listResolutions())[0].rewrittenAt, undefined);
+  assert.equal(hasPendingRefs(await listDrafts()), true);
 });
 
 /* ══ 8. the same file keeps the same remote name ═══════════ */

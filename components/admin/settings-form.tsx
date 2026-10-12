@@ -95,7 +95,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
   }
 
   const rowBtn =
-    "rounded border border-line px-2 py-1 text-xs text-soft transition-colors hover:border-pen hover:text-pen disabled:opacity-40";
+    "min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded border border-line px-2 py-1 text-xs text-soft transition-colors hover:border-pen hover:text-pen disabled:opacity-40";
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -166,7 +166,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
                 </div>
                 <button
                   type="button"
-                  className="h-fit rounded border border-line px-2 py-1 text-xs text-red hover:border-red"
+                  className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 h-fit rounded border border-line px-2 py-1 text-xs text-red hover:border-red"
                   aria-label={`Remove link ${i + 1}`}
                   onClick={() =>
                     draft.setValue((p) => ({
@@ -258,7 +258,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
                 </button>
                 <button
                   type="button"
-                  className="rounded border border-line px-2 py-1 text-xs text-red hover:border-red"
+                  className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded border border-line px-2 py-1 text-xs text-red hover:border-red"
                   aria-label={`Remove ${row.label || "item"}`}
                   onClick={() =>
                     draft.setValue((p) => ({ ...p, nav: p.nav.filter((_, j) => j !== i) }))

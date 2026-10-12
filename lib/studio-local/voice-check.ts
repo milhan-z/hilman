@@ -114,10 +114,7 @@ interface Box {
 async function checkMp4(file: Blob): Promise<VoiceCheck> {
   const moov = await findTopLevel(file, "moov");
   if (moov === "unreadable") {
-    // Structure the walk did not expect, before it reached an index. The
-    // container is right; leave the rest to the browser rather than refuse a
-    // recording over a gap in this reader.
-    return { ok: true, mime: "audio/mp4", duration: null };
+    return unverifiableRecording();
   }
   if (!moov) {
     // An MP4 with no index cannot be played by anything. This is what a
@@ -128,7 +125,7 @@ async function checkMp4(file: Blob): Promise<VoiceCheck> {
     };
   }
   if (moov.end - moov.start > MAX_MOOV_BYTES) {
-    return { ok: true, mime: "audio/mp4", duration: null };
+    return unverifiableRecording();
   }
 
   const bytes = new Uint8Array(await file.slice(moov.start, moov.end).arrayBuffer());
@@ -136,9 +133,7 @@ async function checkMp4(file: Blob): Promise<VoiceCheck> {
   try {
     facts = readMoov(bytes);
   } catch {
-    // Structure the walk did not expect. The container is right; let the
-    // browser be the judge of the rest rather than refusing on a parser gap.
-    return { ok: true, mime: "audio/mp4", duration: null };
+    return unverifiableRecording();
   }
 
   if (facts.hasVideo) {
@@ -166,6 +161,10 @@ async function checkMp4(file: Blob): Promise<VoiceCheck> {
   }
 
   return { ok: true, mime: "audio/mp4", duration: facts.duration };
+}
+
+function unverifiableRecording(): VoiceCheck {
+  return { ok: false, reason: `Studio couldn't verify this recording's audio format. ${EXPORT_HINT}` };
 }
 
 /**
@@ -265,8 +264,13 @@ export function readMoov(bytes: Uint8Array): Mp4Facts {
     if (handler !== "soun") continue;
 
     const stsd = child(bytes, child(bytes, child(bytes, mdia, "minf"), "stbl"), "stsd");
-    // version/flags (4), entry count (4), then the first sample entry's header.
-    if (stsd && stsd.content + 16 <= stsd.end) codecs.push(fourcc(bytes, stsd.content + 12));
+    // Check every declared sample description, not just the first: a track
+    // can switch codec descriptions partway through a recording.
+    if (!stsd || stsd.content + 8 > stsd.end) throw new Error("missing audio descriptions");
+    const count = view.getUint32(stsd.content + 4);
+    const entries = children(bytes, { ...stsd, content: stsd.content + 8 });
+    if (count === 0 || entries.length !== count) throw new Error("incomplete audio descriptions");
+    for (const entry of entries) codecs.push(entry.type);
   }
 
   return { duration, codecs, hasVideo };

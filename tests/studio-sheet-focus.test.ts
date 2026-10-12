@@ -22,13 +22,14 @@ const code = (path: string) =>
 
 test("the sheet's focus effect runs when it opens, not when its caller re-renders", () => {
   const sheet = code("components/admin/mobile-sheet.tsx");
-  const effect = sheet.slice(sheet.indexOf("panel.current?.focus()"));
-  const deps = effect.match(/\}, \[([^\]]*)\]\);/);
+  assert.match(sheet, /useDialogFocus\(open && mounted, panel, onClose\)/);
+  const hook = code("components/admin/use-dialog-focus.ts");
+  const deps = hook.match(/\}, \[([^\]]*)\]\);/);
   assert.ok(deps, "the focus effect has a dependency list");
   assert.deepEqual(
     deps[1].split(",").map((dep) => dep.trim()),
-    ["open"],
-    "only `open` — a callback here moves focus on every keystroke"
+    ["open", "panel", "initialFocus"],
+    "only opening and stable refs — a callback here moves focus on every keystroke"
   );
-  assert.match(sheet, /useEffectEvent\(/, "Escape still reaches the current onClose");
+  assert.match(hook, /useEffectEvent\(/, "Escape still reaches the current onClose");
 });

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useDialogFocus } from "./use-dialog-focus";
 import { useSwipeDismiss } from "./mobile/use-swipe-dismiss";
 import { useScrollLock } from "./mobile/use-scroll-lock";
 import { cn } from "@/lib/utils";
@@ -72,66 +73,13 @@ export function MobileSheet({
   size = "default",
 }: MobileSheetProps) {
   const panel = useRef<HTMLDivElement>(null);
-  const restoreFocus = useRef<HTMLElement | null>(null);
   const swipe = useSwipeDismiss({ onDismiss: onClose });
-  // Holds the page still without shifting the visual viewport. See the hook.
-  useScrollLock(open);
-
-  /* Whichever onClose is current when Escape is pressed.
-     It used to be a dependency of the effect below, and callers pass a fresh
-     arrow on every render — the editor re-renders on every keystroke. So each
-     letter typed into a sheet re-ran the effect: focus went back to where it
-     came from, then to the panel, and on a phone the keyboard closed after
-     one character. The effect is about the sheet opening, and nothing else. */
-  const close = useEffectEvent(() => onClose());
-
-  useEffect(() => {
-    if (!open) return;
-
-    restoreFocus.current = document.activeElement as HTMLElement | null;
-    panel.current?.focus();
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        close();
-        return;
-      }
-      if (event.key !== "Tab" || !panel.current) return;
-
-      // Keep Tab inside the sheet: behind it is a whole page of controls that
-      // are visually covered and, for a screen reader, inert.
-      const focusable = panel.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown, true);
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
-      // preventScroll: returning focus to the control that opened the sheet
-      // otherwise scrolls it into view, which on a phone means the page moves
-      // by itself the moment a sheet is dismissed.
-      restoreFocus.current?.focus?.({ preventScroll: true });
-    };
-  }, [open]);
-
-  // Portals need a DOM to render into, and the server has none. Mounting is
-  // tracked rather than assumed so the first client render matches the HTML.
+  // Portals need a DOM. Initial-open sheets acquire focus after their portal
+  // actually mounts, and inline onClose callbacks never restart the scope.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  useScrollLock(open && mounted);
+  useDialogFocus(open && mounted, panel, onClose);
 
   if (!open || !mounted) return null;
 

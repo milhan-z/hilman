@@ -131,7 +131,18 @@ async function transact<T>(
     tx.onerror = () => finish(null);
     tx.onabort = () => finish(null);
 
-    Promise.resolve(run(tx)).then(
+    let operation: Promise<T> | T;
+    try {
+      operation = run(tx);
+    } catch {
+      // IndexedDB may refuse a request synchronously as well as through its
+      // error event. Both mean storage declined, not a rejected save promise.
+      try { tx.abort(); } catch { /* already finished */ }
+      finish(null);
+      return;
+    }
+
+    Promise.resolve(operation).then(
       (value) => {
         result = value;
       },
@@ -234,6 +245,36 @@ export async function dbReadModifyWrite<T, R>(
     const plan = decide(all);
     for (const key of plan.remove ?? []) await wrap(objectStore.delete(key));
     for (const value of plan.put ?? []) await wrap(objectStore.put(value));
+    return plan.result;
+  });
+  return outcome === null
+    ? { stored: false, result: null }
+    : { stored: true, result: outcome };
+}
+
+/**
+ * Decide across related stores with one lock and one commit. In particular,
+ * a media reference scan must not be separated from rewriting its document
+ * or releasing its bytes by an intervening autosave.
+ */
+export async function dbReadModifyWriteStores<R>(
+  stores: StoreName[],
+  decide: (all: Partial<Record<StoreName, unknown[]>>) => {
+    result: R;
+    put?: Partial<Record<StoreName, unknown[]>>;
+    remove?: Partial<Record<StoreName, string[]>>;
+  }
+): Promise<{ stored: boolean; result: R | null }> {
+  const outcome = await transact(stores, "readwrite", async (tx) => {
+    const all: Partial<Record<StoreName, unknown[]>> = {};
+    await Promise.all(stores.map(async (store) => {
+      all[store] = await wrap<unknown[]>(tx.objectStore(store).getAll());
+    }));
+    const plan = decide(all);
+    for (const store of stores) {
+      for (const key of plan.remove?.[store] ?? []) await wrap(tx.objectStore(store).delete(key));
+      for (const value of plan.put?.[store] ?? []) await wrap(tx.objectStore(store).put(value));
+    }
     return plan.result;
   });
   return outcome === null

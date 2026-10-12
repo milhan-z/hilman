@@ -13,10 +13,10 @@ export type StillFrame = "last" | { marker: string };
  * played once, then held on its still.
  *
  * Lottie is for illustrated moments; HILMAN BITS is for interface motion
- * (docs/HILMAN-BITS.md, "Lottie: illustrated moments"). There are two, each
- * on one route: the sent note after a message has really been sent
- * (/connect), and the card pulled from the drawer with a "?" on it (the 404
- * page).
+ * (docs/HILMAN-BITS.md, "Lottie: illustrated moments"). Its current placement
+ * is the card pulled from the drawer with a "?" on the 404 page. The earlier
+ * Connect sent-note drawing remains an unused asset; Connect now uses small
+ * SVG feedback inside its send button.
  *
  * The markup is only the box: a fixed square that holds the drawing's place,
  * so nothing shifts when it arrives, and that reads as nothing to assistive
@@ -28,8 +28,8 @@ export type StillFrame = "last" | { marker: string };
  *
  * It plays once — on mount, or the first time it comes into view (already
  * on screen: straight away) — and never replays or runs backwards. Then it
- * rests on its still. Where the last frame is not the finished drawing (the
- * sent note is on its way out of the frame), it goes back to the still and
+ * rests on its still. For retained assets where the last frame is not the
+ * finished drawing (the archived sent note), it goes back to the still and
  * fades in on it, a 200 ms fade that only exists with no motion preference.
  * Reduced motion never plays at all: it gets the still, even when the
  * preference changes halfway through.

@@ -41,17 +41,17 @@ primitives per page. Every page is inside it.
 
 | Page | What moves | Primitives |
 |---|---|---|
-| Home | The brush swept under "Hilman"; the lines under the title arriving in turn; section headings arriving as they scroll in; the pen under "together."; the cards | 3 |
+| Home | HandDrawnReveal (name brush and invitation underline), EditorialReveal (intro details), NotebookPlay (one finite glyph response per selected mode). Project proofs and Journal are static; no card lift/peek or count animation on Home. | 3 |
 | Works, Journal | The line under the title; the cards (on Journal, an entry's cover peeks out from behind its card as you point at it) | 2–3 |
 | A work, a journal entry | The details around the title (never the title); the reader count; previous and next, lifted cards with the page they lead to peeking out from behind them; a Stack gallery's prints settling onto the desk as it comes into view, when the author chose a Stack | 2–3, and the pile |
 | About | The pen under the signed "Hilman." on the card as the page opens; the marker behind the page's two headings as they come into view; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 1–2 |
 | Lab | The line under the title | 1 |
-| Connect | The line under the title; after sending, the sent note (Lottie) | 2 |
+| Connect | The line under the title; a small SVG response inside the transparent send button | 1 primitive + action feedback |
 | 404 | The card pulled from the drawer (Lottie) | 1 |
 | Studio | Nothing — feedback only, 150 ms or less. (It downloads bits.css with the rest of the stylesheet; nothing there uses it.) | 0 |
 
 `WorkTransition` is not in the counts: it moves *between* two pages, while
-nothing on either is moving. Opening a work from its card on Home or Works
+nothing on either is moving. Opening a work from its card on Works
 carries the card's photograph into the cover (520 ms) under the entry header,
 which is simply there; the pages themselves swap at once, as on every other
 navigation. Going back through the site's own links ("Back to the archive",
@@ -72,6 +72,23 @@ not do, on purpose or by measurement:
 - It needs `data-scroll-behavior="smooth"` on `<html>`: without it, a page
   opened from far down the list glided up from there for over half a second
   (on master too) and the photograph landed on a cover still on its way up.
+
+## Home contract after the October audit
+
+The project proof and Journal sections are server-rendered, already in their
+finished state. They add no scroll triggers, timelines or continuous loops.
+Their links navigate normally; repeated input and interruption belong to the
+browser/router rather than an animation queue. With reduced motion or no
+JavaScript, the same media, context and links remain. Missing real media is
+omitted, not replaced with an invented proof.
+
+The existing name brush and invitation underline still play once, and the intro
+keeps its existing EditorialReveal. NotebookPlay is reused: choosing a mode
+updates its caption/pressed state immediately and replaces the finite glyph
+entrance; rapid choices leave the latest mode selected. Reduced motion removes
+the entrance, including when the preference changes during use. Without
+JavaScript the initial Design state and the Lab link remain readable. No sensor,
+Lottie, Rive, or other new runtime was added to Home.
 
 ## The rules
 
@@ -121,47 +138,62 @@ not do, on purpose or by measurement:
     effects. `as` and `className` where they make sense. A prop exists
     because somebody needs to change it, not because it could be changed.
 
+## Connect: feedback inside the send button
+
+Connect keeps its form visible after sending. The transparent outlined button
+holds a small SVG, with no cream illustration panel and no Lottie download.
+Submitting nudges the plane once (420 ms), then it rests while the request is
+pending. Only the server's success result changes it to a check drawn once
+(240 ms) and the stable “Sent. Thank you!” label. Animation completion never
+sends a message or determines delivery.
+
+Pending and sent states prevent repeated submissions and make the fields
+read-only. Errors retain the visitor's note and allow retry. “Write another
+note” explicitly opens an empty form and focuses Name; a rerender or focus
+change does not reset a sent note. The live status announces progress and
+outcome, while the SVG is hidden from assistive technology. Keyboard focus
+stays on the same submit control as its label changes.
+
+Reduced motion shows the static plane/check and skips both animations, also
+when the preference changes during feedback. The form's content and button
+are visible in the server HTML. Motion is CSS scoped to this control and has
+no timer, loop, external asset, or new runtime.
+
 ## Lottie: illustrated moments
 
 HILMAN BITS is the interface's own motion: a line drawing itself under a
-title, a card lifting off the desk, a number rolling over. A few moments are
-illustrations instead — a small drawing acting something out, which CSS
-keyframes are the wrong tool for. Those are Lottie files in `public/lottie/`,
-drawn in the notebook's hand, and one component plays them: `NotebookMoment`
-(`components/bits/notebook-moment.tsx`). There are two.
+title, a card lifting off the desk, a number rolling over. One current
+placement uses an illustration instead: the 404 drawing in `public/lottie/`,
+played by `NotebookMoment` (`components/bits/notebook-moment.tsx`).
 
 | Where | What it draws | Plays | Rests on |
 |---|---|---|---|
-| Connect, once a message has really been sent | A note written, highlighted and signed, then sent off out of the frame (`sent-note.json`, 2 s) | As it appears | The signed note: its `static` marker |
 | The 404 page | A drawer of index cards searched — "hm…" — and a card pulled out with a red "?" on it (`page-not-filed.json`, 1.8 s) | The first time it is on screen (straight away if it already is) | Its last frame |
 
-- **Both play once.** Like every entrance in the notebook, a moment never
-  loops, replays or runs backwards. That is why `page-not-filed-loop` is not
-  used (rule 10: no frame loops on public pages), and `filed-idea` waits for a
-  page with room for it (Home has its three). The drawings keep their own
-  timing, a little longer than the interface's 1.2 s: they are played as
-  drawn, never re-exported or re-timed.
+`sent-note.json` is retained as an unused asset from the earlier Connect
+success panel, including its `static` marker. Its presence is not an active
+placement; Connect now uses the button feedback described above.
+
+- **Plays once.** Like every entrance in the notebook, a moment never loops,
+  replays or runs backwards. `page-not-filed-loop` and `filed-idea` remain
+  unused. The illustration keeps its own timing, a little longer than the
+  interface's 1.2 s: it is played as drawn, never re-exported or re-timed.
 - **The player comes with the moment, and only there.** lottie-web's light
-  SVG build (5.13.0, pinned; 46 KB gzipped) and the drawing's JSON (under
-  2 KB gzipped) are fetched with `import()` and `fetch()` inside the component
-  when a moment mounts: on /connect after a successful send, and on the 404
-  page. Nothing about Lottie is in the site layout, the nav, the footer or a
-  chunk another page shares, and `tests/public-performance.test.ts` holds
-  that. (A page with a link to /connect prefetches that page's own chunk,
-  and the component comes with it: under a kilobyte, never the player.) No
-  page loads the `.lottie` files.
-- **Reduced motion holds the still.** A moment never plays: the drawing is
-  shown on its still, and a preference that turns on halfway through jumps
-  straight there. Where the last frame is not the finished drawing — the sent
-  note has left the frame by then — the moment goes back to its still when it
-  ends and fades in on it: 200 ms, and only with no motion preference.
+  SVG build (5.13.0, pinned; previously measured at 46 KB gzipped) and the
+  drawing's JSON are fetched with `import()` and `fetch()` inside the
+  component when the 404 moment mounts. Nothing about Lottie is in Connect,
+  the site layout, the nav, or the footer; `tests/public-performance.test.ts`
+  checks the import boundary. No page loads the `.lottie` files.
+- **Reduced motion holds the still.** The drawing is shown on its last frame,
+  and a preference that turns on halfway through jumps straight there. The
+  component also retains marker-based still support for the archived sent
+  note; that capability does not make it a current placement.
 - **Decoration.** The box is `aria-hidden` with `role="presentation"`, holds
-  no text, takes no focus and moves no focus: the words beside it say what
-  happened, as they did before. It is a fixed square in the HTML, so nothing
-  shifts when the drawing arrives, and it is never the page's LCP element (an
-  inline SVG of paths is not a candidate). With no JavaScript, or when the
-  drawing fails to load, it stays an empty square.
-- **On cream.** A moment is drawn on the notebook's cream paper
+  no text, takes no focus and moves no focus. It is a fixed square in the
+  HTML, so nothing shifts when the drawing arrives. With no JavaScript, or
+  when the drawing fails to load, it stays an empty square and the page's
+  explanation remains readable.
+- **On cream.** The 404 moment is drawn on the notebook's cream paper
   (`.portrait-paper`), which is light in both themes.
 
 One exception, measured: the 404 draws its card only where the not-found

@@ -1,7 +1,7 @@
 "use client";
 
 import { dbDelete, dbGetAll, dbPut, dbReadModifyWrite, dbReplaceAll } from "./db";
-import { replacePendingRefs } from "../studio-media-refs";
+import { hasPendingRefs, replacePendingRefs } from "../studio-media-refs";
 import { rebaseQueued, type SyncEntity, type SyncMutation, type SyncPayload } from "../studio-sync-contract";
 
 /**
@@ -239,30 +239,45 @@ export async function claimForSending(
   sender: string,
   now = Date.now()
 ): Promise<boolean> {
-  const { result } = await dbReadModifyWrite<QueuedMutation, boolean>("outbox", (queue) => {
+  return (await claimMutationForSending(mutationId, sender, now)) !== null;
+}
+
+/**
+ * Freeze and return the exact payload to send in the same transaction.
+ * A candidate read earlier may have been replaced by a newer unsent save.
+ * Sending that stale candidate under the newer save's id would acknowledge
+ * and remove writing the server never received.
+ */
+export async function claimMutationForSending(
+  mutationId: string,
+  sender: string,
+  now = Date.now()
+): Promise<QueuedMutation | null> {
+  const { result } = await dbReadModifyWrite<QueuedMutation, QueuedMutation | false>("outbox", (queue) => {
     const entry = queue.find((item) => item.mutationId === mutationId);
-    if (!entry) return { result: false };
+    // Recheck the current payload: the replacement may contain a photo that
+    // was not in the earlier candidate and is still waiting to upload.
+    if (!entry || entry.blocked || hasPendingRefs(entry.payload)) return { result: false };
 
     const mine = entry.claimedBy === sender;
     const free = !entry.claimedBy || claimIsStale(entry, now);
     if (!mine && !free) return { result: false };
 
+    const claimed: QueuedMutation = {
+      ...entry,
+      sending: true,
+      claimedBy: sender,
+      claimedAt: new Date(now).toISOString(),
+      // Stamped as the request goes out, and never removed. From here on
+      // this id means one payload, whatever the network does next.
+      ...(entry.attemptedAt ? {} : { attemptedAt: new Date(now).toISOString() }),
+    };
     return {
-      result: true,
-      put: [
-        {
-          ...entry,
-          sending: true,
-          claimedBy: sender,
-          claimedAt: new Date(now).toISOString(),
-          // Stamped as the request goes out, and never removed. From here on
-          // this id means one payload, whatever the network does next.
-          ...(entry.attemptedAt ? {} : { attemptedAt: new Date(now).toISOString() }),
-        },
-      ],
+      result: claimed,
+      put: [claimed],
     };
   });
-  return result === true;
+  return result || null;
 }
 
 /** Hands an entry back. Only the holder may — a tab does not release another's. */

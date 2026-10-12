@@ -138,7 +138,7 @@ function MetaSave() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded border border-line px-3 py-1.5 text-xs hover:border-pen hover:text-pen disabled:opacity-50"
+      className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded border border-line px-3 py-1.5 text-xs hover:border-pen hover:text-pen disabled:opacity-50"
     >
       {pending ? "…" : "Save"}
     </button>
@@ -291,14 +291,14 @@ function MediaCard({ item }: { item: MediaRow }) {
               <button
                 type="button"
                 onClick={() => confirmDelete(stage.refs.length > 0)}
-                className="rounded bg-red px-2.5 py-1 text-xs font-semibold text-[#220603]"
+                className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded bg-red px-2.5 py-1 text-xs font-semibold text-[#220603]"
               >
                 {stage.refs.length ? "Delete anyway" : "Delete"}
               </button>
               <button
                 type="button"
                 onClick={() => setStage({ step: "idle" })}
-                className="rounded border border-line px-2.5 py-1 text-xs"
+                className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded border border-line px-2.5 py-1 text-xs"
               >
                 Cancel
               </button>

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createPublicClient } from "@/lib/supabase/public";
+import { useState, useEffect, useRef } from "react";
+import { useDialogFocus } from "./use-dialog-focus";
+import { useScrollLock } from "./mobile/use-scroll-lock";
+import { createBrowserSupabase } from "@/lib/supabase/client";
 import { mediaSrc } from "@/lib/cloudinary";
 import type { MediaRow } from "@/lib/types";
 
@@ -18,12 +20,17 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
   const [folderFilter, setFolderFilter] = useState("all");
   const [selectedItem, setSelectedItem] = useState<MediaRow | null>(null);
 
+  const panel = useRef<HTMLDivElement>(null);
+  useDialogFocus(isOpen, panel, onClose);
+  useScrollLock(isOpen);
+
   // Fetch media from Supabase when the modal is opened
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
       setSelectedItem(null);
-      const sb = createPublicClient();
+      // Media metadata is owner-only; include the signed-in browser session.
+      const sb = createBrowserSupabase();
 
       sb.from("media")
         .select("*")
@@ -62,7 +69,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
       />
 
       {/* Modal Dialog */}
-      <div className="fixed left-1/2 top-1/2 z-50 flex h-[80vh] w-full max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-line bg-surface shadow-sticky animate-in fade-in zoom-in-95 duration-fast">
+      <div ref={panel} role="dialog" aria-modal="true" aria-label="Choose media" tabIndex={-1} className="fixed left-1/2 top-1/2 z-50 flex h-[80vh] w-full max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-line bg-surface shadow-sticky animate-in fade-in zoom-in-95 duration-fast">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line bg-raise px-5 py-4">
           <div>
@@ -86,7 +93,8 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
         <div className="flex flex-wrap items-center gap-3 border-b border-line bg-raise p-4">
           <div className="flex-1 min-w-[200px]">
             <input
-              type="text"
+              type="search"
+              aria-label="Search media"
               placeholder="Search by file ID, title, or alt text..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -130,20 +138,23 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
                 const src = item.kind === "image" ? mediaSrc(item.public_id, { width: 150 }) : null;
 
                 return (
-                  <div
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
+                    aria-label={item.title || item.alt || "Untitled asset"}
                     key={item.id}
                     onClick={() => setSelectedItem(item)}
-                    className={`relative aspect-square cursor-pointer overflow-hidden rounded-lg border transition-all ${
+                    className={`relative aspect-square w-full cursor-pointer overflow-hidden rounded-lg border transition-colors ${
                       isSelected
-                        ? "border-pen ring-2 ring-pen scale-98 bg-raise"
-                        : "border-line bg-surface hover:border-line-strong hover:scale-102"
+                        ? "border-pen ring-2 ring-pen bg-raise"
+                        : "border-line bg-surface hover:border-line-strong"
                     }`}
                   >
                     {src ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={src}
-                        alt={item.alt || item.public_id}
+                        alt=""
                         className="h-full w-full object-cover"
                         loading="lazy"
                       />
@@ -157,7 +168,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
                         </svg>
                       </div>
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -168,7 +179,7 @@ export function MediaSelectorModal({ isOpen, onClose, onSelect }: MediaSelectorM
         <div className="flex items-center justify-between border-t border-line bg-raise px-5 py-3.5">
           <div className="text-xs text-soft truncate max-w-md">
             {selectedItem ? (
-              <span className="font-mono text-pen font-medium">Selected: {selectedItem.public_id}</span>
+              <span className="font-mono text-pen font-medium">Selected: {selectedItem.title || selectedItem.alt || "Untitled asset"}</span>
             ) : (
               <span className="italic text-faint">Choose an asset to proceed</span>
             )}

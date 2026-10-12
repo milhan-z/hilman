@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { stashMedia, type PendingMediaKind } from "@/lib/studio-local/media";
 import { ingestLabel, savingNote } from "@/lib/studio-local/ingest-status";
 import type { IngestProgress } from "@/lib/studio-local/media-optimize";
 import { flushOutbox } from "./studio-runtime";
+import { releaseIfUnreferenced } from "@/lib/studio-local/media-release";
 
 /**
  * Getting a photograph into a block, starting with the camera.
@@ -41,17 +42,45 @@ export function MediaCapture({
   const [error, setError] = useState<string | null>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const libraryInput = useRef<HTMLInputElement>(null);
+  const operation = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const backgrounded = () => {
+      if (kind === "loop-clip" && document.hidden) {
+        operation.current?.abort(new Error("Clip processing stopped when Studio went into the background. Keep Studio open and choose the file again."));
+      }
+    };
+    document.addEventListener("visibilitychange", backgrounded);
+    return () => {
+      document.removeEventListener("visibilitychange", backgrounded);
+      operation.current?.abort();
+      operation.current = null;
+    };
+  }, [kind]);
 
   async function take(file: File | undefined) {
-    if (!file) return;
+    if (!file || operation.current) return;
+    const controller = new AbortController();
+    operation.current = controller;
     setBusy(true);
     setError(null);
     setSaved(null);
     setProgress({ phase: "inspecting" });
 
-    const result = await stashMedia(file, folder, kind, setProgress);
+    const result = await stashMedia(file, folder, kind, (next) => {
+      if (!controller.signal.aborted) setProgress(next);
+    }, controller.signal).catch(() => ({ ok: false as const, reason: "Studio couldn't keep that file. Your existing media is unchanged; choose the file again." }));
+    // An unmount or cancel can arrive while IndexedDB is committing. Do not
+    // attach or upload an abandoned result; retain any already durable refs.
+    if (controller.signal.aborted && result.ok) void releaseIfUnreferenced(result.ref);
+    if (operation.current !== controller) return;
+    operation.current = null;
     setBusy(false);
     setProgress(null);
+    if (controller.signal.aborted) {
+      setError(controller.signal.reason instanceof Error ? controller.signal.reason.message : "Media processing cancelled.");
+      return;
+    }
 
     if (!result.ok) {
       setError(result.reason);
@@ -107,6 +136,21 @@ export function MediaCapture({
         </button>
       </div>
 
+      {busy && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3">
+          <p role="status" className="text-sm text-soft">
+            {ingestLabel(progress, kind)}{kind === "loop-clip" ? " Keep Studio open while the clip is prepared." : ""}
+          </p>
+          <button
+            type="button"
+            onClick={() => operation.current?.abort(new Error("Media processing cancelled. Your existing media is unchanged."))}
+            className="min-h-11 px-2 text-sm font-medium text-soft underline underline-offset-4"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* `capture` is what makes iOS open the camera rather than the picker.
           It is only a hint — a desktop browser ignores it and shows files,
           which is the right thing to happen there. */}
@@ -116,6 +160,8 @@ export function MediaCapture({
         accept={accept}
         capture="environment"
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden
         onChange={(event) => {
           void take(event.target.files?.[0]);
           event.target.value = "";
@@ -126,6 +172,8 @@ export function MediaCapture({
         type="file"
         accept={accept}
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden
         onChange={(event) => {
           void take(event.target.files?.[0]);
           event.target.value = "";

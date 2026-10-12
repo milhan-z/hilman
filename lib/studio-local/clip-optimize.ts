@@ -42,8 +42,8 @@ import {
   MAX_CLIP_SECONDS,
   MAX_CLIP_BYTES,
 } from "./clip-check";
-import { planClip, type ClipFacts } from "./media-policy";
-import { replaced, untouched, type OptimizeOutcome, type ProgressFn } from "./media-optimize";
+import { isAvc, MAX_SOURCE_CLIP_BYTES, planClip, type ClipFacts } from "./media-policy";
+import { MediaTooLargeError, replaced, untouched, type OptimizeOutcome, type ProgressFn } from "./media-optimize";
 
 type Mediabunny = typeof import("mediabunny");
 
@@ -74,7 +74,7 @@ function loadMediabunny(): Promise<Mediabunny> {
  */
 let queue: Promise<unknown> = Promise.resolve();
 
-function serialize<T>(work: () => Promise<T>): Promise<T> {
+function serialize<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   const run = queue.then(work, work);
   // Keep the chain alive even when one job rejects, without reporting an
   // unhandled rejection for a result somebody else already received.
@@ -82,23 +82,36 @@ function serialize<T>(work: () => Promise<T>): Promise<T> {
     () => undefined,
     () => undefined
   );
-  return run;
+  if (!signal) return run;
+  // A cancelled queued selection reports promptly; the queued callback still
+  // checks the signal before it allocates anything when its turn arrives.
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    run.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
 }
 
 /** Everything the policy needs, read from the file itself. */
-export async function inspectClip(file: File): Promise<ClipFacts | null> {
-  const { Input, BlobSource, ALL_FORMATS } = await loadMediabunny();
+export async function inspectClip(file: File, signal?: AbortSignal, measureFrameRate = true): Promise<ClipFacts | null> {
+  signal?.throwIfAborted();
+  const { Input, BlobSource, ALL_FORMATS, MP4 } = await loadMediabunny();
+  signal?.throwIfAborted();
+  const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
+  const abort = () => input.dispose();
+  signal?.addEventListener("abort", abort, { once: true });
 
   try {
-    const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
     const track = await input.getPrimaryVideoTrack();
     if (!track) return null;
 
-    const [width, height, duration, codec] = await Promise.all([
+    const [width, height, duration, codec, format] = await Promise.all([
       track.getDisplayWidth(),
       track.getDisplayHeight(),
       input.computeDuration(),
       track.getCodecParameterString().catch(() => null),
+      input.getFormat(),
     ]);
 
     // Frame rate is deduced from real frame timestamps rather than container
@@ -107,13 +120,16 @@ export async function inspectClip(file: File): Promise<ClipFacts | null> {
     // as "leave the frame rate alone".
     let frameRate: number | null = null;
     try {
-      const metrics = await track.computeFrameRateMetrics();
-      const guess = metrics.bestGuessFrameRate;
-      if (Number.isFinite(guess) && guess > 0) frameRate = guess;
+      if (measureFrameRate) {
+        const metrics = await track.computeFrameRateMetrics();
+        const guess = metrics.bestGuessFrameRate;
+        if (Number.isFinite(guess) && guess > 0) frameRate = guess;
+      }
     } catch {
       frameRate = null;
     }
 
+    signal?.throwIfAborted();
     return {
       bytes: file.size,
       width,
@@ -121,30 +137,57 @@ export async function inspectClip(file: File): Promise<ClipFacts | null> {
       durationSeconds: duration,
       frameRate,
       codec,
-      type: (file.type || "").toLowerCase(),
+      // The actual format wins over both the extension and File.type.
+      type: format === MP4 ? "video/mp4" : "",
     };
   } catch {
+    signal?.throwIfAborted();
     // Unreadable by the demuxer. Not an error here: the caller falls back to
     // checkClipFile(), which produces the right sentence for the author.
     return null;
+  } finally {
+    signal?.removeEventListener("abort", abort);
+    input.dispose();
   }
 }
 
 /**
  * The clip half of the ingest pipeline.
  *
- * Never throws: every failure hands back the original, and `checkClipFile()`
- * then decides whether that original is acceptable. That ordering is what
- * keeps the existing refusal messages intact when transcoding is unavailable.
+ * Encoding failures return the original for the independent format gate.
+ * Cancellation/deadline and unsafe source sizes refuse the ingest entirely.
  */
 export async function optimizeClip(
   file: File,
-  onProgress?: ProgressFn
+  onProgress?: ProgressFn,
+  signal?: AbortSignal
 ): Promise<OptimizeOutcome> {
+  // Include inspection and validation in the queue, not just encoding.
+  return serialize(async () => {
+    signal?.throwIfAborted();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error("Clip processing took too long. Keep Studio open, trim the clip, and try again.")), 120_000);
+    const bounded = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+    try {
+      return await optimizeClipNow(file, onProgress, bounded);
+    } finally {
+      clearTimeout(timer);
+    }
+  }, signal);
+}
+
+async function optimizeClipNow(file: File, onProgress: ProgressFn | undefined, signal: AbortSignal): Promise<OptimizeOutcome> {
+  signal.throwIfAborted();
+  if (file.size > MAX_SOURCE_CLIP_BYTES) return untouched(file, "source-too-large");
   onProgress?.({ phase: "inspecting" });
 
-  const facts = await inspectClip(file).catch(() => null);
+  const facts = await inspectClip(file, signal);
   if (!facts) return untouched(file, "unreadable");
+  // Compressed bytes alone do not bound the size of a decoded frame. Allow
+  // standard 4K phone footage, but refuse larger sources before decoding.
+  if (facts.width * facts.height > 4096 * 2160) {
+    throw new MediaTooLargeError("This clip's frames are too large to process safely on a phone. Export at 4K or lower and try again.");
+  }
 
   // Too long to be a Loop Clip at all. Transcoding it would be a minute of
   // battery spent on something checkClipFile() is about to refuse anyway.
@@ -167,15 +210,27 @@ export async function optimizeClip(
   const encodable = await canEncodeVideo("avc", {
     width: plan.width,
     height: plan.height,
+    ...(plan.frameRate !== null ? { frameRate: plan.frameRate } : {}),
   }).catch(() => false);
+  signal.throwIfAborted();
 
   // No H.264 encoder here. Hand the original back unchanged so the existing
   // container check gives the author the explanation it always did.
   if (!encodable) return untouched(file, "no-encoder", base);
 
   try {
-    const candidate = await serialize(() => transcode(file, plan, onProgress));
+    const candidate = await transcode(file, plan, onProgress, signal);
     if (!candidate || candidate.size === 0) return untouched(file, "encode-failed", base);
+
+    // A MIME label and the requested encoder are not output verification.
+    const verified = await inspectClip(candidate, signal);
+    if (!verified || verified.type !== "video/mp4" || !isAvc(verified.codec) ||
+        !Number.isFinite(verified.durationSeconds) || verified.durationSeconds <= 0 ||
+        verified.durationSeconds > MAX_CLIP_SECONDS ||
+        verified.width !== plan.width || verified.height !== plan.height ||
+        (plan.frameRate !== null && (verified.frameRate === null || verified.frameRate > plan.frameRate + 1.5))) {
+      return untouched(file, "invalid-output", base);
+    }
 
     // A transcode that produced something bigger is a transcode that should
     // not have happened — unless the point was to change container or codec,
@@ -194,12 +249,14 @@ export async function optimizeClip(
 
     return replaced(file, candidate, {
       ...base,
-      finalWidth: plan.width,
-      finalHeight: plan.height,
-      finalFps: plan.frameRate ?? facts.frameRate,
+      finalWidth: verified.width,
+      finalHeight: verified.height,
+      finalFps: verified.frameRate,
+      codec: verified.codec,
       audioRemoved: true,
     });
   } catch {
+    signal.throwIfAborted();
     return untouched(file, "error", base);
   }
 }
@@ -216,46 +273,77 @@ interface MediaReportExtras {
 async function transcode(
   file: File,
   plan: ReturnType<typeof planClip>,
-  onProgress?: ProgressFn
+  onProgress: ProgressFn | undefined,
+  signal: AbortSignal
 ): Promise<File | null> {
   const { Input, Output, Conversion, BlobSource, BufferTarget, Mp4OutputFormat, ALL_FORMATS } =
     await loadMediabunny();
 
   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
   const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
-
-  const conversion = await Conversion.init({
-    input,
-    output,
-    video: {
-      width: plan.width,
-      height: plan.height,
-      // `contain` rather than `cover`: a Loop Clip must never be silently
-      // cropped on its way in. The block decides how it is framed.
-      fit: "contain",
-      ...(plan.frameRate !== null ? { frameRate: plan.frameRate } : {}),
-    },
-    // Always muted on the public site, so the track is dead weight in the
-    // file and in the upload.
-    audio: { discard: true },
-  });
-
-  if (!conversion.isValid) return null;
-
-  onProgress?.({ phase: "optimizing", ratio: 0 });
-  conversion.onProgress = (ratio: number) => {
-    onProgress?.({ phase: "optimizing", ratio });
+  let conversion: Awaited<ReturnType<typeof Conversion.init>> | undefined;
+  let cancellation: Promise<void> | undefined;
+  const abort = () => {
+    cancellation ??= conversion ? conversion.cancel() : output.cancel();
+    void cancellation.catch(() => {});
+    input.dispose();
   };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    signal.throwIfAborted();
 
-  await conversion.execute();
-  onProgress?.({ phase: "validating" });
+    conversion = await Conversion.init({
+      input,
+      output,
+      tracks: "primary",
+      showWarnings: false,
+      video: {
+        codec: "avc",
+        // Default conversion can copy the existing packets. That preserves a
+        // bloated H.264 encode and can even keep HEVC inside an MP4.
+        forceTranscode: true,
+        width: plan.width,
+        height: plan.height,
+        // `contain` rather than `cover`: a Loop Clip must never be silently
+        // cropped on its way in. The block decides how it is framed.
+        fit: "contain",
+        ...(plan.frameRate !== null ? { frameRate: plan.frameRate } : {}),
+      },
+      // Always muted on the public site, so the track is dead weight in the
+      // file and in the upload.
+      audio: { discard: true },
+    });
+    signal.throwIfAborted();
 
-  const buffer = output.target.buffer;
-  if (!buffer) return null;
+    if (!conversion.isValid) return null;
 
-  const base = (file.name || "clip").replace(/\.[^.]+$/, "") || "clip";
-  return new File([buffer], `${base}.mp4`, {
-    type: "video/mp4",
-    lastModified: Date.now(),
-  });
+    onProgress?.({ phase: "optimizing", ratio: 0 });
+    conversion.onProgress = (ratio: number) => {
+      onProgress?.({ phase: "optimizing", ratio });
+    };
+
+    await conversion.execute();
+    signal.throwIfAborted();
+    onProgress?.({ phase: "validating" });
+
+    const buffer = output.target.buffer;
+    if (!buffer) return null;
+
+    const base = (file.name || "clip").replace(/\.[^.]+$/, "") || "clip";
+    return new File([buffer], `${base}.mp4`, {
+      type: "video/mp4",
+      lastModified: Date.now(),
+    });
+  } finally {
+    signal.removeEventListener("abort", abort);
+    try {
+      if (cancellation) await cancellation;
+      else if (output.state !== "finalized") {
+        if (conversion) await conversion.cancel();
+        else await output.cancel();
+      }
+    } finally {
+      input.dispose();
+    }
+  }
 }

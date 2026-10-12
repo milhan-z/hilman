@@ -81,7 +81,7 @@ export function MessageCard({
   const replySubject = encodeURIComponent(`Re: your note via hilman.`);
   const mailto = `mailto:${message.email}?subject=${replySubject}`;
   const action =
-    "rounded border border-line px-2.5 py-1.5 text-xs text-soft transition-colors hover:border-pen hover:text-pen disabled:opacity-50";
+    "min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded border border-line px-2.5 py-1.5 text-xs text-soft transition-colors hover:border-pen hover:text-pen disabled:opacity-50";
 
   return (
     <li
@@ -148,7 +148,7 @@ export function MessageCard({
         )}
         <button
           type="button"
-          className="ml-auto rounded border border-line px-2.5 py-1.5 text-xs text-red transition-colors hover:border-red disabled:opacity-50"
+          className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 ml-auto rounded border border-line px-2.5 py-1.5 text-xs text-red transition-colors hover:border-red disabled:opacity-50"
           disabled={pending}
           onClick={() => setConfirming(true)}
         >
@@ -169,14 +169,14 @@ export function MessageCard({
               type="button"
               onClick={destroy}
               disabled={pending}
-              className="rounded bg-red px-2.5 py-1 font-semibold text-[#220603] disabled:opacity-50"
+              className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded bg-red px-2.5 py-1 font-semibold text-[#220603] disabled:opacity-50"
             >
               {pending ? "Deleting…" : "Delete permanently"}
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              className="rounded border border-line px-2.5 py-1"
+              className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded border border-line px-2.5 py-1"
             >
               Cancel
             </button>

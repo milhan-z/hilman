@@ -68,6 +68,13 @@ Run the migrations **in order** in the SQL editor (or `supabase db push`):
 | `0011_atomic_pin_throttle.sql` | a wrong PIN is counted in one step |
 | `0012_atomic_content_delete.sql` | deleting an entry and its blocks is one transaction |
 | `0013_reader_counts.sql` | reader counts on Works and Journal, kept apart from the content rows |
+| `0014_journal_voice_note.sql` | optional Journal recording metadata; absent=keep, null=remove |
+| `0015_private_media_registry.sql` | owner-only media registry; public pages keep published media references |
+
+The migration list describes the local schema chain, not the live project's
+applied history. Inspect actual remote schema and history separately before
+release; do not replay old migrations to reconcile the ledger. Migration 0015
+is prepared and tested locally in the October audit, not applied to production.
 
 Note on `0004`: it uses `jsonb_exists(b, 'data')` rather than the `?` operator.
 The Supabase SQL editor reads a bare `?` as a bind parameter and fails to parse

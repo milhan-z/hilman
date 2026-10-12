@@ -56,8 +56,8 @@ test("the site shell ships no animation library", () => {
 test("Lottie is fetched by one component, after the page, and only where it draws", () => {
   // lottie-web's light player is 46 KB gzipped. The one component that draws
   // an illustrated moment fetches it, with the drawing, when a moment mounts:
-  // on /connect after a message is sent, and on the 404 page. Nothing else
-  // may import it, and that component never statically — a static import
+  // on the 404 page. Connect now uses inline SVG button feedback. Nothing
+  // else may import it, and that component never statically — a static import
   // would put the player in the page's own JavaScript, or in a chunk every
   // page shares (docs/HILMAN-BITS.md, "Lottie: illustrated moments").
   const moment = "components/bits/notebook-moment.tsx";
@@ -74,12 +74,12 @@ test("Lottie is fetched by one component, after the page, and only where it draw
   }
   assert.match(src, /Promise\.all\(\[\s*import\("lottie-web\/build\/player\/lottie_light"\),\s*fetch\(src\)/, "inside the component, with the drawing");
 
-  // Only Connect's success and the 404 page mount a moment; the shell
-  // every page is drawn in knows nothing about them.
+  // Only the 404 page mounts a moment; Connect and the shared shell do not
+  // import a player or illustrated success panel.
   const users = ["app", "components", "lib"]
     .flatMap(scriptsIn)
     .filter((path) => path !== moment && code(path).includes("notebook-moment"));
-  assert.deepEqual(users.sort(), ["app/not-found.tsx", "components/connect-form.tsx"]);
+  assert.deepEqual(users.sort(), ["app/not-found.tsx"]);
   for (const path of ["app/layout.tsx", "app/(site)/layout.tsx", "components/site-nav.tsx", "components/site-footer.tsx"]) {
     assert.ok(!/lottie|NotebookMoment/i.test(code(path)), `${path} knows nothing about Lottie`);
   }

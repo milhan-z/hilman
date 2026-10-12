@@ -33,7 +33,7 @@ export const PAGE_SCHEMAS: Record<string, PageSchema> = {
     slug: "home",
     title: "Home",
     blurb:
-      "The first screen. One clear sentence about what you do beats a list of job titles.",
+      "Your introduction, followed by full project sections. Pin published Projects and arrange their order in Projects to curate Home; all pinned works appear. With no pins, Home shows the first three published works. Covers, summaries and contributions come from each project. Journal follows, then Play, your About community story, and the invitation.",
     fields: [
       {
         kind: "longtext",

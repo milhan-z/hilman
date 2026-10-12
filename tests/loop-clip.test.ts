@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { checkClipFile, MAX_CLIP_BYTES, MAX_CLIP_SECONDS } from "../lib/studio-local/clip-check";
 import { BLOCK_HINTS } from "../lib/types";
 import { blockReference } from "../lib/studio-import-reference";
@@ -12,14 +13,9 @@ import { extractR2Key, resolveLoopClipSrc } from "../lib/loop-clip";
  *
  * Two things are being defended here.
  *
- * The first is `checkClipFile()` — the "detect/reject a MOV/HEVC file
- * instead of silently uploading it" gate. It runs in a browser normally, and
- * the second half of it (an actual playback probe through a hidden <video>
- * element) needs a DOM this test environment does not have. The module
- * itself accounts for that — `typeof document === "undefined"` skips the
- * probe rather than throwing — so what is tested here is exactly the part
- * that runs everywhere: the container check, which the file's own comment
- * explains is doing more of the real work than the probe anyway.
+ * The first is the format/codec gate, using actual encoded MP4 fixture bytes.
+ * Metadata inspection runs without a DOM; browser playback is an additional
+ * check that these Node tests do not claim to exercise.
  *
  * The second is that the block slots into the existing registries the same
  * way `image` or `youtube` already do — BLOCK_HINTS, the importer's
@@ -27,12 +23,13 @@ import { extractR2Key, resolveLoopClipSrc } from "../lib/loop-clip";
  * hardcoded list of block types to grow by hand.
  */
 
+const h264 = readFileSync(new URL("./fixtures/media/h264.mp4", import.meta.url));
 const mp4 = (bytes: number, name = "clip.mp4", type = "video/mp4") =>
-  new File([new Uint8Array(bytes)], name, { type });
+  new File([h264, new Uint8Array(Math.max(0, bytes - h264.length))], name, { type });
 
 /* ── the format gate ──────────────────────────────────────── */
 
-test("a plain MP4 passes the container check", async () => {
+test("an actual H.264 MP4 passes the format and codec gate", async () => {
   const result = await checkClipFile(mp4(1024));
   assert.equal(result.ok, true);
 });
@@ -45,10 +42,8 @@ test("a .mov export is rejected, and told why in terms of MP4", async () => {
   assert.match(result.reason!, /video\/quicktime/);
 });
 
-test("an mp4 with no reported type is accepted by its extension", async () => {
-  // Some browsers/OSes hand back an empty File.type for an otherwise-normal
-  // file; the container name is still evidence.
-  const file = new File([new Uint8Array(1024)], "clip.mp4", { type: "" });
+test("an H.264 mp4 with no reported type is still verified from its bytes", async () => {
+  const file = mp4(1024, "clip.mp4", "");
   const result = await checkClipFile(file);
   assert.equal(result.ok, true);
 });
@@ -85,7 +80,7 @@ test("the duration ceiling is defined and reasonable for a short clip", () => {
   assert.equal(MAX_CLIP_SECONDS, 60);
 });
 
-/* ── without a DOM, the container check is still the one that runs ── */
+/* ── byte-level checks run even without a DOM ── */
 
 test("checkClipFile does not require a browser to reach a verdict", async () => {
   assert.equal(typeof document, "undefined", "this test asserts the Node environment has no DOM");
@@ -93,6 +88,21 @@ test("checkClipFile does not require a browser to reach a verdict", async () => 
   const bad = await checkClipFile(mp4(2048, "clip.mov", "video/quicktime"));
   assert.equal(good.ok, true);
   assert.equal(bad.ok, false);
+});
+
+test("an HEVC MP4 is refused even though its extension and MIME both say MP4", async () => {
+  const bytes = readFileSync(new URL("./fixtures/media/hevc.mp4", import.meta.url));
+  const result = await checkClipFile(new File([bytes], "clip.mp4", { type: "video/mp4" }));
+  assert.equal(result.ok, false);
+  assert.match(result.reason!, /H\.264/);
+});
+
+test("a renamed corrupt file and an empty MP4 never pass an unknown codec", async () => {
+  for (const bytes of [new Uint8Array(1024), new Uint8Array(0)]) {
+    const result = await checkClipFile(new File([bytes], "clip.mp4", { type: "video/mp4" }));
+    assert.equal(result.ok, false);
+    assert.match(result.reason!, /verified H\.264/);
+  }
 });
 
 /* ── the block is a first-class citizen of the registries ─── */

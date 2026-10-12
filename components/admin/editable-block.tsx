@@ -741,7 +741,7 @@ function BlockControls({
   if (variant === "inline") {
     if (!active) return null;
     return (
-      <div className="mt-2.5 flex items-center justify-end gap-1 border-t border-line pt-1.5 lg:hidden">
+      <div className="mt-2.5 flex flex-wrap items-center justify-end gap-1 border-t border-line pt-1.5 lg:hidden">
         {buttons}
       </div>
     );

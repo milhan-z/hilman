@@ -2,9 +2,9 @@ import Link from "next/link";
 import { EditorialReveal } from "@/components/bits/editorial-reveal";
 import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
 import { Pic } from "@/components/cld-image";
-import { JournalCard } from "@/components/journal-card";
-import { ProjectCard } from "@/components/project-card";
-import { Button, ArrowLink, Kicker, SectionHeading } from "@/components/ui";
+import { HomeJournal } from "@/components/home-journal";
+import { HomeProject } from "@/components/home-project";
+import { Button, ArrowLink, Kicker } from "@/components/ui";
 import { ContentUnavailable } from "@/components/content-unavailable";
 import { NotebookPlay } from "@/components/notebook-play";
 import { getJournalPosts, getPage, getProjects, load } from "@/lib/data";
@@ -27,8 +27,12 @@ export default async function HomePage() {
   const about = resolveProfileData("about", aboutRes.ok ? aboutRes.value?.data : undefined);
   const projects = projectsRes.ok ? projectsRes.value : [];
   const featured = projects.filter((project) => project.featured);
-  const showcase = (featured.length ? featured : projects).slice(0, 3);
-  const journal = journalRes.ok ? journalRes.value.slice(0, 2) : [];
+  // The existing Studio pins and sort order are the curation. Do not silently
+  // drop a fourth pinned work. Retain the current three-work starter fallback.
+  const showcase = featured.length ? featured : projects.slice(0, 3);
+  const entries = journalRes.ok ? journalRes.value : [];
+  const leadEntry = entries.find((post) => post.featured) ?? entries[0];
+  const journal = leadEntry ? [leadEntry, ...entries.filter((post) => post.id !== leadEntry.id).slice(0, 2)] : [];
   const portrait = mediaSrc(home.portrait) ? home.portrait : undefined;
 
   return (
@@ -89,9 +93,9 @@ export default async function HomePage() {
         </div>
       </section>
       <section id="selected-work" className="scroll-mt-24 border-t border-line-strong pt-9" aria-label={showcase.length ? "Selected work" : "Creative interests"}>
-        <EditorialReveal trigger="view"><SectionHeading index="01" title={showcase.length ? "A few things I’ve made" : "The things I love exploring"} href={showcase.length ? "/works" : undefined} hrefLabel="All work" /></EditorialReveal>
+        <h2 className="mb-7 font-display text-3xl font-semibold tracking-tight sm:text-4xl">{showcase.length ? "A few things I’ve made" : "The things I love exploring"}</h2>
         {!projectsRes.ok ? <ContentUnavailable what="the work" compact /> : showcase.length ? (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{showcase.map((project, index) => <ProjectCard key={project.id} project={project} index={index} />)}</div>
+          <div>{showcase.map((project, index) => <HomeProject key={project.id} project={project} index={index} />)}</div>
         ) : (
           <div className="grid gap-0 overflow-hidden rounded-lg border border-line sm:grid-cols-3">
             {practices.map((practice) => <Link key={practice.label} href={practice.href} className="practice-link group flex flex-col border-b border-line bg-surface p-6 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 lg:p-8">
@@ -102,19 +106,23 @@ export default async function HomePage() {
           </div>
         )}
       </section>
-      {about.community_story && <section className="my-16 grid gap-8 border-y border-line py-10 sm:my-20 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16 lg:py-14" aria-label="People and collaboration">
-        <div><Kicker>more than what’s on the screen</Kicker>{about.community_heading && <h2 id="people-heading" className="mt-4 max-w-md font-display text-3xl font-semibold tracking-tight sm:text-4xl">{about.community_heading}</h2>}</div>
-        <div><p className="max-w-xl text-lg leading-relaxed text-soft">{about.community_story}</p><div className="mt-6"><ArrowLink href="/about#people">Meet the person behind the work</ArrowLink></div></div>
-      </section>}
-      <section className="mt-16 grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:gap-14" aria-label="Notes and experiments">
-        <div>
-          <EditorialReveal trigger="view"><SectionHeading index="02" title="Notes along the way" href="/journal" hrefLabel={home.journal_hook} /></EditorialReveal>
-          {!journalRes.ok ? <ContentUnavailable what="the journal" compact /> : journal.length ? <div className="space-y-4">{journal.map((post) => <JournalCard key={post.id} post={post} />)}</div> : (
+      <div className="flex justify-end border-b border-line py-7"><ArrowLink href="/works" className="min-h-[44px]">Explore the full archive</ArrowLink></div>
+      <section className="mt-16 sm:mt-20" aria-labelledby="home-journal-heading">
+          <Kicker>Talk / Journal</Kicker>
+          <h2 id="home-journal-heading" className="mb-7 mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Notes along the way</h2>
+          {!journalRes.ok ? <ContentUnavailable what="the journal" compact /> : journal.length ? <HomeJournal posts={journal} /> : (
             <div className="ruled rounded-lg border border-line bg-surface p-7 sm:p-9"><span className="font-hand text-2xl text-pen">There’s room for the unfinished.</span><p className="mt-4 max-w-md text-soft">This is where I’ll share moments, things I’m learning, and the thinking behind the work. The first notes are still taking shape.</p><div className="mt-6"><ArrowLink href="/about">For now, get to know me</ArrowLink></div></div>
           )}
-        </div>
-        <div><EditorialReveal trigger="view"><SectionHeading index="03" title="A little room to play" /></EditorialReveal><NotebookPlay /><div className="mt-5"><ArrowLink href="/lab">More experiments in the Lab</ArrowLink></div></div>
+          <ArrowLink href="/journal" className="mt-6 min-h-[44px]">{home.journal_hook || "Read the notes"}</ArrowLink>
       </section>
+      <section className="mt-16 grid gap-8 border-y border-line py-10 sm:mt-20 sm:py-14 lg:grid-cols-2 lg:items-center lg:gap-16" aria-labelledby="home-play-heading">
+        <div><Kicker>Play / Lab</Kicker><h2 id="home-play-heading" className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">A little room to play</h2><ArrowLink href="/lab" className="mt-5 min-h-[44px]">More experiments in the Lab</ArrowLink></div>
+        <NotebookPlay />
+      </section>
+      {about.community_story && <section className="my-16 grid gap-8 sm:my-20 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16" aria-label="People and collaboration">
+        <div><Kicker>more than what’s on the screen</Kicker>{about.community_heading && <h2 id="people-heading" className="mt-4 max-w-md font-display text-3xl font-semibold tracking-tight sm:text-4xl">{about.community_heading}</h2>}</div>
+        <div><p className="max-w-xl text-lg leading-relaxed text-soft">{about.community_story}</p><div className="mt-6"><ArrowLink href="/about#people" className="min-h-[44px]">Meet the person behind the work</ArrowLink></div></div>
+      </section>}
       <section className="my-16 flex flex-col justify-between gap-7 rounded-lg border border-line-strong bg-surface p-7 sm:my-20 sm:p-10 lg:flex-row lg:items-center" aria-labelledby="connect-heading">
         <div><Kicker className="text-pen">new ideas start with a hello</Kicker><h2 id="connect-heading" className="mt-4 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Let’s make something <span className="relative inline-block italic">together.<span aria-hidden className="absolute -bottom-2 left-0 right-1"><HandDrawnReveal variant="underline" trigger="view" fluid strokeWidth={3} /></span></span></h2><p className="mt-3 max-w-xl text-soft">A creative project, a tech idea, a new opportunity — or just a good conversation.</p></div>
         <Button href="/connect" className="self-start lg:shrink-0">Say hello <span aria-hidden>↗</span></Button>

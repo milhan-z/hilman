@@ -7,6 +7,7 @@ import { checkClipFile } from "./clip-check";
 import { dbDelete, dbGetAll, dbPut } from "./db";
 import {
   MediaTooLargeError,
+  MediaProcessingInterruptedError,
   optimizeForIngest,
   type MediaReport,
   type ProgressFn,
@@ -174,8 +175,11 @@ export async function stashMedia(
   file: File,
   folder = "hilman",
   kind: PendingMediaKind = "image",
-  onProgress?: ProgressFn
+  onProgress?: ProgressFn,
+  signal?: AbortSignal
 ): Promise<StashResult> {
+  const interrupted = (): StashResult => ({ ok: false, reason: signal?.reason instanceof Error ? signal.reason.message : "Media processing cancelled. Your existing media is unchanged." });
+  if (signal?.aborted) return interrupted();
   if (kind === "image" && file.size > MAX_SOURCE_IMAGE_BYTES) {
     return {
       ok: false,
@@ -193,14 +197,15 @@ export async function stashMedia(
 
   if (kind !== "voice-note") {
     try {
-      const outcome = await optimizeForIngest(file, kind, onProgress);
+      const outcome = await optimizeForIngest(file, kind, onProgress, signal);
       kept = outcome.file;
       optimization = outcome.report;
     } catch (error) {
       // The only failure worth refusing over: a source too big to process
       // without taking the tab down. Everything else fell back to the original
       // inside the optimizer and never reaches here.
-      if (error instanceof MediaTooLargeError) {
+      if (signal?.aborted) return interrupted();
+      if (error instanceof MediaTooLargeError || error instanceof MediaProcessingInterruptedError) {
         return { ok: false, reason: error.message };
       }
     }
@@ -211,8 +216,17 @@ export async function stashMedia(
       // Still the gate it always was, now applied to the finished clip — so a
       // MOV that was normalized into an MP4 passes, and one that could not be
       // gets exactly the refusal it got before.
-      const clip = await checkClipFile(kept);
+      let clip;
+      try {
+        clip = await checkClipFile(kept, signal);
+      } catch (error) {
+        if (signal?.aborted) return interrupted();
+        return { ok: false, reason: error instanceof Error ? error.message : "Studio couldn't verify this clip. Re-export it as H.264 MP4 and try again." };
+      }
       if (!clip.ok) return { ok: false, reason: clip.reason! };
+      // Some pickers omit MIME. Byte verification above established MP4; the
+      // signing request must carry that verified type, never octet-stream.
+      if (kept.type !== "video/mp4") kept = new File([kept], kept.name, { type: "video/mp4", lastModified: kept.lastModified });
       break;
     }
     case "voice-note": {
@@ -243,6 +257,7 @@ export async function stashMedia(
   }
 
   const report = await storageReport();
+  if (signal?.aborted) return interrupted();
   if (report && report.quota > 0 && report.usage + kept.size > report.quota * QUOTA_CEILING) {
     return {
       ok: false,

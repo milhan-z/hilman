@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getCommandIndex, type CommandIndex } from "@/app/admin/actions";
+import { useDialogFocus } from "./use-dialog-focus";
+import { useScrollLock } from "./mobile/use-scroll-lock";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,7 +31,7 @@ const STATIC_ITEMS: PaletteItem[] = [
   { key: "go-journal", label: "Journal", group: "Go to", href: "/admin/journal" },
   { key: "go-pages", label: "Pages", group: "Go to", href: "/admin/pages" },
   { key: "go-media", label: "Media library", group: "Go to", href: "/admin/media" },
-  { key: "go-taxonomy", label: "Taxonomy", group: "Go to", href: "/admin/taxonomy" },
+  { key: "go-taxonomy", label: "Tags & categories", group: "Go to", href: "/admin/taxonomy" },
   { key: "go-messages", label: "Messages", group: "Go to", href: "/admin/messages" },
   { key: "go-settings", label: "Settings", group: "Go to", href: "/admin/settings" },
   { key: "view-site", label: "View live site ↗", group: "Go to", href: "/" },
@@ -44,6 +46,10 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const panel = useRef<HTMLDivElement>(null);
+  useDialogFocus(open, panel, () => setOpen(false), inputRef);
+  useScrollLock(open);
+
   // open/close triggers
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -51,7 +57,6 @@ export function CommandPalette() {
         e.preventDefault();
         setOpen((v) => !v);
       }
-      if (e.key === "Escape") setOpen(false);
     }
     function onOpenEvent() {
       setOpen(true);
@@ -69,12 +74,14 @@ export function CommandPalette() {
     if (open && !index) {
       getCommandIndex().then(setIndex).catch(() => {});
     }
-    if (open) {
-      setQuery("");
-      setActive(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
   }, [open, index]);
+
+  // The async index arriving must not erase a search already being typed.
+  useEffect(() => {
+    if (!open) return;
+    setQuery("");
+    setActive(0);
+  }, [open]);
 
   const items = useMemo<PaletteItem[]>(() => {
     const content: PaletteItem[] = [
@@ -150,14 +157,11 @@ export function CommandPalette() {
   return (
     <div
       className="fixed inset-0 z-[100] flex items-start justify-center bg-black/50 p-4 pt-[12vh] backdrop-blur-sm sm:pt-[18vh]"
-      onMouseDown={(e) => {
+      onPointerDown={(e) => {
         if (e.target === e.currentTarget) setOpen(false);
       }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Command palette"
     >
-      <div className="w-full max-w-lg overflow-hidden rounded-lg border border-line-strong bg-surface shadow-lift">
+      <div ref={panel} role="dialog" aria-modal="true" aria-label="Command palette" tabIndex={-1} className="w-full max-w-lg overflow-hidden rounded-lg border border-line-strong bg-surface shadow-lift">
         <div className="flex items-center gap-3 border-b border-line px-4">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--pen)" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
             <circle cx="11" cy="11" r="7" />

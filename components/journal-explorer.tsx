@@ -80,9 +80,9 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
             className="w-full rounded-md border border-line-strong bg-surface py-2.5 pl-10 pr-3 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-pen focus:ring-1 focus:ring-pen"
           />
         </label>
-        {tags.length > 0 && (
+        {(tags.length > 0 || anyFilter) && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-hand text-lg text-faint">topics:</span>
+            {tags.length > 0 && <span className="font-hand text-lg text-faint">topics:</span>}
             {tags.map((t) => {
               const active = tag === t.slug;
               return (
@@ -107,9 +107,9 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
                   setTag(undefined);
                   setQuery("");
                 }}
-                className="ml-1 font-mono text-2xs uppercase tracking-wider text-red hover:underline"
+                className="ml-1 inline-flex min-h-11 items-center px-3 font-mono text-2xs uppercase tracking-wider text-red hover:underline"
               >
-                clear ✕
+                Clear filters ✕
               </button>
             )}
           </div>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "./use-dialog-focus";
+import { useScrollLock } from "./mobile/use-scroll-lock";
 import { MobileSheet } from "./mobile-sheet";
 import { BlockEditorFields, BLOCK_TYPES } from "./block-editors";
 import type { Block } from "@/lib/types";
@@ -42,15 +44,9 @@ export function PropertyDrawer({ open, block, onChange, onClose }: PropertyDrawe
     return () => query.removeEventListener("change", sync);
   }, []);
 
-  // Close on Escape — the sheet does this itself, the drawer does not.
-  useEffect(() => {
-    if (!open || isPointerFine === false) return;
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose, isPointerFine]);
+  const desktopOpen = open && !!block && isPointerFine === true;
+  useDialogFocus(desktopOpen, drawerRef, onClose);
+  useScrollLock(desktopOpen);
 
   if (!open || !block) return null;
 
@@ -91,6 +87,7 @@ export function PropertyDrawer({ open, block, onChange, onClose }: PropertyDrawe
 
       <div
         ref={drawerRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={`${label} settings`}

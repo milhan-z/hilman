@@ -1,7 +1,8 @@
 "use client";
 
 import { listConflicts } from "./conflicts";
-import { deleteDraft, listDrafts, readDraft, writeDraft, type LocalDraft } from "./drafts";
+import { listDrafts, readDraft, writeDraft, type LocalDraft } from "./drafts";
+import { dbReadModifyWrite } from "./db";
 import { listPendingMedia } from "./media";
 import { listQueue } from "./outbox";
 
@@ -113,30 +114,18 @@ export async function keepRecovery(
   if (!decision) return false;
   if (decision.kind === "offer") return false;
 
-  // Re-read rather than trusting the decision: between the lookup and now a
-  // debounce may have written a newer copy down.
-  const stored = await readDraft<DraftValue>(key);
-  if (!stored) return false;
-
-  // Identical to what the site has: nothing is lost by removing it, whoever
-  // wrote it.
-  const identical = stored.value?.snapshot === syncedSnapshot;
-
-  // Otherwise it is an *intermediate* — something typed and then moved away
-  // from, because the editor asking to clean up is by definition back at the
-  // synced state. Ours to drop; somebody else's to leave alone, because that
-  // tab may be in the middle of writing it.
-  //
-  // Without this, changing a field and pressing Reset left the undone version
-  // on the device, and reopening the entry offered to restore it. A draft with
-  // no owner recorded predates this and is treated as ours, which is what it
-  // almost always is.
-  const ours = !stored.writtenBy || stored.writtenBy === sender;
-
-  if (!identical && !ours) return false;
-
-  await deleteDraft(key);
-  return true;
+  // Decide and delete under one lock: a second tab may write its only copy
+  // between a separate re-read and delete.
+  const outcome = await dbReadModifyWrite<LocalDraft<DraftValue>, boolean>("drafts", (drafts) => {
+    const stored = drafts.find((draft) => draft.key === key);
+    if (!stored) return { result: false };
+    const identical = stored.value?.snapshot === syncedSnapshot;
+    // The caller is back at the synced state, so its own intermediate copy
+    // was undone. Another tab's writing still belongs to that tab.
+    const ours = !stored.writtenBy || stored.writtenBy === sender;
+    return identical || ours ? { result: true, remove: [key] } : { result: false };
+  });
+  return outcome.stored && outcome.result === true;
 }
 
 /**
@@ -190,26 +179,25 @@ export function restoreBase(
  */
 export async function carryRecoveryOver(
   from: string,
-  to: string,
-  io: { write?: (draft: LocalDraft) => Promise<boolean> } = {}
+  to: string
 ): Promise<boolean> {
   if (from === to) return true;
 
-  const stored = await readDraft<DraftValue>(from);
-  if (!stored) {
-    seen.delete(from);
-    return true; // nothing to move is not a failure
-  }
-
-  const write = io.write ?? writeDraft;
-  const written = await write({ ...stored, key: to, localId: to });
-  if (!written) return false;
+  const moved = await dbReadModifyWrite<LocalDraft<DraftValue>, boolean>("drafts", (drafts) => {
+    const source = drafts.find((draft) => draft.key === from);
+    if (!source) return { result: true };
+    const destination = drafts.find((draft) => draft.key === to);
+    // A later editor may already have a different recovery copy at the real
+    // id. Preserve both instead of silently replacing its writing.
+    if (destination && destination.value.snapshot !== source.value.snapshot) return { result: false };
+    return { result: true, put: [{ ...source, key: to, localId: to }], remove: [from] };
+  });
+  if (!moved.stored || !moved.result) return false;
 
   // The moved copy is the same writing under a new name, so whatever was
   // decided about it still holds — carry the lookup across with it, or the
   // new key would be un-examined and cleanup would refuse for ever.
   const decision = seen.get(from);
-  await deleteDraft(from);
   seen.delete(from);
   if (decision) seen.set(to, decision);
   return true;

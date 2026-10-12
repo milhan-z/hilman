@@ -65,6 +65,12 @@ export function VoiceNoteField({
   // the field may already hold a different recording, the one being replaced.
   const latest = useRef(value);
   latest.current = value;
+  const operation = useRef<AbortController | null>(null);
+
+  useEffect(() => () => {
+    operation.current?.abort();
+    operation.current = null;
+  }, []);
 
   const pending = isPendingRef(value?.src);
 
@@ -82,7 +88,9 @@ export function VoiceNoteField({
   }, [value, pending]);
 
   async function take(file: File | undefined) {
-    if (!file) return;
+    if (!file || operation.current) return;
+    const controller = new AbortController();
+    operation.current = controller;
     setBusy(true);
     setError(null);
     setProgress({ phase: "inspecting" });
@@ -94,9 +102,14 @@ export function VoiceNoteField({
     // would mark the entry changed after the author had saved it. Capped,
     // because some browsers never answer for a detached <audio>; the public
     // player reads the length again for itself either way.
-    const probed = /mpeg|mp3/i.test(`${file.type} ${file.name}`) ? await readVoiceDuration(file, 3_000) : null;
+    const probed = /mpeg|mp3/i.test(`${file.type} ${file.name}`) ? await readVoiceDuration(file, 3_000).catch(() => null) : null;
 
-    const result = await stashMedia(file, "voice-notes", "voice-note", setProgress);
+    const result = await stashMedia(file, "voice-notes", "voice-note", (next) => {
+      if (!controller.signal.aborted) setProgress(next);
+    }, controller.signal).catch(() => ({ ok: false as const, reason: "Studio couldn't keep that recording. Choose the file again." }));
+    if (controller.signal.aborted && result.ok) void releaseIfUnreferenced(result.ref);
+    if (operation.current !== controller) return;
+    operation.current = null;
     setBusy(false);
     setProgress(null);
 
@@ -127,6 +140,12 @@ export function VoiceNoteField({
   }
 
   function remove() {
+    // Removing during a pending replacement must not resurrect that recording
+    // when its asynchronous validation/storage completes.
+    operation.current?.abort();
+    operation.current = null;
+    setBusy(false);
+    setProgress(null);
     const local = Boolean(value && isPendingRef(value.src));
     if (value && local) void releaseIfUnreferenced(value.src);
     setRemoved(local ? "local" : "stored");

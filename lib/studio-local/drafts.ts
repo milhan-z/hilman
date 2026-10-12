@@ -87,6 +87,7 @@ export async function migrateLegacyDrafts(): Promise<number> {
   }
 
   let moved = 0;
+  let incomplete = false;
   for (const storageKey of keys) {
     try {
       const raw = storage.getItem(storageKey);
@@ -97,7 +98,7 @@ export async function migrateLegacyDrafts(): Promise<number> {
       // The old keys were already "<entity>:<id>" for the editors and a bare
       // name for the dashboard widget. Both survive as-is.
       const [entity, ...rest] = name.split(":");
-      await writeDraft({
+      const stored = await writeDraft({
         key: name,
         entity: rest.length ? entity : "widget",
         entityId: rest.length && rest[0] !== "new" ? rest.join(":") : null,
@@ -107,15 +108,20 @@ export async function migrateLegacyDrafts(): Promise<number> {
         editedAt: parsed.savedAt ?? new Date().toISOString(),
         label: titleWithin(parsed),
       });
+      if (!stored) {
+        incomplete = true;
+        continue;
+      }
       storage.removeItem(storageKey);
       moved += 1;
     } catch {
+      incomplete = true;
       /* one unreadable draft must not stop the rest moving */
     }
   }
 
   try {
-    storage.setItem(MIGRATED_FLAG, "1");
+    if (!incomplete) storage.setItem(MIGRATED_FLAG, "1");
   } catch {
     /* nothing to do — the flag is an optimisation, not a correctness guard */
   }

@@ -119,6 +119,7 @@ export function replaced(
 /* ── the one entry point ──────────────────────────────────── */
 
 export class MediaTooLargeError extends Error {}
+export class MediaProcessingInterruptedError extends Error {}
 
 /**
  * Optimize a file on its way into local storage.
@@ -132,8 +133,10 @@ export class MediaTooLargeError extends Error {}
 export async function optimizeForIngest(
   file: File,
   kind: "image" | "loop-clip",
-  onProgress?: ProgressFn
+  onProgress?: ProgressFn,
+  signal?: AbortSignal
 ): Promise<OptimizeOutcome> {
+  signal?.throwIfAborted();
   if (kind === "loop-clip") {
     if (file.size > MAX_SOURCE_CLIP_BYTES) {
       throw new MediaTooLargeError(
@@ -143,9 +146,16 @@ export async function optimizeForIngest(
     // Loaded only when a clip is actually being processed — see the comment
     // in clip-optimize.ts about keeping the encoder off the startup path.
     const { optimizeClip } = await import("./clip-optimize");
-    return optimizeClip(file, onProgress);
+    try {
+      return await optimizeClip(file, onProgress, signal);
+    } catch (error) {
+      if (error instanceof MediaTooLargeError) throw error;
+      throw new MediaProcessingInterruptedError(error instanceof Error ? error.message : "Clip processing was interrupted. Choose the file again.");
+    }
   }
 
   const { optimizeImage } = await import("./image-optimize");
-  return optimizeImage(file, onProgress);
+  const outcome = await optimizeImage(file, onProgress);
+  signal?.throwIfAborted();
+  return outcome;
 }

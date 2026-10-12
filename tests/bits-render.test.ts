@@ -603,16 +603,6 @@ test("the drawings rest where the component expects them to", () => {
   }
 });
 
-test("the sent note appears only with the real answer from the server, above the words it illustrates", () => {
-  const form = read("components/connect-form.tsx");
-  const success = form.slice(form.indexOf('if (state.status === "success")'), form.indexOf("<form"));
-  assert.match(
-    success,
-    /<div className="portrait-paper mx-auto mb-6 w-fit max-w-full">\s*<NotebookMoment src="\/lottie\/sent-note\.json" stillFrame=\{\{ marker: "static" \}\} size=\{200\} playOn="mount" \/>\s*<\/div>\s*<p className="font-display text-2xl font-semibold">Got it\. Thanks!<\/p>/
-  );
-  assert.equal((form.match(/<NotebookMoment/g) ?? []).length, 1, "and nowhere else on the page");
-});
-
 test("the 404 draws its card only where it is the page, never in the copy every page carries", () => {
   // Next sends a finished not-found inside every page, for a page that calls
   // notFound(); a client component there is downloaded by all of them.

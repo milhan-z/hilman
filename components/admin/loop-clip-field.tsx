@@ -54,7 +54,7 @@ export function LoopClipField({
         )}
 
         <MediaCapture
-          accept="video/mp4"
+          accept="video/mp4,video/quicktime,.mp4,.mov"
           kind="loop-clip"
           folder="clips"
           onCaptured={(ref) => onChange(ref)}

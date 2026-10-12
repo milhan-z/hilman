@@ -204,13 +204,14 @@ test("a carried-over draft reaches its new key before the old one is removed", a
   assert.equal(await readDraft("journal:new"), null, "and the placeholder key is cleared");
 });
 
-test("a carry-over that cannot write leaves the source exactly where it was", async () => {
+test("a carry-over that cannot write leaves the source exactly where it was", async (t) => {
   await seedRecovery({ key: "journal:new", localId: "journal:new" });
 
   // Storage refuses — a full quota, or site data switched off mid-session.
-  const moved = await carryRecoveryOver("journal:new", "journal:abc", {
-    write: async () => false,
+  t.mock.method(IDBObjectStore.prototype, "put", () => {
+    throw new DOMException("Quota exceeded", "QuotaExceededError");
   });
+  const moved = await carryRecoveryOver("journal:new", "journal:abc");
 
   assert.equal(moved, false, "it reports the failure rather than swallowing it");
   assert.notEqual(
@@ -219,6 +220,46 @@ test("a carry-over that cannot write leaves the source exactly where it was", as
     "and the only copy is still on the device"
   );
 });
+
+test("a carry-over preserves different writing already stored at its destination", async () => {
+  await seedRecovery({ key: "journal:new", localId: "journal:new" });
+  await seedRecovery({ key: "journal:abc", value: { snapshot: "Newer writing", savedAt: "later" } });
+  assert.equal(await carryRecoveryOver("journal:new", "journal:abc"), false);
+  assert.equal((await readDraft<{ snapshot: string }>("journal:abc"))!.value.snapshot, "Newer writing");
+  assert.notEqual(await readDraft("journal:new"), null);
+});
+
+for (const operation of ["cleanup", "carry-over"] as const) {
+  test(`${operation} cannot erase a recovery write that arrives after its read`, async (t) => {
+    const source = operation === "cleanup" ? KEY : "journal:new";
+    await seedRecovery({ key: source, value: { snapshot: SERVER, savedAt: "before" } });
+    await findRecovery(source, SERVER);
+    let newer: Promise<boolean> | undefined;
+    const injectAfterRead = (request: IDBRequest, store: IDBObjectStore) => {
+      if (store.name !== "drafts") return;
+      request.addEventListener("success", () => {
+        newer ??= writeDraft({ ...pending(), key: source, writtenBy: "another-tab",
+          value: { snapshot: "Only copy of newer writing", savedAt: "after" } });
+      }, { once: true });
+    };
+    const get = IDBObjectStore.prototype.get;
+    const getAll = IDBObjectStore.prototype.getAll;
+    t.mock.method(IDBObjectStore.prototype, "get", function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore["get"]>) {
+      const request = get.apply(this, args);
+      injectAfterRead(request, this);
+      return request;
+    });
+    t.mock.method(IDBObjectStore.prototype, "getAll", function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore["getAll"]>) {
+      const request = getAll.apply(this, args);
+      injectAfterRead(request, this);
+      return request;
+    });
+    if (operation === "cleanup") await keepRecovery(source, SERVER, TAB);
+    else await carryRecoveryOver(source, "journal:abc");
+    assert.equal(await newer, true);
+    assert.equal((await readDraft<{ snapshot: string }>(source))?.value.snapshot, "Only copy of newer writing");
+  });
+}
 
 test("carrying over nothing is not an error", async () => {
   assert.equal(await carryRecoveryOver("journal:new", "journal:abc"), true);

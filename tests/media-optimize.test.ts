@@ -349,7 +349,7 @@ test("the optimized file is the one stored, and the one the limits judge", () =>
   assert.match(media, /blob:\s*kept/, "IndexedDB gets the optimized blob");
   assert.match(media, /size:\s*kept\.size/, "and the recorded size is its size");
   assert.match(media, /usage \+ kept\.size/, "the quota check uses the final size");
-  assert.match(media, /checkClipFile\(kept\)/, "and the clip gate validates the final file");
+  assert.match(media, /checkClipFile\(kept(?:, signal)?\)/, "and the clip gate validates the final file");
 });
 
 test("optimization runs before anything touches the network", () => {

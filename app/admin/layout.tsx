@@ -75,8 +75,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <p className="mt-4 text-soft">
           The CMS requires Supabase. Add <code className="rounded bg-n-100 px-1.5">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
           <code className="rounded bg-n-100 px-1.5">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{" "}
-          <code className="rounded bg-n-100 px-1.5">.env.local</code>, run the migrations and seed,
-          then come back. The public site keeps running on mock content meanwhile.
+          <code className="rounded bg-n-100 px-1.5">.env.local</code>, then follow the setup guide to
+          configure the owner and review required database migrations. The public site keeps running
+          on its bundled content meanwhile.
         </p>
         <Link href="/" className="mt-6 inline-block text-pen underline underline-offset-4">
           ← Back to the site

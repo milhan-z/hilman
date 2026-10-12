@@ -10,7 +10,7 @@ import { conflictKey, listConflicts } from "./conflicts";
 import { moveQueuedToConflict } from "./transitions";
 import {
   blockEntry,
-  claimForSending,
+  claimMutationForSending,
   dequeue,
   listQueue,
   oneSavePerRow,
@@ -228,16 +228,18 @@ export function uploadNoun(media: PendingMedia[]): UploadNoun {
 }
 
 export async function refreshSyncState(): Promise<SyncState> {
-  const [queue, conflicts, media] = await Promise.all([
+  const [queue, conflicts, media, resolutions] = await Promise.all([
     listQueue(),
     listConflicts(),
     listPendingMedia(),
+    listResolutions(),
   ]);
   setState({
     queued: queue.filter((entry) => !entry.blocked).length,
     blocked: queue.filter((entry) => entry.blocked).length + media.filter((m) => m.blocked).length,
     conflicts: conflicts.length,
     media: media.filter((m) => !m.blocked).length,
+    unrecordedMedia: resolutions.filter((item) => item.unrecorded).length,
     // Split, because "still going up" and "gave up" need different sentences
     // and different buttons — see FailureKind in lib/studio-editor-state.ts.
     uploads: {
@@ -344,9 +346,10 @@ async function runFlush(): Promise<SyncState> {
 
   // Claim each one before it goes anywhere. Another tab may be carrying it
   // already, in which case this one leaves it alone rather than sending the
-  // same save down a second connection. See claimForSending().
+  // same save down a second connection. Use the snapshot returned by the
+  // claim: an unsent candidate may have changed since listQueue().
   const claimed = await Promise.all(
-    candidates.map(async (entry) => ((await claimForSending(entry.mutationId, realm())) ? entry : null))
+    candidates.map((entry) => claimMutationForSending(entry.mutationId, realm()))
   );
   const batch = claimed.filter((entry): entry is QueuedMutation => entry !== null);
 
@@ -507,7 +510,7 @@ async function sendStashedPhotos(): Promise<{ offline: boolean }> {
   if (Object.keys(resolved).length === 0) return { offline };
 
   // Rewrites the queue, the recovery drafts *and* the stored conflicts, then
-  // verifies by reading them back before forgetting the mapping. See
+  // records completion atomically while retaining the mapping for late saves. See
   // lib/studio-local/media-resolution.ts.
   await applyResolutions(await listResolutions());
 

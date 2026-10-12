@@ -7,8 +7,10 @@ accents, cream paper, and handwritten details support those stories.
 
 ## What changed
 
-- Home introduces Hilman clearly, then shows published work, people, notes, a
-  small interactive sketch, and an invitation to collaborate. When no genuine
+- Home introduces Hilman clearly, then shows individual project proof sections,
+  the archive link, Journal, the existing NotebookPlay, people, and an invitation
+  to collaborate. Each project uses its real cover (or thumbnail), subtitle,
+  excerpt and contribution without requiring a click into the case study. When no genuine
   projects are ready, it describes interests without presenting them as work.
 - About supports personal interests, a community story, a real portrait, and
   optional photo moments with captions and alternative text.
@@ -50,8 +52,16 @@ Unverified seeded portraits, timeline claims, and social URLs are not shown.
    For each, describe why it existed, your exact role, a meaningful decision, the
    process, and the result. Use only outcomes you can substantiate. Replace every
    writing prompt before publishing.
+   Pin the projects you want on Home and arrange their order in Projects. All
+   pinned, public projects appear; without pins Home uses the first three
+   public projects as before. No project names or claims are hardcoded. The
+   cover/thumbnail and the excerpt should explain the work; the Role field
+   provides “My contribution”. Blank details stay blank rather than inventing
+   a client or result. A missing image produces no placeholder proof.
 4. **Journal:** add observations, behind-the-scenes notes, or experiments. Short
    genuine notes are welcome; there is no arbitrary minimum story length.
+   Home leads with the first featured entry (or the newest entry), then up to
+   two more titles. A voice-note marker appears only for valid recording metadata.
 5. **Settings:** enter verified social URLs. Publish a CV link only if an actual
    current file is available.
 

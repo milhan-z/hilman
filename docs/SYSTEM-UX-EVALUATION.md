@@ -1,5 +1,14 @@
 # System evaluation and Journal Voice Notes — Pass 0
 
+> **Status correction, 12 October 2026:** this is a historical implementation
+> log, not the current release state. Voice Notes Phase 1A and the later
+> outbox/media and atomic bulk-delete fixes are present on remote `master`
+> at `8f6d31a`. The old “local only” branch claim below no longer describes
+> that code. Migration `0014` exists and runs in local tests; its presence
+> does **not** establish the live schema. No live schema or owner session was
+> available in this audit. Current findings, local fixes and verification are
+> recorded in [the October audit](PORTFOLIO-STUDIO-AUDIT-2026-10.md).
+
 Date: 8 October 2026. Branch `feature/journal-voice-notes`, created from `origin/master` at `29dc2df`. This pass was read-only: no feature code, no migrations applied, no uploads, no production access.
 
 Scope, as agreed: this evaluation exists to understand what Voice Notes depend on and to find blockers. Unrelated issues are logged in §6, not fixed.
@@ -95,7 +104,7 @@ voice_note?: JournalVoiceNote | null;
 - **`src` holds the R2 key, not a URL.** The public URL is resolved on the server at render time from the existing R2 config, the same way the sign route chooses between the proxy and the custom domain. Storing a key keeps the DB valid if the media domain changes, and lets SQL validate the shape strictly.
 - **`audio/x-m4a` is normalised to `audio/mp4` before signing.** `audio/mp4` is the standard type and is what R2 will serve.
 
-### 4.2 Migration `0014_journal_voice_note.sql` (prepared and tested locally only)
+### 4.2 Migration `0014_journal_voice_note.sql` (historical proposal; implemented in master)
 
 The migration will:
 - `alter table journal_posts add column if not exists voice_note jsonb;`
@@ -318,10 +327,10 @@ One object was written with the application's own client (`lib/r2-server.ts`, de
 | 430 / 768 / 1440 | Field contained, no overflow. On desktop it sits in the expanded Details grid. |
 | Clean-up | Discarded the local recovery copy the QA edits left; it held only the QA change. The draft on the server was never changed. |
 
-## 8. Final report — Journal Voice Notes Phase 1A
+## 8. Historical final report — Journal Voice Notes Phase 1A
 
 - **Baseline:** `29dc2df` (`origin/master`, 8 October 2026).
-- **Branch:** `feature/journal-voice-notes`, local only. It has no upstream, has not been pushed, merged or deployed, and has not touched the production database.
+- **Branch at this report's original date:** `feature/journal-voice-notes`, then local only. Superseded for code status: Phase 1A is present on `master` at `8f6d31a`. Production schema/deployment state remains separately unverified in the 12 October audit.
 - **Commits:**
   - `b60a511` Pass 0 audit
   - `924eb59` Pass 1 data and save
@@ -372,7 +381,8 @@ One object was written with the application's own client (`lib/r2-server.ts`, de
   - `preload="metadata"`, Range streaming, no frame loop.
   - Studio's ingest check reads only the box headers and the `moov` box.
   - The card marker costs no extra query.
-- **Remaining risks:**
+- **Risks recorded at that time (not all still open):**
+  - The discard-immediately, queue rewrite, upload-blocking-text, and late-duration dirty-state findings below were subsequently addressed on master. The October audit rechecks those paths and closes additional local recovery races; see its evidence and current gaps.
   - The same discard-immediately pattern is still in the photo and Loop Clip fields.
   - `applyResolutions` reads and rewrites the queue in two steps.
   - A 25 MB upload delays queued text saves.

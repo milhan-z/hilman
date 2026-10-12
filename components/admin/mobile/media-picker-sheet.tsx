@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MobileSheet } from "../mobile-sheet";
-import { createPublicClient } from "@/lib/supabase/public";
+import { createBrowserSupabase } from "@/lib/supabase/client";
 import { mediaSrc } from "@/lib/cloudinary";
 import { stashMedia } from "@/lib/studio-local/media";
 import { ingestLabel } from "@/lib/studio-local/ingest-status";
@@ -70,7 +70,8 @@ export function MediaPickerSheet({
     async (from: number, term: string) => {
       setLoading(true);
       setError(null);
-      const sb = createPublicClient();
+      // Media metadata is owner-only; include the signed-in browser session.
+      const sb = createBrowserSupabase();
 
       // Only the columns a thumbnail and a caption need. The old modal used
       // `select("*")` with no range at all, which on a phone meant waiting for
@@ -267,6 +268,8 @@ export function MediaPickerSheet({
           type="file"
           accept="image/*"
           capture="environment"
+          tabIndex={-1}
+          aria-hidden="true"
           className="sr-only"
           onChange={(event) => {
             void keepFiles(event.target.files);
@@ -278,6 +281,8 @@ export function MediaPickerSheet({
           type="file"
           accept="image/*"
           multiple={multiple}
+          tabIndex={-1}
+          aria-hidden="true"
           className="sr-only"
           onChange={(event) => {
             void keepFiles(event.target.files);
@@ -306,6 +311,7 @@ export function MediaPickerSheet({
 
           <input
             type="search"
+            aria-label="Search photos"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search photos"

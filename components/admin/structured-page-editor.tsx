@@ -241,7 +241,7 @@ function RowControls({
   itemLabel: string;
 }) {
   const btn =
-    "rounded border border-line px-2 py-1 text-xs text-soft transition-colors hover:border-pen hover:text-pen disabled:opacity-40";
+    "min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded border border-line px-2 py-1 text-xs text-soft transition-colors hover:border-pen hover:text-pen disabled:opacity-40";
   return (
     <div className="flex shrink-0 flex-col gap-1">
       <button
@@ -264,7 +264,7 @@ function RowControls({
       </button>
       <button
         type="button"
-        className="rounded border border-line px-2 py-1 text-xs text-red transition-colors hover:border-red"
+        className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded border border-line px-2 py-1 text-xs text-red transition-colors hover:border-red"
         aria-label={`Remove ${itemLabel} ${index + 1}`}
         onClick={() => onRemove(index)}
       >

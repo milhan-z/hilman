@@ -21,6 +21,29 @@
   background-image: linear-gradient(90deg, transparent 17px, var(--cream-line) 18px, transparent 19px);
 }
 .portrait-paper { padding: 12px; }
+
+/* Connect: feedback belongs to the send action. No illustrated panel, opaque
+   tile or looping loader. State comes from the server, never an animation. */
+.connect-send[data-state="idle"]:hover { border-color: var(--pen); }
+.connect-send[data-state="sending"] { cursor: progress; }
+.connect-send[data-state="sent"] { cursor: default; }
+.connect-send-plane { transform-origin: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .connect-send { transition: border-color 150ms ease; }
+  .connect-send[data-state="sending"] .connect-send-plane {
+    animation: connect-send-nudge 420ms var(--motion-ease-out) both;
+  }
+  .connect-send-check { animation: connect-send-check 240ms ease-out both; }
+}
+@keyframes connect-send-nudge {
+  0%, 100% { transform: none; }
+  45% { transform: translate(2px, -2px) rotate(-8deg); }
+}
+@keyframes connect-send-check {
+  from { stroke-dasharray: 1; stroke-dashoffset: 1; }
+  to { stroke-dasharray: 1; stroke-dashoffset: 0; }
+}
+
 .practice-link { transition: background-color 200ms ease; }
 .practice-link:hover { background-color: var(--raise); }
 .play-glyph { display: inline-block; animation: idea-appear 400ms ease both; }

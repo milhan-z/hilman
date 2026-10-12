@@ -1,9 +1,9 @@
 "use client";
 
-import { listConflicts, recordConflict, type StoredConflict } from "./conflicts";
-import { dbDelete, dbGetAll, dbPut } from "./db";
-import { listDrafts, writeDraft, type LocalDraft } from "./drafts";
-import { listQueue, rewriteQueuedPlaceholders } from "./outbox";
+import { listConflicts } from "./conflicts";
+import { dbDelete, dbGetAll, dbPut, dbReadModifyWriteStores } from "./db";
+import { listDrafts } from "./drafts";
+import { listQueue } from "./outbox";
 import { collectPendingRefs, replacePendingRefs } from "../studio-media-refs";
 import type { PendingMediaKind } from "./media";
 
@@ -37,10 +37,10 @@ import type { PendingMediaKind } from "./media";
  * mapping, and resuming is idempotent: rewriting a document that has already
  * been rewritten changes nothing.
  *
- * The record is kept until no document anywhere still names the placeholder,
- * which is also how the rewrite is *verified* rather than assumed. A rewrite
- * that storage refused leaves the placeholder in place, the record stays, and
- * the next pass tries again.
+ * Completed mappings stay on this device: another tab or a delayed recovery
+ * write may still hold the old placeholder in memory. They are small identity
+ * records, not media bytes, and make a late save resolvable too. Only mappings
+ * with unfinished work participate in the next flush.
  */
 
 export interface MediaResolution {
@@ -76,7 +76,11 @@ export async function listResolutions(): Promise<MediaResolution[]> {
 
 /** Everything uploaded whose paperwork is not finished. */
 export async function unfinishedResolutions(): Promise<MediaResolution[]> {
-  return listResolutions();
+  const [resolutions, queue, drafts, conflicts] = await Promise.all([
+    listResolutions(), listQueue(), listDrafts(), listConflicts(),
+  ]);
+  const held = new Set(collectPendingRefs([queue, drafts, conflicts]));
+  return resolutions.filter((item) => !item.rewrittenAt || held.has(item.ref.toLowerCase()));
 }
 
 export async function forgetResolution(ref: string): Promise<void> {
@@ -89,20 +93,10 @@ export function resolutionMap(list: MediaResolution[]): Record<string, string> {
 }
 
 /**
- * Test seams for the two stores whose refusal has to be survivable.
- *
- * Only ever passed by tests. A rewrite that storage declines is the case this
- * module exists to handle, and the only honest way to check it is to make a
- * write actually decline.
- */
-export interface ResolutionIo {
-  writeDraft?: (draft: LocalDraft) => Promise<boolean>;
-  writeConflict?: (conflict: StoredConflict) => Promise<void>;
-}
-
-/**
- * Rewrites every local document that names one of these placeholders, then
- * forgets the records that are no longer needed.
+ * Rewrites references and records completion in one transaction. Reading a
+ * draft and later putting the rewritten copy used to overwrite an autosave
+ * made in between. An unreadable store must also never look like evidence
+ * that a mapping is no longer needed.
  *
  * All four stores that can legitimately hold a reference, not just the editor
  * that happens to be open: the queued saves that will reach the server, the
@@ -111,48 +105,22 @@ export interface ResolutionIo {
  * never resolve, in a copy somebody will eventually restore.
  */
 export async function applyResolutions(
-  resolutions: MediaResolution[],
-  io: ResolutionIo = {}
+  resolutions: MediaResolution[]
 ): Promise<void> {
   if (resolutions.length === 0) return;
   const resolved = resolutionMap(resolutions);
 
-  // ── the queue ── one transaction; see rewriteQueuedPlaceholders().
-  await rewriteQueuedPlaceholders(resolved);
-
-  // ── recovery drafts ──
-  const putDraft = io.writeDraft ?? writeDraft;
-  for (const draft of await listDrafts()) {
-    const next = replacePendingRefs(draft, resolved);
-    if (JSON.stringify(next) !== JSON.stringify(draft)) await putDraft(next);
-  }
-
-  // ── stored conflicts ──
-  const putConflict = io.writeConflict ?? recordConflict;
-  for (const conflict of await listConflicts()) {
-    const next = replacePendingRefs(conflict, resolved);
-    if (JSON.stringify(next) !== JSON.stringify(conflict)) await putConflict(next);
-  }
-
-  // ── and only now, the bookkeeping ──
-  //
-  // Read everything back rather than trusting the writes above. That is what
-  // makes this a verification: a store that refused leaves its placeholder in
-  // place, the record stays, and the next pass finishes the job.
-  const stillHeld = new Set(
-    [
-      ...collectPendingRefs(await listQueue()),
-      ...collectPendingRefs(await listDrafts()),
-      ...collectPendingRefs(await listConflicts()),
-    ].map((ref) => ref.toLowerCase())
-  );
-
-  for (const resolution of resolutions) {
-    const ref = resolution.ref.toLowerCase();
-    if (stillHeld.has(ref)) {
-      await dbPut("resolutions", { ...resolution, rewrittenAt: new Date().toISOString() });
-      continue;
+  await dbReadModifyWriteStores(["outbox", "drafts", "conflicts", "resolutions"], (all) => {
+    const put: Partial<Record<"outbox" | "drafts" | "conflicts" | "resolutions", unknown[]>> = {};
+    for (const store of ["outbox", "drafts", "conflicts"] as const) {
+      put[store] = (all[store] ?? [])
+        .map((before) => ({ before, after: replacePendingRefs(before, resolved) }))
+        .filter(({ before, after }) => JSON.stringify(before) !== JSON.stringify(after))
+        .map(({ after }) => after);
     }
-    await forgetResolution(ref);
-  }
+    put.resolutions = (all.resolutions as MediaResolution[])
+      .filter((item) => resolved[item.ref.toLowerCase()] === item.resolved)
+      .map((item) => ({ ...item, rewrittenAt: new Date().toISOString() }));
+    return { result: true, put };
+  });
 }

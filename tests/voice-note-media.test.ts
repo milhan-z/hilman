@@ -322,6 +322,28 @@ test("an m4a whose stored index runs past the end of the file is refused as unfi
   assert.match(result.ok ? "" : result.reason, /unfinished/);
 });
 
+test("unreadable, malformed and oversized audio indexes fail closed", async () => {
+  const files = [
+    concat(ftyp(), u32(2), ascii("junk"), mdat()),
+    concat(ftyp(), box("moov", box("mvhd", zeros(1))), mdat()),
+    concat(ftyp(), box("moov", zeros(8 * 1024 * 1024)), mdat()),
+  ];
+  for (const bytes of files) {
+    const result = await checkVoiceFile(fileOf(bytes, "memo.m4a", "audio/mp4"));
+    assert.equal(result.ok, false);
+    assert.match(result.ok ? "" : result.reason, /couldn't verify/);
+  }
+});
+
+test("a second audio sample description cannot hide Apple Lossless behind AAC", async () => {
+  const descriptions = box("stsd", u32(0), u32(2), box("mp4a", zeros(28)), box("alac", zeros(28)));
+  const audio = box("trak", box("mdia", hdlr("soun"), box("minf", box("stbl", descriptions))));
+  const bytes = concat(ftyp(), moov(mvhdV0(1000, 1000), audio), mdat());
+  const result = await checkVoiceFile(fileOf(bytes, "memo.m4a", "audio/mp4"));
+  assert.equal(result.ok, false);
+  assert.match(result.ok ? "" : result.reason, /Apple Lossless/);
+});
+
 test("an empty file is refused as empty", async () => {
   const result = await checkVoiceFile(fileOf(new Uint8Array(0), "empty.m4a", "audio/mp4"));
   assert.equal(result.ok, false);
