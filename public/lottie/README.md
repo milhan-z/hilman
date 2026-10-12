@@ -1,17 +1,17 @@
 # Lottie — Hilman Bits illustrated moments
 
 **Lottie is for illustrated moments. HILMAN BITS is for interface motion.**
-There is at most one of these per screen, and each plays **once**, except the loop variant, which is marked as such.
-None is used where `docs/HILMAN-BITS.md` already spends the page's motion budget.
+Current placements play **once**, then rest. Home Play also offers an explicit replay button.
+The loop variant is archived and unused. See `docs/HILMAN-BITS.md` for the current placement budget.
 
-The three assets are one family: a small story about paper.
+The original three assets are one family: a small story about paper. New Play drawings extend that family.
 
 | asset | where | the paper is… | trigger |
 |---|---|---|---|
-| `filed-idea` | Home, placement still open. Home is at 3/3 primitives, so either the still, or it replaces one | **created**: loose scraps are gathered into a card | on view, once |
-| `sent-note` | Connect | **sent**: a signed note leaves the desk | only after the message was really sent |
+| `filed-idea` | Home invitation; replaces its animated underline | **created**: loose scraps are gathered into a card | on view, once |
+| `sent-note` | Archived, unused (Connect uses button feedback) | **sent**: a signed note leaves the desk | only after the message was really sent |
 | `page-not-filed` | 404 (`app/not-found.tsx`) | **searched for**: a card is pulled out and it is empty | on load, once |
-| `page-not-filed-loop` | 404, looping variant (see its section) | the same, and it goes back | on load, loops |
+| `page-not-filed-loop` | Archived, unused looping variant | the same, and it goes back | on load, loops |
 
 **Shared grammar**
 
@@ -23,7 +23,7 @@ The three assets are one family: a small story about paper.
 - "h." is the signature.
 - The reduced-motion still is either the last frame, or the frame named by a `static` marker where the last frame is not the finished drawing.
 
-Each asset comes in two forms:
+Each original asset comes in two forms (the new Play drawings use JSON/SVG only):
 
 - **`.lottie`** — a dotLottie v1 container (`manifest.json` + `animations/<id>.json`). `loop` and `autoplay` are false, except in the loop variant.
 - **`.json`** — the same animation as plain Lottie JSON.
@@ -36,7 +36,29 @@ On LottieFiles (workspace "milzhar's Workspace", Drafts), LottieFiles makes its 
 - Page Not Filed (loop) — https://app.lottiefiles.com/animation/7fa7f980-6408-4cab-8e80-50312efb1ea1
 - `sent-note` v2 and `filed-idea` are **not uploaded yet**: the workspace is at its 5-animation limit. The LottieFiles "Sent Note" (8d821702-…) is still v1.
 
-## Shared spec
+## Home Play drawings (October 2026)
+
+`play-design`, `play-motion`, and `play-code` are original shape-only drawings:
+a sketch and yellow pencil, a folded plane with a curved ink trail, and a
+browser window whose code is drawn in. Each is 320×320, 30 fps, 72 frames
+(2.4 seconds), with a transparent canvas. They are decorative, never project
+proofs or screenshots of work.
+
+Run `node scripts/create-notebook-doodles.mjs` to regenerate these JSON/SVG
+pairs. The SVG uses the same geometry and final positions as its animation.
+Existing `filed-idea`, `page-not-filed`, and archived `sent-note` also have SVG
+stills exported from the light player's final/`static` frame.
+
+The player loads only on view, pauses offscreen/in a background tab, and never
+loops. The static SVG remains for no JavaScript, loading errors and reduced
+motion; initial reduced motion skips the animation download entirely. On Play,
+mode changes replace the drawing, while the replay control explicitly starts
+the current drawing again. The active mode button itself does not restart it.
+
+The timelines below describe the original assets, including archived variants;
+asset availability does not imply a current placement.
+
+## Original assets: shared spec
 
 - Bodymovin 5.7.4, **30 fps**, canvas **320×320**. Meant to be shown at 120–280 px.
 - Shape layers and nulls only. There are no expressions, effects, raster images, text layers, mattes or masks, so the files run in `lottie-web` light.
@@ -79,7 +101,7 @@ A notebook card slides in under them. The scraps are gathered onto it, a yellow 
 | 1.73–2.00 s | 52–60 | "h." in the corner |
 | 2.00–2.40 s | 60–72 | hold: the filed card |
 
-## sent-note — Connect success ("a note leaving the desk")
+## sent-note — archived Connect success ("a note leaving the desk")
 
 This is not a success badge. A note is written, one line is marked, and it is signed "h." with a tiny red ✳. Then someone picks it up and it leaves the desk.
 

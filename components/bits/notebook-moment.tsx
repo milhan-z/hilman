@@ -4,163 +4,138 @@ import { useEffect, useRef } from "react";
 import { useReducedMotion } from "../use-reduced-motion";
 
 type AnimationItem = import("lottie-web/build/player/lottie_light").AnimationItem;
+type MomentSource = `/lottie/${"sent-note" | "page-not-filed" | "filed-idea" | "play-design" | "play-motion" | "play-code"}.json`;
 
 /** Where a moment rests: its last frame, or the frame of a named marker. */
 export type StillFrame = "last" | { marker: string };
 
 /**
- * An illustrated moment — one of the Lottie drawings in public/lottie —
- * played once, then held on its still.
- *
- * Lottie is for illustrated moments; HILMAN BITS is for interface motion
- * (docs/HILMAN-BITS.md, "Lottie: illustrated moments"). Its current placement
- * is the card pulled from the drawer with a "?" on the 404 page. The earlier
- * Connect sent-note drawing remains an unused asset; Connect now uses small
- * SVG feedback inside its send button.
- *
- * The markup is only the box: a fixed square that holds the drawing's place,
- * so nothing shifts when it arrives, and that reads as nothing to assistive
- * technology. Everything else happens here, in the browser:
- * lottie-web's light SVG build and the drawing's JSON are fetched with
- * `import()` and `fetch()` when a moment mounts — never before, and never on
- * any other page. With no script the box stays empty; if either fails to
- * load it stays empty too. It is decoration.
- *
- * It plays once — on mount, or the first time it comes into view (already
- * on screen: straight away) — and never replays or runs backwards. Then it
- * rests on its still. For retained assets where the last frame is not the
- * finished drawing (the archived sent note), it goes back to the still and
- * fades in on it, a 200 ms fade that only exists with no motion preference.
- * Reduced motion never plays at all: it gets the still, even when the
- * preference changes halfway through.
+ * A transparent notebook illustration, played once when seen, then still.
+ * The matching SVG is visible in the server HTML, on loading failure and
+ * with reduced motion. Below-fold moments defer both JSON and the light
+ * player until visible. Offscreen/background playback pauses; a new source
+ * cancels the previous load. Remount only for an explicit replay action.
  */
-export function NotebookMoment({
-  src,
-  stillFrame,
-  size,
-  playOn,
-  className,
-}: {
-  src: "/lottie/sent-note.json" | "/lottie/page-not-filed.json";
+export function NotebookMoment({ src, stillFrame, size, playOn, className }: {
+  src: MomentSource;
   stillFrame: StillFrame;
   /** Width and height of the square, in CSS pixels. */
   size: number;
-  /** "mount": as soon as it has loaded. "view": the first time it is on screen. */
+  /** "mount": once loaded. "view": load and play only when on screen. */
   playOn: "mount" | "view";
   className?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
-  const reducedNow = useRef(reduced);
-  const moment = useRef<{ animation: AnimationItem; still: number; done: boolean } | null>(null);
+  const moment = useRef<{ rest: () => void } | null>(null);
   const marker = typeof stillFrame === "string" ? null : stillFrame.marker;
 
-  // The preference, as it is now: read by the loader below, and acted on
-  // at once if it turns on while the drawing plays.
   useEffect(() => {
-    reducedNow.current = reduced;
-    const current = moment.current;
-    if (reduced && current && !current.done) {
-      current.done = true;
-      current.animation.goToAndStop(current.still, true);
-    }
+    if (reduced) moment.current?.rest();
   }, [reduced]);
 
   useEffect(() => {
     const node = box.current;
-    if (!node) return;
-    let gone = false;
+    const canvas = stage.current;
+    if (!node || !canvas) return;
+    const controller = new AbortController();
+    let gone = false, loading = false, ready = false, done = false;
+    let visible = playOn === "mount";
+    let animation: AnimationItem | undefined;
     let observer: IntersectionObserver | undefined;
-
-    const rest = (current: { animation: AnimationItem; still: number; done: boolean }) => {
-      current.done = true;
-      current.animation.goToAndStop(current.still, true);
+    const prefersStill = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const rest = () => {
+      done = true;
+      animation?.pause();
+      node.dataset.bitsMoment = "still";
     };
+    const owner = { rest };
+    moment.current = owner;
 
-    Promise.all([
-      import("lottie-web/build/player/lottie_light"),
-      fetch(src).then((response) => {
-        if (!response.ok) throw new Error(`${src}: ${response.status}`);
-        return response.json();
-      }),
-    ])
-      .then(([{ default: lottie }, animationData]) => {
-        if (gone) return;
-        const animation = lottie.loadAnimation({
-          container: node,
-          renderer: "svg",
-          loop: false,
-          autoplay: false,
+    const syncPlayback = () => {
+      if (gone || done) return;
+      if (prefersStill()) { rest(); return; }
+      if (!ready || !animation) return;
+      if (visible && !document.hidden) {
+        node.dataset.bitsMoment = "playing";
+        animation.play();
+      } else {
+        animation.pause();
+        node.dataset.bitsMoment = "paused";
+      }
+    };
+    const load = () => {
+      if (gone || loading || done) return;
+      if (prefersStill()) { rest(); return; }
+      loading = true;
+      Promise.all([
+        import("lottie-web/build/player/lottie_light"),
+        fetch(src, { signal: controller.signal }).then((response) => {
+          if (!response.ok) throw new Error(`${src}: ${response.status}`);
+          return response.json();
+        }),
+      ]).then(([{ default: lottie }, animationData]) => {
+        if (gone || done) return;
+        animation = lottie.loadAnimation({
+          container: canvas, renderer: "svg", loop: false, autoplay: false,
           animationData,
           rendererSettings: { preserveAspectRatio: "xMidYMid meet", progressiveLoad: true },
         });
         const named = marker === null ? undefined : animationData.markers?.find((m: { cm?: string }) => m.cm === marker);
-        const last = Math.max(0, Math.round(animation.totalFrames) - 1);
-        const current = { animation, still: named ? named.tm : last, done: false };
-        moment.current = current;
-
-        if (reducedNow.current) {
-          rest(current);
-          return;
-        }
+        const still = named ? named.tm : Math.max(0, Math.round(animation.totalFrames) - 1);
+        const onReady = () => { ready = true; syncPlayback(); };
+        animation.addEventListener("DOMLoaded", onReady);
+        if (animation.isLoaded) onReady();
         animation.addEventListener("complete", () => {
-          if (current.done) return;
-          current.done = true;
-          if (current.still === last) return; // already resting on it
-          animation.goToAndStop(current.still, true);
+          if (gone || done) return;
+          done = true;
+          animation?.goToAndStop(still, true);
           node.dataset.bitsMoment = "settled";
+          observer?.disconnect();
         });
-        const play = () => {
-          if (current.done) return;
-          if (reducedNow.current) rest(current);
-          else animation.play();
-        };
-        if (playOn === "mount" || typeof IntersectionObserver === "undefined") {
-          play();
-          return;
-        }
-        // "view" follows InView's measure of the screen, trigger margin and
-        // all — except that a moment already on screen plays straight away.
-        let first = true;
-        observer = new IntersectionObserver(
-          (entries) => {
-            for (const entry of entries) {
-              const rect = entry.boundingClientRect;
-              const onScreen = rect.top < window.innerHeight && rect.bottom > 0;
-              if (entry.isIntersecting || (first && onScreen)) {
-                observer?.disconnect();
-                play();
-              }
-              first = false;
-            }
-          },
-          { rootMargin: "0px 0px -10% 0px" }
-        );
-        observer.observe(node);
-      })
-      .catch(() => {
-        // Decoration: an empty box, no error of its own.
-        moment.current?.animation.destroy();
-        moment.current = null;
-        if (!gone) node.replaceChildren();
+        animation.addEventListener("data_failed", rest);
+      }).catch(() => {
+        // The effect owns its player: a late failed old load cannot destroy
+        // the next mode's drawing. Keep the static illustration on failure.
+        if (gone) return;
+        animation?.destroy();
+        rest();
       });
+    };
+    const onVisibility = () => {
+      if (visible && !document.hidden) load();
+      syncPlayback();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (typeof IntersectionObserver === "undefined") {
+      visible = true;
+      onVisibility();
+    } else {
+      observer = new IntersectionObserver((entries) => {
+        visible = entries.some((entry) => entry.isIntersecting);
+        onVisibility();
+      }, { threshold: 0.15 });
+      observer.observe(node);
+      if (playOn === "mount") onVisibility();
+    }
 
     return () => {
       gone = true;
+      controller.abort();
       observer?.disconnect();
-      moment.current?.animation.destroy();
-      moment.current = null;
+      document.removeEventListener("visibilitychange", onVisibility);
+      animation?.destroy();
+      if (moment.current === owner) moment.current = null;
+      delete node.dataset.bitsMoment;
     };
   }, [src, marker, playOn]);
 
-  return (
-    <div
-      ref={box}
-      aria-hidden="true"
-      role="presentation"
-      // Not cn(): lib/utils brings the date helpers along with it.
-      className={className ? `bits-moment ${className}` : "bits-moment"}
-      style={{ width: size }}
-    />
-  );
+  return <div ref={box} aria-hidden="true" role="presentation"
+    className={className ? `bits-moment ${className}` : "bits-moment"} style={{ width: size }}>
+    {/* A local vector asset: no image optimization or runtime required. */}
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    <img className="bits-moment-still" src={src.replace(/\.json$/, ".svg")} alt="" width={320} height={320} loading="lazy" decoding="async" />
+    <div ref={stage} className="bits-moment-stage" />
+  </div>;
 }

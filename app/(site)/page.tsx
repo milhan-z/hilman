@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { EditorialReveal } from "@/components/bits/editorial-reveal";
 import { HandDrawnReveal } from "@/components/bits/hand-drawn-reveal";
+import { NotebookMoment } from "@/components/bits/notebook-moment";
 import { Pic } from "@/components/cld-image";
 import { HomeJournal } from "@/components/home-journal";
 import { HomeProject } from "@/components/home-project";
@@ -60,7 +61,7 @@ export default async function HomePage() {
             {home.headline && <p className="mt-7 max-w-md whitespace-pre-line text-xl font-medium leading-snug sm:text-2xl">{home.headline}</p>}
             {home.intro && <p className="mt-4 max-w-xl text-base leading-relaxed text-soft sm:text-lg">{home.intro}</p>}
             <div className="mt-7 flex flex-wrap gap-3">
-              <Button href={showcase.length ? "#selected-work" : "/about"}>{showcase.length ? "Explore my work" : "A little about me"}<span aria-hidden>↗</span></Button>
+              <Button arrow href={showcase.length ? "#selected-work" : "/about"}>{showcase.length ? "Explore my work" : "A little about me"}</Button>
               <Button href="/connect" variant="ghost">Let’s make something</Button>
             </div>
             <div className="mt-7 flex items-center gap-3 text-xs text-soft"><span className="h-px w-8 shrink-0 bg-line-strong" aria-hidden /><span>Informatics at ITS{home.field ? ` · ${home.field}` : ""}{home.based ? ` · ${home.based}` : ""}</span></div>
@@ -123,9 +124,9 @@ export default async function HomePage() {
         <div><Kicker>more than what’s on the screen</Kicker>{about.community_heading && <h2 id="people-heading" className="mt-4 max-w-md font-display text-3xl font-semibold tracking-tight sm:text-4xl">{about.community_heading}</h2>}</div>
         <div><p className="max-w-xl text-lg leading-relaxed text-soft">{about.community_story}</p><div className="mt-6"><ArrowLink href="/about#people" className="min-h-[44px]">Meet the person behind the work</ArrowLink></div></div>
       </section>}
-      <section className="my-16 flex flex-col justify-between gap-7 rounded-lg border border-line-strong bg-surface p-7 sm:my-20 sm:p-10 lg:flex-row lg:items-center" aria-labelledby="connect-heading">
-        <div><Kicker className="text-pen">new ideas start with a hello</Kicker><h2 id="connect-heading" className="mt-4 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Let’s make something <span className="relative inline-block italic">together.<span aria-hidden className="absolute -bottom-2 left-0 right-1"><HandDrawnReveal variant="underline" trigger="view" fluid strokeWidth={3} /></span></span></h2><p className="mt-3 max-w-xl text-soft">A creative project, a tech idea, a new opportunity — or just a good conversation.</p></div>
-        <Button href="/connect" className="self-start lg:shrink-0">Say hello <span aria-hidden>↗</span></Button>
+      <section className="my-16 grid gap-2 rounded-lg border border-line-strong bg-surface p-7 sm:my-20 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-8 sm:p-10" aria-labelledby="connect-heading">
+        <div><Kicker className="text-pen">new ideas start with a hello</Kicker><h2 id="connect-heading" className="mt-4 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Let’s make something <span className="italic decoration-hl underline decoration-2 underline-offset-8">together.</span></h2><p className="mt-4 max-w-xl text-soft">A creative project, a tech idea, a new opportunity — or just a good conversation.</p><Button arrow href="/connect" className="mt-6">Say hello</Button></div>
+        <NotebookMoment src="/lottie/filed-idea.json" stillFrame="last" size={200} playOn="view" className="justify-self-end max-w-[144px] sm:max-w-none" />
       </section>
     </div>
   );

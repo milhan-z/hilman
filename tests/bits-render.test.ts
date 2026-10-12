@@ -559,26 +559,25 @@ test("previous and next are lifted cards, with the next page's photograph behind
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("a moment is sent as an empty square: its place kept, and nothing to read or focus", () => {
-  assert.equal(
-    html(h(NotebookMoment, { src: "/lottie/sent-note.json", stillFrame: { marker: "static" }, size: 200, playOn: "mount" })),
-    '<div aria-hidden="true" role="presentation" class="bits-moment" style="width:200px"></div>'
-  );
-  assert.equal(
-    html(h(NotebookMoment, { src: "/lottie/page-not-filed.json", stillFrame: "last", size: 240, playOn: "view", className: "max-w-[70vw]" })),
-    '<div aria-hidden="true" role="presentation" class="bits-moment max-w-[70vw]" style="width:240px"></div>'
-  );
+test("a moment sends a decorative SVG fallback with its place kept and nothing to focus", () => {
+  const out = html(h(NotebookMoment, { src: "/lottie/play-design.json", stillFrame: "last", size: 224, playOn: "view" }));
+  assert.match(out, /^<div aria-hidden="true" role="presentation" class="bits-moment" style="width:224px">/);
+  assert.match(out, /<img[^>]*src="\/lottie\/play-design.svg"[^>]*alt=""[^>]*width="320"[^>]*height="320"/);
+  assert.ok(!out.includes("tabindex"));
+  for (const name of ["play-design", "play-motion", "play-code", "filed-idea", "page-not-filed", "sent-note"]) {
+    assert.match(read(`public/lottie/${name}.svg`), /<svg/);
+  }
 });
 
-test("the square holds its height before the drawing arrives, and only the sent note's return fades", () => {
+test("the square holds its height before the drawing arrives and reduced motion keeps the still", () => {
   const css = read("components/bits/bits.css");
   const section = css.slice(css.indexOf("/* ── NotebookMoment"));
   assert.match(section, /\.bits-moment \{\s*display: block;\s*aspect-ratio: 1 \/ 1;/, "a square from the first paint");
   assert.match(section, /:where\(\.bits-moment\) \{\s*max-width: 100%;/, "never wider than its sheet, and a page may cap it further");
   assert.match(
     section,
-    /@media \(prefers-reduced-motion: no-preference\) \{\s*\.bits-moment\[data-bits-moment="settled"\] > svg \{\s*animation: bits-fade 200ms var\(--motion-ease-out\);/,
-    "the fade back onto the still is motion, and waits for no-preference"
+    /@media \(prefers-reduced-motion: reduce\) \{\s*\.bits-moment\[data-bits-moment\] .bits-moment-still \{ visibility: visible; \}/,
+    "the still remains visible during a preference change"
   );
 });
 
@@ -586,8 +585,8 @@ test("a moment plays once, never loops, and is taken down with its page", () => 
   const src = read("components/bits/notebook-moment.tsx");
   assert.match(src, /renderer: "svg",\s*loop: false,\s*autoplay: false,/);
   assert.match(src, /rendererSettings: \{ preserveAspectRatio: "xMidYMid meet", progressiveLoad: true \}/);
-  assert.match(src, /goToAndStop\(current\.still, true\)/, "reduced motion is shown the still, never the film");
-  assert.match(src, /return \(\) => \{[^}]*animation\.destroy\(\)/, "destroyed on unmount");
+  assert.match(src, /goToAndStop\(still, true\)/, "completion holds the chosen frame");
+  assert.match(src, /return \(\) => \{[^}]*animation\?\.destroy\(\)/, "destroyed on unmount");
 });
 
 test("the drawings rest where the component expects them to", () => {
@@ -612,6 +611,6 @@ test("the 404 draws its card only where it is the page, never in the copy every 
   const page = html(h(NotFound, { params: Promise.resolve({}) }));
   assert.match(
     page,
-    /^<div class="dotgrid[^"]*"><div class="portrait-paper mb-8 max-w-full"><div aria-hidden="true" role="presentation" class="bits-moment max-w-\[70vw\]" style="width:240px"><\/div><\/div><p class="font-mono[^"]*">Error 404 \/ page not filed<\/p>/
+    /^<div class="dotgrid[^"]*"><div class="portrait-paper mb-8 max-w-full"><div aria-hidden="true" role="presentation" class="bits-moment max-w-\[70vw\]" style="width:240px"><img[^>]*src="\/lottie\/page-not-filed.svg"/
   );
 });

@@ -92,8 +92,8 @@ export function JournalExplorer({ posts }: { posts: JournalPost[] }) {
                   onClick={() => setTag(active ? undefined : t.slug)}
                   aria-pressed={active}
                   className={cn(
-                    "inline-flex min-h-11 items-center rounded-[4px] border px-3 py-1 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
-                    active ? "border-transparent bg-hl text-hl-ink font-semibold" : "border-line-strong text-soft hover:border-pen hover:text-pen"
+                    "notebook-choice inline-flex min-h-11 items-center rounded-[4px] border px-3 py-1 font-mono text-2xs uppercase tracking-wide",
+                    active ? "border-transparent bg-hl text-hl-ink font-semibold" : "border-line-strong text-soft"
                   )}
                 >
                   {t.name}

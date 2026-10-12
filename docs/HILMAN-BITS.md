@@ -41,7 +41,7 @@ primitives per page. Every page is inside it.
 
 | Page | What moves | Primitives |
 |---|---|---|
-| Home | HandDrawnReveal (name brush and invitation underline), EditorialReveal (intro details), NotebookPlay (one finite glyph response per selected mode). Project proofs and Journal are static; no card lift/peek or count animation on Home. | 3 |
+| Home | HandDrawnReveal (name brush), EditorialReveal (intro details), NotebookMoment (Play drawings and invitation; one finite illustration per section). Project proofs and Journal are static; no card lift/peek or count animation on Home. | 3 |
 | Works, Journal | The line under the title; the cards (on Journal, an entry's cover peeks out from behind its card as you point at it) | 2–3 |
 | A work, a journal entry | The details around the title (never the title); the reader count; previous and next, lifted cards with the page they lead to peeking out from behind them; a Stack gallery's prints settling onto the desk as it comes into view, when the author chose a Stack | 2–3, and the pile |
 | About | The pen under the signed "Hilman." on the card as the page opens; the marker behind the page's two headings as they come into view; the moments, a pile dropped on the desk as it comes into view, and a print put back underneath when you ask (only when there are moments) | 1–2 |
@@ -82,13 +82,30 @@ browser/router rather than an animation queue. With reduced motion or no
 JavaScript, the same media, context and links remain. Missing real media is
 omitted, not replaced with an invented proof.
 
-The existing name brush and invitation underline still play once, and the intro
-keeps its existing EditorialReveal. NotebookPlay is reused: choosing a mode
-updates its caption/pressed state immediately and replaces the finite glyph
-entrance; rapid choices leave the latest mode selected. Reduced motion removes
-the entrance, including when the preference changes during use. Without
-JavaScript the initial Design state and the Lab link remain readable. No sensor,
-Lottie, Rive, or other new runtime was added to Home.
+The name brush and intro EditorialReveal still play once. NotebookPlay now
+uses three original transparent Lottie drawings instead of glyph entrances.
+Choosing Design/Motion/Code updates caption and pressed state immediately;
+rapid choices cancel the previous drawing and leave the latest mode selected.
+Selecting the same mode does nothing; the separate **Play again** button is an
+explicit replay. Reduced motion shows the matching static SVG and makes replay unavailable without removing keyboard focus.
+The invitation's former animated underline is now static, accompanied by the
+existing `filed-idea` drawing. No extra sensor experiment or dependency is added.
+The existing light Lottie runtime is shared by these placements and the 404.
+
+## Local verification of decorative moments — 12 October 2026
+
+Against `work` at `6bb77c0`, the decorative follow-up passed 77 relevant existing
+tests, typecheck and production build. Chromium checked Home at 360/390/430/768/
+1440px in Night/Paper and normal/reduced motion (20 combinations), including
+keyboard/touch-equivalent selection, replay, immediate state changes and no
+horizontal overflow. Delayed old requests, HTTP503 fallback, offscreen pause,
+simulated background visibility, reduced-motion interruption with stable focus,
+no-JavaScript SVGs and the existing 404 illustration passed. Production Home
+also played all three modes to completion at 390px. Evidence and recordings:
+`/workspace/hilman-audit/lottie-moments/`. Physical iPhone/Safari/VoiceOver and
+real mobile OS suspension remain unverified. These checks preceded the user’s
+subsequent authorization to commit and push this follow-up to master. It
+introduces no schema or dependency changes.
 
 ## The rules
 
@@ -138,6 +155,38 @@ Lottie, Rive, or other new runtime was added to Home.
     effects. `as` and `className` where they make sense. A prop exists
     because somebody needs to change it, not because it could be changed.
 
+## Public controls: ink and paper feedback
+
+Buttons, arrow links, navigation and filter controls share small, user-triggered
+responses. Nothing new plays on load or continuously; the existing page
+entrances and NotebookPlay glyph remain their own moments. These controls use
+CSS and inline SVG rather than another animation runtime.
+
+- **Buttons:** a fixed offset paper edge fades in on hover/focus, with a 1px
+  press. Primary navigation arrows travel 2px diagonally; ghost/cream buttons
+  answer with an ink tint. Disabled controls stay still and retain their native
+  disabled behavior. Only named properties transition; shadows themselves do not.
+- **Links and navigation:** a short underline inks in and arrow links point
+  3px toward their destination (reversed for Back). Current-route ink stays
+  visible. Hover is gated to a fine pointer; focus and pressing provide the
+  equivalent cue. Arrow-link touch targets are at least 44px high.
+- **Theme and menu:** both destination icons occupy the same 20px SVG box, with
+  a 120ms crossfade driven by the already-applied document theme. The two menu
+  strokes become an X in 150ms. Theme, expanded state, labels and navigation
+  update immediately; they never wait for animation completion.
+- **Filters and Lab modes:** existing selected fills remain, with a small ink
+  dot reinforcing the selected state. Hover/focus/press follow the same visual
+  language; no additional glyph or list animation is introduced. Works reset
+  controls now also provide 44px targets.
+
+Repeated input updates the current state and reverses CSS transitions instead
+of queuing animation. Leaving hover/focus restores the resting appearance;
+menu/theme interruption settles to the latest state. Reduced motion removes
+transitions and movement, showing the correct underline, icon and selection
+immediately, even if the preference changes mid-interaction. The server still
+sends readable labels and ordinary links with JavaScript disabled; interactive
+theme, menu and filtering behavior requires JavaScript as before.
+
 ## Connect: feedback inside the send button
 
 Connect keeps its form visible after sending. The transparent outlined button
@@ -161,40 +210,40 @@ no timer, loop, external asset, or new runtime.
 
 ## Lottie: illustrated moments
 
-HILMAN BITS is the interface's own motion: a line drawing itself under a
-title, a card lifting off the desk, a number rolling over. One current
-placement uses an illustration instead: the 404 drawing in `public/lottie/`,
-played by `NotebookMoment` (`components/bits/notebook-moment.tsx`).
+HILMAN BITS provides interface feedback; Lottie provides short notebook
+illustrations. These are decorative, transparent shape drawings played by
+`NotebookMoment` (`components/bits/notebook-moment.tsx`).
 
-| Where | What it draws | Plays | Rests on |
-|---|---|---|---|
-| The 404 page | A drawer of index cards searched — "hm…" — and a card pulled out with a red "?" on it (`page-not-filed.json`, 1.8 s) | The first time it is on screen (straight away if it already is) | Its last frame |
+| Where | Drawing | Trigger / final state |
+|---|---|---|
+| Home / Play | A design sketch and pencil, a folded paper plane, a little code window (`play-design`, `play-motion`, `play-code`, each 2.4 s) | Once on view or mode change; rests on the finished drawing. Explicit replay button. |
+| Home / invitation | Three loose ideas gather into a signed note (`filed-idea`, 2.4 s) | Once on view, then the finished note. Replaces the animated underline in this section. |
+| 404 | A drawer searched and a card marked “?” (`page-not-filed`, 1.8 s) | Once on view, then its last frame. |
 
-`sent-note.json` is retained as an unused asset from the earlier Connect
-success panel, including its `static` marker. Its presence is not an active
-placement; Connect now uses the button feedback described above.
+- **No automatic loops or hover replays.** Repeated mode input stays settled;
+  rapid changes follow the latest choice without an animation queue. Leaving
+  the viewport or backgrounding the tab pauses playback; returning resumes
+  that playback, and a completed drawing stays completed.
+- **Deferred player.** Both the JSON and dynamic import of the existing
+  lottie-web light SVG player (5.13.0) wait until the illustration is visible.
+  Reduced motion does not load them. Home uses the shared player; Connect,
+  navigation, footer and the site shell do not import it. No new dependency.
+- **Static first.** Each asset has a local SVG still, visible before hydration,
+  without JavaScript, on load failure and with reduced motion. Preference
+  changes during playback immediately reveal that still and stop the player.
+  The reserved square prevents layout shifts; all illustration markup is
+  `aria-hidden`, cannot receive focus, and cannot intercept pointer input.
+- **Cleanup.** Switching/removing a drawing aborts its fetch and destroys only
+  its own player. A late old response cannot overwrite or destroy a new mode.
+- **Original assets.** `scripts/create-notebook-doodles.mjs` generates the three
+  Play JSON/SVG pairs from shared vector coordinates, using the notebook's
+  cream, ink, yellow and red. They use no external art, fonts or images. Paper
+  shapes are cream but the surrounding canvas is transparent in Night/Paper.
 
-- **Plays once.** Like every entrance in the notebook, a moment never loops,
-  replays or runs backwards. `page-not-filed-loop` and `filed-idea` remain
-  unused. The illustration keeps its own timing, a little longer than the
-  interface's 1.2 s: it is played as drawn, never re-exported or re-timed.
-- **The player comes with the moment, and only there.** lottie-web's light
-  SVG build (5.13.0, pinned; previously measured at 46 KB gzipped) and the
-  drawing's JSON are fetched with `import()` and `fetch()` inside the
-  component when the 404 moment mounts. Nothing about Lottie is in Connect,
-  the site layout, the nav, or the footer; `tests/public-performance.test.ts`
-  checks the import boundary. No page loads the `.lottie` files.
-- **Reduced motion holds the still.** The drawing is shown on its last frame,
-  and a preference that turns on halfway through jumps straight there. The
-  component also retains marker-based still support for the archived sent
-  note; that capability does not make it a current placement.
-- **Decoration.** The box is `aria-hidden` with `role="presentation"`, holds
-  no text, takes no focus and moves no focus. It is a fixed square in the
-  HTML, so nothing shifts when the drawing arrives. With no JavaScript, or
-  when the drawing fails to load, it stays an empty square and the page's
-  explanation remains readable.
-- **On cream.** The 404 moment is drawn on the notebook's cream paper
-  (`.portrait-paper`), which is light in both themes.
+`sent-note` and `page-not-filed-loop` remain unused assets. Connect retains its
+small transparent send-button feedback; the earlier success panel does not
+return. The 404 still uses its cream sheet. See `public/lottie/README.md` for
+asset details and original timelines.
 
 One exception, measured: the 404 draws its card only where the not-found
 file is the page — a URL with no route at all. Next also sends a finished

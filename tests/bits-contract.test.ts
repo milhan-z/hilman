@@ -68,7 +68,7 @@ test("only the pieces that need the browser are client components", () => {
   // changes in front of you. photo-stack-hands: puts a print back, opens the
   // lightbox (the pile itself, photo-stack.tsx, is a server component).
   // notebook-moment: fetches a Lottie drawing and its player after the page,
-  // and plays it once (the server sends only the empty box).
+  // and plays it once (the server sends the static SVG fallback).
   const allowed = new Set([
     "components/bits/in-view.tsx",
     "components/bits/tally.tsx",

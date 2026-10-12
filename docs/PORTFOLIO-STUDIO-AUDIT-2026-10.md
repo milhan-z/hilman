@@ -186,6 +186,22 @@ operations. The remote was rechecked at the baseline HEAD before preparing the
 commit. CI or hosting may run automatically after the push; their completion
 must be checked separately from local test/build evidence.
 
+### Later local interaction and illustration follow-ups
+
+The earlier source release was committed as `6bb77c0` and pushed to `master`
+under the user's direct authorization. The user subsequently reported running
+migration0015; this is a user-reported application, not a live schema/ledger
+verification from this environment.
+
+The next local follow-ups refine public buttons/navigation/filter controls and
+add three original transparent Lottie drawings to Home Play, plus the existing
+filed-idea drawing at the invitation. Connect keeps its transparent button-only
+feedback. No new dependency or migration is introduced. After local verification,
+the user authorized committing and pushing these follow-ups directly to master.
+Deployment results remain separate from the source push. Current motion contracts and local verification are in
+`HILMAN-BITS.md`; artifacts are under `hilman-audit/button-polish/` and
+`hilman-audit/lottie-moments/`.
+
 ### Evidence limits and remaining release work
 
 1. The audit initially left changes uncommitted on `work`. The subsequent source
@@ -195,7 +211,8 @@ must be checked separately from local test/build evidence.
    migration ledger separately. Confirm 0014 behavior, review the additive0015
    policy, and plan release against the actual schema. Do not repair history or
    replay old migrations blindly. Apply0015 only under a separate authorized
-   release; it currently exists only locally.
+   release if still needed after checking the actual ledger. The user reports
+   applying it, but this environment has not independently verified that state.
 3. Verify provider backups and rehearse restore in a scratch project with Auth
    identity mapping and media copies. Local SQL tests are not a backup rehearsal.
 4. Use a separate test project and user-provided owner login to exercise real

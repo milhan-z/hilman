@@ -87,8 +87,8 @@ export default async function AboutPage() {
                 <p className="mt-3 text-soft">A creative project, a tech idea, or just a conversation. I&apos;d love to meet the person behind it.</p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button href="/connect">Say hello <span aria-hidden>↗</span></Button>
-                {d.cv_url && <Button href={d.cv_url} variant="ghost">Read my CV <span aria-hidden>↗</span></Button>}
+                <Button arrow href="/connect">Say hello</Button>
+                {d.cv_url && <Button arrow href={d.cv_url} variant="ghost">Read my CV</Button>}
               </div>
             </div>
           </section>

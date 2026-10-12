@@ -22,9 +22,181 @@
 }
 .portrait-paper { padding: 12px; }
 
+/* Notebook controls: an ink edge, a short directional cue, a firm press.
+   State remains immediate; transitions simply follow it and can reverse.
+   The offset edge is a fixed shadow on a separate layer, faded in, not animated. */
+.notebook-button {
+  position: relative;
+  isolation: isolate;
+  --button-edge: var(--line-strong);
+}
+.notebook-button[data-tone="paper"] { --button-edge: var(--cream-line); }
+.notebook-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: 3px 3px 0 var(--button-edge);
+  opacity: 0;
+  pointer-events: none;
+}
+.notebook-button:disabled,
+.notebook-button[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.notebook-button:not(:disabled):not([aria-disabled="true"]):is(:focus-visible, :active)::after { opacity: 1; }
+.notebook-button[data-tone="ghost"]:not(:disabled):not([aria-disabled="true"]):is(:focus-visible, :active) {
+  border-color: var(--pen);
+  background: var(--pen-soft);
+}
+.notebook-button[data-tone="paper"]:not(:disabled):not([aria-disabled="true"]):is(:focus-visible, :active) {
+  color: var(--cream);
+  background: var(--cream-ink);
+}
+.notebook-link-label { position: relative; }
+.notebook-link-label::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: -0.18em;
+  height: 1px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+}
+.notebook-arrow-link:is(:focus-visible, :active) .notebook-link-label::after { opacity: 1; }
+.notebook-choice { position: relative; }
+.notebook-replay[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.notebook-choice::after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  bottom: 3px;
+  left: calc(50% - 1.5px);
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+}
+.notebook-choice[aria-pressed="true"]::after { opacity: 0.7; }
+.notebook-choice[aria-pressed="false"]:is(:focus-visible, :active) {
+  background: var(--raise);
+  color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .notebook-button:not(:disabled):not([aria-disabled="true"]):hover::after { opacity: 1; }
+  .notebook-button[data-tone="ghost"]:not(:disabled):not([aria-disabled="true"]):hover {
+    border-color: var(--pen);
+    background: var(--pen-soft);
+  }
+  .notebook-button[data-tone="paper"]:not(:disabled):not([aria-disabled="true"]):hover {
+    color: var(--cream);
+    background: var(--cream-ink);
+  }
+  .notebook-arrow-link:hover .notebook-link-label::after { opacity: 1; }
+  .notebook-choice[aria-pressed="false"]:hover { background: var(--raise); color: var(--ink); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .notebook-button,
+  .notebook-choice {
+    transition: translate var(--motion-fast) var(--motion-ease-out), color var(--motion-fast) ease,
+      background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  }
+  .notebook-button::after,
+  .notebook-choice::after { transition: opacity var(--motion-fast) ease; }
+  .notebook-link-label::after {
+    scale: 0 1;
+    transform-origin: left center;
+    transition: scale var(--motion-base) var(--motion-ease-out), opacity var(--motion-fast) ease;
+  }
+  .notebook-arrow,
+  .notebook-button-arrow { transition: translate var(--motion-base) var(--motion-ease-out); }
+  .notebook-arrow-link:focus-visible .notebook-link-label::after { scale: 1; }
+  .notebook-arrow-link:focus-visible .notebook-arrow { translate: 3px 0; }
+  .notebook-arrow-link[data-back]:focus-visible .notebook-arrow { translate: -3px 0; }
+  .notebook-button:not(:disabled):not([aria-disabled="true"]):focus-visible .notebook-button-arrow { translate: 2px -2px; }
+  @media (hover: hover) and (pointer: fine) {
+    .notebook-button:not(:disabled):not([aria-disabled="true"]):hover { translate: 0 -1px; }
+    .notebook-button:not(:disabled):not([aria-disabled="true"]):hover .notebook-button-arrow { translate: 2px -2px; }
+    .notebook-arrow-link:hover .notebook-link-label::after { scale: 1; }
+    .notebook-arrow-link:hover .notebook-arrow { translate: 3px 0; }
+    .notebook-arrow-link[data-back]:hover .notebook-arrow { translate: -3px 0; }
+  }
+  .notebook-button:not(:disabled):not([aria-disabled="true"]):active,
+  .notebook-choice:not([aria-disabled="true"]):active { translate: 0 1px; }
+  .notebook-arrow-link:active .notebook-link-label::after { scale: 1; }
+  .notebook-arrow-link:active .notebook-arrow { translate: 1px 0; }
+  .notebook-arrow-link[data-back]:active .notebook-arrow { translate: -1px 0; }
+}
+
+/* Notebook navigation: route ink stays marked; focus and touch share the cue.
+   Repeated input reverses toward the current state, never queues a sequence. */
+.notebook-nav-label { position: relative; }
+.notebook-nav-label::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: -0.32em;
+  height: 1px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0;
+}
+.notebook-nav-link[aria-current="page"] .notebook-nav-label::after,
+.notebook-nav-link:focus-visible .notebook-nav-label::after,
+.notebook-nav-link:active .notebook-nav-label::after { opacity: 1; }
+.notebook-nav-link:focus-visible,
+.notebook-nav-link:active { color: var(--pen); }
+.notebook-icon-button { border: 1px solid transparent; }
+.notebook-icon-button:focus-visible,
+.notebook-icon-button:active {
+  color: var(--ink);
+  border-color: var(--line-strong);
+  background: var(--raise);
+}
+/* These are destination icons: sun goes to Paper, moon goes to Night. */
+.theme-sun { opacity: 1; }
+.theme-moon { opacity: 0; }
+html[data-theme="light"] .theme-sun { opacity: 0; }
+html[data-theme="light"] .theme-moon { opacity: 1; }
+.notebook-menu-line-top { transform-origin: 12px 8px; }
+.notebook-menu-line-bottom { transform-origin: 12px 16px; }
+[aria-expanded="true"] .notebook-menu-line-top { transform: translateY(4px) rotate(45deg); }
+[aria-expanded="true"] .notebook-menu-line-bottom { transform: translateY(-4px) rotate(-45deg); }
+@media (hover: hover) and (pointer: fine) {
+  .notebook-nav-link:hover { color: var(--pen); }
+  .notebook-nav-link:hover .notebook-nav-label::after { opacity: 1; }
+  .notebook-icon-button:hover {
+    color: var(--ink);
+    border-color: var(--line-strong);
+    background: var(--raise);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .theme-sun,
+  .theme-moon { transition: opacity 120ms ease-out; }
+  .notebook-nav-label::after {
+    scale: 0 1;
+    transform-origin: left center;
+    transition: scale var(--motion-base) var(--motion-ease-out), opacity 120ms ease-out;
+  }
+  .notebook-nav-link[aria-current="page"] .notebook-nav-label::after,
+  .notebook-nav-link:is(:focus-visible, :active) .notebook-nav-label::after { scale: 1; }
+  @media (hover: hover) and (pointer: fine) {
+    .notebook-nav-link:hover .notebook-nav-label::after { scale: 1; }
+  }
+  .notebook-icon-button { transition: border-color 120ms ease-out, background-color 120ms ease-out, color 120ms ease-out; }
+  .notebook-menu-line { transition: transform 150ms ease-out; }
+}
+/* With reduced motion, state styles above apply instantly, including the X.
+   No entrance animation and no persistent motion in either preference. */
+
 /* Connect: feedback belongs to the send action. No illustrated panel, opaque
    tile or looping loader. State comes from the server, never an animation. */
-.connect-send[data-state="idle"]:hover { border-color: var(--pen); }
+.connect-send[data-state="idle"]:is(:focus-visible, :active) { border-color: var(--pen); }
+@media (hover: hover) and (pointer: fine) {
+  .connect-send[data-state="idle"]:hover { border-color: var(--pen); }
+}
 .connect-send[data-state="sending"] { cursor: progress; }
 .connect-send[data-state="sent"] { cursor: default; }
 .connect-send-plane { transform-origin: center; }
@@ -46,13 +218,6 @@
 
 .practice-link { transition: background-color 200ms ease; }
 .practice-link:hover { background-color: var(--raise); }
-.play-glyph { display: inline-block; animation: idea-appear 400ms ease both; }
-.play-motion { color: var(--red); transform: rotate(-12deg); }
-.play-code { color: var(--cyan); font-family: var(--font-mono), monospace; }
-@keyframes idea-appear {
-  from { opacity: 0.4; translate: 0 8px; }
-  to { opacity: 1; translate: 0 0; }
-}
 /* Studio tab bar: the hint that a destination is genuinely still loading.
    It starts invisible, so a prefetched route — the normal case — never shows
    it. A flicker on every fast navigation reads as jank, not as feedback. */
@@ -90,7 +255,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .play-glyph,
   .lightbox-in,
   .lightbox-photo-in { animation: none; }
   *, *::before, *::after { scroll-behavior: auto !important; }

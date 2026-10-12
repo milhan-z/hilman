@@ -11,49 +11,56 @@ import type { ReactNode } from "react";
 /* ── Button ──────────────────────────────────────────────── */
 
 const buttonVariants = {
-  pen: "bg-hl text-hl-ink hover:brightness-[0.97] shadow-card hover:shadow-glow", // primary — yellow marker
-  ghost: "border border-line-strong text-ink hover:border-pen hover:text-pen",
-  hl: "bg-hl text-hl-ink hover:brightness-[0.97] shadow-card hover:shadow-glow",
-  red: "bg-red text-[#220603] hover:brightness-110 shadow-card",
+  pen: "bg-hl text-hl-ink", // primary — yellow marker
+  ghost: "border border-line-strong text-ink",
+  hl: "bg-hl text-hl-ink",
+  red: "bg-red text-[#220603]",
   // ghost, drawn on the cream paper (About's card), which is light in both themes
-  paper: "border border-cream-ink text-cream-ink hover:bg-cream-ink hover:text-cream",
+  paper: "border border-cream-ink text-cream-ink",
 } as const;
 
 export function Button({
   href,
   variant = "pen",
+  arrow = false,
   className,
   children,
   ...rest
 }: {
   href?: string;
   variant?: keyof typeof buttonVariants;
+  /** A small directional cue for a navigation action. Decoration only. */
+  arrow?: boolean;
   className?: string;
   children: ReactNode;
 } & Record<string, any>) {
   const cls = cn(
-    "group inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md px-5 py-2.5 text-sm font-medium",
-    "transition-all duration-base ease-out active:translate-y-px",
+    "notebook-button group inline-flex min-h-[44px] items-center justify-center gap-3 rounded-md px-5 py-2.5 text-sm font-medium",
     buttonVariants[variant],
     className
   );
+  const content = <>{children}{arrow && (
+    <svg className="notebook-button-arrow shrink-0" aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 18 18 6M6 6h12v12" />
+    </svg>
+  )}</>;
   if (href) {
     const external = href.startsWith("http") || href.startsWith("mailto:");
     if (external)
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer" className={cls} {...rest}>
-          {children}
+        <a href={href} target="_blank" rel="noopener noreferrer" className={cls} data-tone={variant} {...rest}>
+          {content}
         </a>
       );
     return (
-      <Link href={href} className={cls} {...rest}>
-        {children}
+      <Link href={href} className={cls} data-tone={variant} {...rest}>
+        {content}
       </Link>
     );
   }
   return (
-    <button className={cls} {...rest}>
-      {children}
+    <button className={cls} data-tone={variant} {...rest}>
+      {content}
     </button>
   );
 }
@@ -75,14 +82,15 @@ export function ArrowLink({
   return (
     <Link
       href={href}
+      data-back={back || undefined}
       className={cn(
-        "group inline-flex items-center gap-1.5 text-sm font-medium text-pen underline-offset-4 hover:underline",
+        "notebook-arrow-link group inline-flex min-h-11 items-center gap-2 text-sm font-medium text-pen",
         className
       )}
     >
-      {back && <span aria-hidden className="transition-transform group-hover:-translate-x-0.5">{arrow}</span>}
-      {children}
-      {!back && <span aria-hidden className="transition-transform group-hover:translate-x-0.5">{arrow}</span>}
+      {back && <span aria-hidden className="notebook-arrow">{arrow}</span>}
+      <span className="notebook-link-label">{children}</span>
+      {!back && <span aria-hidden className="notebook-arrow">{arrow}</span>}
     </Link>
   );
 }

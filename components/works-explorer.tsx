@@ -143,8 +143,8 @@ export function WorksExplorer({ projects, tags }: { projects: Project[]; tags: T
                 onClick={() => setSort(s.key)}
                 aria-pressed={sort === s.key}
                 className={cn(
-                  "min-h-11 rounded px-2.5 py-1 transition-colors",
-                  sort === s.key ? "bg-hl text-hl-ink font-semibold" : "text-soft hover:text-ink"
+                  "notebook-choice min-h-11 rounded px-2.5 py-1",
+                  sort === s.key ? "bg-hl text-hl-ink font-semibold" : "text-soft"
                 )}
               >
                 {s.label}
@@ -177,8 +177,8 @@ export function WorksExplorer({ projects, tags }: { projects: Project[]; tags: T
               onClick={() => pickStream(s)}
               aria-pressed={active}
               className={cn(
-                "relative min-h-[44px] shrink-0 translate-y-[2px] rounded-t-md border border-b-0 px-4 py-2.5 font-mono text-2xs uppercase tracking-widest transition-colors duration-fast",
-                active ? "border-line-strong bg-surface font-bold text-ink" : "border-transparent text-faint hover:text-ink"
+                "notebook-choice relative min-h-[44px] shrink-0 translate-y-[2px] rounded-t-md border border-b-0 px-4 py-2.5 font-mono text-2xs uppercase tracking-widest",
+                active ? "border-line-strong bg-surface font-bold text-ink" : "border-transparent text-faint"
               )}
               style={active && s ? { boxShadow: `inset 0 3px 0 ${STREAM_ACCENT[s]}` } : undefined}
             >
@@ -200,8 +200,8 @@ export function WorksExplorer({ projects, tags }: { projects: Project[]; tags: T
               onClick={() => pickTag(active ? undefined : t.slug)}
               aria-pressed={active}
               className={cn(
-                "inline-flex min-h-11 items-center rounded-[4px] border px-3 py-1 font-mono text-2xs uppercase tracking-wide transition-colors duration-fast",
-                active ? "border-transparent bg-hl text-hl-ink font-semibold" : "border-line-strong text-soft hover:border-pen hover:text-pen"
+                "notebook-choice inline-flex min-h-11 items-center rounded-[4px] border px-3 py-1 font-mono text-2xs uppercase tracking-wide",
+                active ? "border-transparent bg-hl text-hl-ink font-semibold" : "border-line-strong text-soft"
               )}
             >
               {t.name}
@@ -209,7 +209,7 @@ export function WorksExplorer({ projects, tags }: { projects: Project[]; tags: T
           );
         })}
         {anyFilter && (
-          <button type="button" onClick={reset} className="ml-1 font-mono text-2xs uppercase tracking-wider text-red hover:underline">
+          <button type="button" onClick={reset} className="ml-1 inline-flex min-h-11 items-center px-3 font-mono text-2xs uppercase tracking-wider text-red underline-offset-4 hover:underline focus-visible:underline">
             clear ✕
           </button>
         )}
@@ -239,7 +239,7 @@ export function WorksExplorer({ projects, tags }: { projects: Project[]; tags: T
         ) : filtered.length === 0 ? (
           <div className="dotgrid rounded-lg border border-dashed border-line-strong p-12 text-center">
             <p className="font-display text-lg text-soft">Nothing matches that yet.</p>
-            <button onClick={reset} className="mt-2 font-hand text-lg text-pen hover:underline">
+            <button type="button" onClick={reset} className="mt-2 min-h-11 px-3 font-hand text-lg text-pen underline-offset-4 hover:underline focus-visible:underline">
               clear the filters
             </button>
           </div>

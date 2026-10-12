@@ -37,17 +37,20 @@ export function SiteNav({ items }: { items: { label: string; href: string }[] })
         <span className="hidden border-l border-line-strong pl-4 font-hand text-lg text-soft xl:block">a personal notebook</span>
       </Link>
       <div className="hidden items-center gap-1 md:flex">
-        {items.map((item) => <Link key={item.href} href={item.href} aria-current={isActive(item.href) ? "page" : undefined} className={cn("inline-flex min-h-11 items-center rounded px-3 text-sm font-medium transition-colors", isActive(item.href) ? "text-pen underline decoration-pen underline-offset-8" : "text-soft hover:text-ink")}>{item.label}</Link>)}
+        {items.map((item) => <Link key={item.href} href={item.href} aria-current={isActive(item.href) ? "page" : undefined} className={cn("notebook-nav-link inline-flex min-h-11 items-center rounded px-3 text-sm font-medium", isActive(item.href) ? "text-pen" : "text-soft")}><span className="notebook-nav-label">{item.label}</span></Link>)}
       </div>
       <div className="flex items-center gap-1 md:border-l md:border-line md:pl-2">
         <ThemeToggle />
-        <button ref={toggleRef} type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="mobile-nav" aria-label={open ? "Close menu" : "Open menu"} className="flex h-11 w-11 items-center justify-center rounded text-ink hover:bg-raise md:hidden">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden>{open ? <path d="m6 6 12 12M18 6 6 18" /> : <path d="M4 8h16M4 16h16" />}</svg>
+        <button ref={toggleRef} type="button" onClick={() => setOpen((current) => !current)} aria-expanded={open} aria-controls="mobile-nav" aria-label={open ? "Close menu" : "Open menu"} className="notebook-icon-button flex h-11 w-11 items-center justify-center rounded-full text-ink md:hidden">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden>
+            <path className="notebook-menu-line notebook-menu-line-top" d="M4 8h16" />
+            <path className="notebook-menu-line notebook-menu-line-bottom" d="M4 16h16" />
+          </svg>
         </button>
       </div>
     </nav>
     <div id="mobile-nav" hidden={!open} className="border-t border-line bg-surface px-5 py-3 md:!hidden">
-      <nav aria-label="Mobile">{items.map((item) => <Link key={item.href} href={item.href} onClick={() => setOpen(false)} aria-current={isActive(item.href) ? "page" : undefined} className={cn("flex min-h-12 items-center justify-between border-b border-line py-3 last:border-b-0", isActive(item.href) ? "text-pen" : "text-ink")}>{item.label}<span aria-hidden className="text-soft">↗</span></Link>)}</nav>
+      <nav aria-label="Mobile">{items.map((item) => <Link key={item.href} href={item.href} onClick={() => setOpen(false)} aria-current={isActive(item.href) ? "page" : undefined} className={cn("notebook-nav-link flex min-h-12 items-center justify-between border-b border-line py-3 last:border-b-0", isActive(item.href) ? "text-pen" : "text-ink")}><span className="notebook-nav-label">{item.label}</span><span aria-hidden className="text-soft">↗</span></Link>)}</nav>
     </div>
   </header>;
 }

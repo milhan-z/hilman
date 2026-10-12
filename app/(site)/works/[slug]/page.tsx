@@ -169,7 +169,7 @@ export default async function ProjectPage(props: { params: Promise<{ slug: strin
         </div>
 
         <footer className="mx-auto mt-20 max-w-3xl border-t-2 border-line-strong pt-8">
-          <div className="mb-10 flex flex-wrap items-center justify-between gap-5 rounded-lg border border-line bg-surface p-6"><div><h2 className="font-display text-xl font-semibold">Have an idea we could make together?</h2><p className="mt-2 text-sm text-soft">I’d love to hear what you have in mind.</p></div><Button href="/connect">Let’s talk ↗</Button></div>
+          <div className="mb-10 flex flex-wrap items-center justify-between gap-5 rounded-lg border border-line bg-surface p-6"><div><h2 className="font-display text-xl font-semibold">Have an idea we could make together?</h2><p className="mt-2 text-sm text-soft">I’d love to hear what you have in mind.</p></div><Button arrow href="/connect">Let’s talk</Button></div>
           <PrevNext prev={toItem(prevP)} next={toItem(nextP)} label="project" />
           <div className="mt-8">
             <ArrowLink href="/works" back>
